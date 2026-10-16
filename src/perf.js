@@ -1,49 +1,151 @@
 /**
- * ?perf overlay: frame time (avg and worst over the last 2 s), FPS, draw calls
- * and triangles. "Worst" is the number to watch for stutter: anything well
- * above the average means hitches.
+ * ?perf overlay. Line 1 is what you see: FPS, frame interval (avg and worst
+ * over the last 2 s) and hitches. With vsync the interval sits at 16.7 ms
+ * whenever the work fits, so line 2 measures the work itself:
+ *
+ *  - CPU: JS time per frame (game update + three.js issuing draw calls).
+ *  - GPU: the GPU's time for the frame, from timer queries
+ *    (EXT_disjoint_timer_query_webgl2) where the browser offers them. They're
+ *    asynchronous, so they don't disturb the frame.
+ *  - Where there are no timer queries (Safari / iOS), each frame ends with a
+ *    1-pixel readback that waits for the GPU to finish. The time from frame
+ *    start to that point is the total frame cost (CPU + GPU, labelled "sync").
+ *    That stops the CPU and GPU overlapping, so it reads slightly high, but it
+ *    is the real cost of a frame. ?perf=nosync turns it off.
+ *
+ * Budget: 16.7 ms at 60 Hz. Leave a few ms for the browser's own compositing.
  */
+const WINDOW_MS = 2000;
+const RING = 240;
+
+class Ring {
+  constructor() {
+    this.v = new Float32Array(RING);
+    this.head = 0;
+    this.count = 0;
+  }
+
+  push(x) {
+    this.v[this.head] = x;
+    this.head = (this.head + 1) % RING;
+    this.count = Math.min(this.count + 1, RING);
+  }
+
+  /** avg and worst of the newest n samples (writes into out, no allocation) */
+  stats(n, out) {
+    n = Math.min(n, this.count);
+    let sum = 0;
+    let worst = 0;
+    for (let i = 1; i <= n; i++) {
+      const x = this.v[(this.head - i + RING) % RING];
+      sum += x;
+      worst = Math.max(worst, x);
+    }
+    out.avg = sum / Math.max(1, n);
+    out.worst = worst;
+    out.n = n;
+    return out;
+  }
+}
+
 export class PerfOverlay {
-  constructor(renderer) {
+  constructor(renderer, mode = '') {
     this.renderer = renderer;
     this.el = document.createElement('div');
     this.el.id = 'perf';
     document.body.appendChild(this.el);
-    this.samples = new Float32Array(240);
-    this.count = 0;
-    this.head = 0;
+    this.frame = new Ring(); // interval between frames
+    this.cpu = new Ring();
+    this.gpu = new Ring();
     this.last = performance.now();
+    this.start = 0;
     this.nextPaint = 0;
     this.hitches = 0; // frames over 50 ms since start
+    this.s = { avg: 0, worst: 0, n: 0 };
+
+    const gl = renderer.getContext();
+    this.gl = gl;
+    this.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    if (this.ext) {
+      this.free = Array.from({ length: 6 }, () => gl.createQuery());
+      this.pending = []; // in issue order
+    }
+    this.sync = !this.ext && mode !== 'nosync';
+    this.pixel = new Uint8Array(4);
+  }
+
+  /** Call at the very start of the frame. */
+  begin() {
+    this.start = performance.now();
+    if (this.ext && this.free.length) {
+      const q = this.free.pop();
+      this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, q);
+      this.pending.push(q);
+      this.querying = true;
+    }
   }
 
   /** Call once per frame after rendering. */
-  tick() {
+  end() {
+    const { gl, ext } = this;
+    if (this.querying) {
+      gl.endQuery(ext.TIME_ELAPSED_EXT);
+      this.querying = false;
+    }
+    let cpuEnd = performance.now();
+    if (this.sync) {
+      // waits for the GPU to finish this frame
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.pixel);
+      cpuEnd = performance.now();
+    }
+    this.cpu.push(cpuEnd - this.start);
+    if (ext) this.collect();
+
     const now = performance.now();
     const ms = now - this.last;
     this.last = now;
-    this.samples[this.head] = ms;
-    this.head = (this.head + 1) % this.samples.length;
-    this.count = Math.min(this.count + 1, this.samples.length);
-    if (ms > 50 && this.count > 30) this.hitches++;
+    this.frame.push(ms);
+    if (ms > 50 && this.frame.count > 30) this.hitches++;
     if (now < this.nextPaint) return;
     this.nextPaint = now + 500;
+    this.paint();
+  }
 
-    // last ~2 s of frames
-    let sum = 0;
-    let worst = 0;
+  collect() {
+    const { gl, ext } = this;
+    while (this.pending.length) {
+      const q = this.pending[0];
+      if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+      const ns = gl.getQueryParameter(q, gl.QUERY_RESULT);
+      this.pending.shift();
+      this.free.push(q);
+      // a disjoint event (clock change, power state) invalidates the result
+      if (!gl.getParameter(ext.GPU_DISJOINT_EXT)) this.gpu.push(ns / 1e6);
+    }
+  }
+
+  paint() {
+    const { s } = this;
+    // how many frames make up the last ~2 s
     let n = 0;
     let span = 0;
-    for (let i = 1; i <= this.count && span < 2000; i++) {
-      const v = this.samples[(this.head - i + this.samples.length) % this.samples.length];
-      sum += v;
-      span += v;
-      worst = Math.max(worst, v);
-      n++;
+    const f = this.frame;
+    while (n < f.count && span < WINDOW_MS) span += f.v[(f.head - ++n + RING) % RING];
+
+    f.stats(n, s);
+    let text = `${(1000 / s.avg).toFixed(0)} fps · frame ${s.avg.toFixed(1)} ms · worst ${s.worst.toFixed(0)} ms · hitches ${this.hitches}\n`;
+    this.cpu.stats(n, s);
+    const cpu = `${s.avg.toFixed(1)} ms (worst ${s.worst.toFixed(1)})`;
+    if (this.sync) {
+      text += `work ${cpu} · cpu+gpu, sync`;
+    } else if (this.ext) {
+      text += `cpu ${cpu}`;
+      this.gpu.stats(n, s);
+      text += s.n ? ` · gpu ${s.avg.toFixed(1)} ms (worst ${s.worst.toFixed(1)})` : ' · gpu …';
+    } else {
+      text += `cpu ${cpu} · gpu n/a`;
     }
-    const avg = sum / Math.max(1, n);
     const { calls, triangles } = this.renderer.info.render;
-    this.el.textContent = `${(1000 / avg).toFixed(0)} fps · avg ${avg.toFixed(1)} ms · worst ${worst.toFixed(0)} ms`
-      + ` · hitches ${this.hitches}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris`;
+    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris`;
   }
 }

@@ -171,11 +171,12 @@ async function init() {
   let visTimer = 0;
   veg.updateVisibility(camera.position);
 
-  const perf = params.has('perf') ? new PerfOverlay(renderer) : null;
+  const perf = params.has('perf') ? new PerfOverlay(renderer, params.get('perf')) : null;
   let hudTimer = 0;
 
   let frames = 0;
   renderer.setAnimationLoop(() => {
+    perf?.begin();
     // ?still=N renders N frames then stops (for headless screenshots)
     const still = params.has('still') && ++frames >= (parseInt(params.get('still'), 10) || 3);
     const dt = Math.min(clock.getDelta(), 0.1);
@@ -211,7 +212,7 @@ async function init() {
     }
 
     renderer.render(scene, camera);
-    perf?.tick();
+    perf?.end();
     if (still) {
       renderer.setAnimationLoop(null);
       window.__still = renderer.domElement.toDataURL('image/png');
