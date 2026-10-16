@@ -126,7 +126,7 @@ async function init() {
   const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
   player.place(num('x', SPAWN.x), num('z', SPAWN.z), num('yaw', SPAWN.yaw), num('pitch', SPAWN.pitch));
   if (['rain', 'snow', 'clear'].includes(params.get('weather'))) weather.override = params.get('weather');
-  veg.updateNear(camera.position, true); // fill the near ring before warm-up uploads it
+  veg.updateNear(camera, true); // fill the near ring before warm-up uploads it
 
   for (const kind of ['trees', 'ferns', 'rocks']) if (off.has(kind)) veg.disable(kind);
   for (const name of ['terrain', 'trail', 'lake', 'sky']) {
@@ -216,7 +216,7 @@ async function init() {
     player.update(dt);
     weather.update(dt, t, camera);
 
-    veg.updateNear(camera.position);
+    veg.updateNear(camera);
     grass?.update(camera);
     visTimer -= dt;
     if (visTimer <= 0) {

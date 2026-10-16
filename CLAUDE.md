@@ -68,7 +68,11 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
     ±`uLodBand` (12 m) both tiers draw and a complementary screen-space dither (interleaved gradient noise,
     `discard`) gives each pixel to exactly one, so trees dissolve between levels instead of snapping.
     Outside the band the other tier is culled in the vertex shader. The pool holds radius + band + 10 m and
-    refills lazily (every 4 m). The dither uses `discard`, which can cost fill rate on Apple GPUs
+    refills lazily (every 4 m). **Near pools are view-culled:** a refill only gathers candidates. `cull()` uploads only those whose
+    per-instance bounding sphere (precomputed) is in a frustum widened 12° on every side, or that are within 10 m. `updateNear(camera)`
+    re-culls when the view turns >8° or moves >1.5 m (widening > trigger, so nothing is ever missing on screen). All parts of a pool
+    share one instanceMatrix buffer, so a re-cull uploads it once. Verified with a culled-vs-all render: 0 px differ for turns
+    ≤10°, and the test catches 34°/90° turns. Draws ~37% of candidates. Phone tris at spawn 0.79 → 0.60M (forest 0.69 → 0.47M). The dither uses `discard`, which can cost fill rate on Apple GPUs
     (hidden-surface removal), so re-check phone `?perf` after changing tree materials.
   - Ferns: near pool only, and they shrink into the ground at `uFernRadius` ('fade' mode).
   - Boulders: near pool + far chunks like trees (`boulder_x` + `boulder_x_lod`). Logs, stumps and furniture: 125 m chunks only.

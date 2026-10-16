@@ -148,7 +148,7 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
 
   for (const view of views) {
     player.place(view.x ?? spawn.x, view.z ?? spawn.z, view.yaw ?? spawn.yaw, view.pitch ?? spawn.pitch);
-    veg.updateNear(camera.position, true);
+    veg.updateNear(camera, true);
     veg.updateVisibility(camera.position);
     weather.update(10, 0, camera); // snap weather and fog to this spot
     grass?.update(camera); // the game loop is paused: move the grass tile here

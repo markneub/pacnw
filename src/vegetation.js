@@ -444,9 +444,54 @@ export function buildVegetation(protos, trail) {
     }
   }
 
-  /** Keep the full-detail near ring filled around the camera (cheap; refills every few metres). */
-  function updateNear(cameraPos, force = false) {
-    for (const pool of nearPools) pool.update(cameraPos, poolRadius(pool.radiusKey), force);
+  // Near-pool culling (see detail.js): re-cull when the view has turned more
+  // than TURN or moved more than STEP; the cull frustum is widened by WIDEN on
+  // every side, which is more than TURN, so nothing is ever missing on screen.
+  const TURN = THREE.MathUtils.degToRad(8);
+  const WIDEN = THREE.MathUtils.degToRad(12);
+  const STEP = 1.5;
+  const wide = new THREE.PerspectiveCamera();
+  const frustum = new THREE.Frustum();
+  const viewProj = new THREE.Matrix4();
+  const lastPos = new THREE.Vector3(Infinity, 0, 0);
+  const lastDir = new THREE.Vector3();
+  const dir = new THREE.Vector3();
+
+  function wideFrustum(camera) {
+    const v = THREE.MathUtils.degToRad(camera.fov);
+    const h = Math.atan(Math.tan(v / 2) * camera.aspect);
+    wide.fov = THREE.MathUtils.radToDeg(v + 2 * WIDEN);
+    wide.aspect = Math.tan(h + WIDEN) / Math.tan(v / 2 + WIDEN);
+    wide.near = camera.near;
+    wide.far = camera.far;
+    wide.updateProjectionMatrix();
+    viewProj.multiplyMatrices(wide.projectionMatrix, camera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(viewProj);
+  }
+
+  /**
+   * Keep the full-detail near ring filled around the camera (refills every few
+   * metres) and culled to what can be seen (re-culls when the view changes).
+   * Once per frame; allocation-free.
+   */
+  function updateNear(camera, force = false) {
+    camera.updateMatrixWorld();
+    camera.getWorldDirection(dir);
+    const moved = force || camera.position.distanceTo(lastPos) > STEP || dir.dot(lastDir) < Math.cos(TURN);
+    let built = false;
+    for (const pool of nearPools) {
+      const refilled = pool.update(camera.position, poolRadius(pool.radiusKey), force);
+      if (!refilled && !moved) continue;
+      if (!built) {
+        wideFrustum(camera);
+        built = true;
+      }
+      pool.cull(frustum, camera.position);
+    }
+    if (moved) {
+      lastPos.copy(camera.position);
+      lastDir.copy(dir);
+    }
   }
 
   /** Switch a kind on or off (perf testing: ?off= and ?bench). Chunks follow on the next updateVisibility. */
