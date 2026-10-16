@@ -27,6 +27,7 @@ export const groundDetail = {
     uGDTile: { value: new THREE.Vector4(0.5, 0.25, 0.33, 0.6) }, // 1 / tile size (m)
     uGDRange: { value: new THREE.Vector2(20, 45) }, // m: full detail inside x, none beyond y
     uGDNormal: { value: 0.8 },
+    uGDStrength: { value: new THREE.Vector4(1, 1, 1, 1) }, // per-layer detail contrast
   },
 };
 
@@ -66,6 +67,7 @@ export async function loadGroundDetail(renderer, { lowPower }) {
     u.uGDNrm.value[i] = nrm;
     u.uGDAvg.value[i].setRGB(...layer.avg); // linear
     u.uGDTile.value.setComponent(i, 1 / layer.tile);
+    u.uGDStrength.value.setComponent(i, layer.strength ?? 1);
   }));
   if (lowPower) u.uGDRange.value.set(15, 32);
 
@@ -107,6 +109,7 @@ export function patchGroundDetail(shader) {
         uniform vec4 uGDTile;
         uniform vec2 uGDRange;
         uniform float uGDNormal;
+        uniform vec4 uGDStrength;
         varying vec4 vGDLayers;
         varying vec3 vGDPos;
         varying vec3 vGDNormal;
@@ -129,7 +132,7 @@ export function patchGroundDetail(shader) {
           // forest floor (top-down)
           s = uGDTile.x;
           if (w.x > 0.02) {
-            detail += w.x * textureGrad(uGDAlb[0], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).rgb / uGDAvg[0];
+            detail += w.x * mix(vec3(1.0), textureGrad(uGDAlb[0], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).rgb / uGDAvg[0], uGDStrength.x);
             n = textureGrad(uGDNrm[0], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).xy * 2.0 - 1.0;
             off += w.x * vec3(n.x, 0.0, n.y);
           } else detail += w.x;
@@ -142,7 +145,7 @@ export function patchGroundDetail(shader) {
             vec3 aX = textureGrad(uGDAlb[1], vGDPos.zy * s, dPdx.zy * s, dPdy.zy * s).rgb;
             vec3 aY = textureGrad(uGDAlb[1], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).rgb;
             vec3 aZ = textureGrad(uGDAlb[1], vGDPos.xy * s, dPdx.xy * s, dPdy.xy * s).rgb;
-            detail += w.y * (aX * bw.x + aY * bw.y + aZ * bw.z) / uGDAvg[1];
+            detail += w.y * mix(vec3(1.0), (aX * bw.x + aY * bw.y + aZ * bw.z) / uGDAvg[1], uGDStrength.y);
             vec2 nX = textureGrad(uGDNrm[1], vGDPos.zy * s, dPdx.zy * s, dPdy.zy * s).xy * 2.0 - 1.0;
             vec2 nY = textureGrad(uGDNrm[1], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).xy * 2.0 - 1.0;
             vec2 nZ = textureGrad(uGDNrm[1], vGDPos.xy * s, dPdx.xy * s, dPdy.xy * s).xy * 2.0 - 1.0;
@@ -151,14 +154,14 @@ export function patchGroundDetail(shader) {
           // snow (top-down)
           s = uGDTile.z;
           if (w.z > 0.02) {
-            detail += w.z * textureGrad(uGDAlb[2], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).rgb / uGDAvg[2];
+            detail += w.z * mix(vec3(1.0), textureGrad(uGDAlb[2], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).rgb / uGDAvg[2], uGDStrength.z);
             n = textureGrad(uGDNrm[2], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).xy * 2.0 - 1.0;
             off += w.z * vec3(n.x, 0.0, n.y);
           } else detail += w.z;
           // mud / trail dirt (top-down)
           s = uGDTile.w;
           if (w.w > 0.02) {
-            detail += w.w * textureGrad(uGDAlb[3], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).rgb / uGDAvg[3];
+            detail += w.w * mix(vec3(1.0), textureGrad(uGDAlb[3], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).rgb / uGDAvg[3], uGDStrength.w);
             n = textureGrad(uGDNrm[3], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).xy * 2.0 - 1.0;
             off += w.w * vec3(n.x, 0.0, n.y);
           } else detail += w.w;

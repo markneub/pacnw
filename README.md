@@ -74,3 +74,13 @@ pip install bpy && python blender/build_assets.py
 Object and material names in the GLB are what the JS looks up. If you rename them, update
 `src/vegetation.js` too. You can also drop in other models (e.g. CC0 packs from Poly Haven or
 Quaternius): add them to the GLB and give them entries in the scatter tables.
+
+### Ground textures
+
+The close-up ground detail uses four CC0 texture sets from [Poly Haven](https://polyhaven.com):
+[forest_leaves_04](https://polyhaven.com/a/forest_leaves_04) (forest floor),
+[aerial_rocks_02](https://polyhaven.com/a/aerial_rocks_02) (rock),
+[snow_02](https://polyhaven.com/a/snow_02) (snow) and
+[brown_mud_02](https://polyhaven.com/a/brown_mud_02) (trail dirt). They're committed in
+`public/textures/ground/` at 1024 px (desktop) and 512 px (phones). To re-fetch them, or to swap in
+others, edit `LAYERS` in `tools/fetch_ground_textures.py` and run it (`--search words` lists candidates).

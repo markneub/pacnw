@@ -100,6 +100,10 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   api.polyhaven.com + dl.polyhaven.org allowed in the environment's network settings). Without a manifest the
   feature stays off. It compiles in via `patchGroundDetail` + `customProgramCacheKey = groundDetailCacheKey`,
   and textures must load before `warmUp()`. `?off=detail` disables it.
+  Assets: forest_leaves_04 (2.2 m tile), aerial_rocks_02 (6 m), snow_02 (3 m), brown_mud_02 (2 m). The per-layer
+  `strength` in the manifest scales the photo's contrast (snow 0.45, or its specks read as dirt). `snowCover()` in
+  terrain.js is the single sharpened, patchy snow edge used by both `groundColor` and `groundLayers`. If they
+  disagree, needle texture shows up on white snow. Cost: +0 draws, about 10 ms of load (the download overlaps the build).
 - Shader noise: use the sine-free hash (`fract(p.xyx * .1031)`, Hoskins). `fract(sin(x)*43758)` is
   unreliable on mobile GPUs.
 - `src/bake.js`: prototype vertex AO (vertex colours × instance colours), `bakeCanopy` (2 m grid) feeds

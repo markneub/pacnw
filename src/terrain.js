@@ -181,11 +181,22 @@ const COL = {
 const tmpColor = new THREE.Color();
 
 /**
+ * Visible snow cover on the ground (0..1) from snowAmount: sharper and patchier
+ * than the raw amount, so near the snowline snow lies in irregular patches over
+ * the forest floor instead of a pale wash. Shared by the colour and the detail
+ * layers so they always agree.
+ */
+function snowCover(x, z, y, slope) {
+  const patch = nDetail(x * 0.035, z * 0.035) * 0.15;
+  return smoothstep(0.3, 0.65, snowAmount(x, z, y, slope) + patch);
+}
+
+/**
  * How much of each ground surface a point is, for close-up detail textures:
  * [forest floor, rock, snow, mud/dirt], summing to 1. Mirrors groundColor().
  */
 export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
-  const snow = snowAmount(x, z, y, slope);
+  const snow = snowCover(x, z, y, slope);
   const rock = smoothstep(0.22, 0.42, slope) * (1 - snow);
   const mud = (1 - smoothstep(WATER_LEVEL - 1, WATER_LEVEL + 2.5, y)) * (1 - rock) * (1 - snow);
   out[0] = Math.max(0, 1 - snow - rock - mud);
@@ -220,7 +231,7 @@ export function groundColor(x, y, z, slope, target = new THREE.Color()) {
   c.lerp(tmp, smoothstep(0.22, 0.42, slope));
 
   // snow
-  const s = snowAmount(x, z, y, slope);
+  const s = snowCover(x, z, y, slope);
   tmp.copy(COL.snow).lerp(COL.snowShade, n1 * 0.5 + slope);
   c.lerp(tmp, s);
   return c;

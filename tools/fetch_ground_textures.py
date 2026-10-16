@@ -23,13 +23,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "public", "textures", "ground")
 API = "https://api.polyhaven.com"
 
-# (layer name, Poly Haven asset id, tile size in metres)
-# Asset ids are chosen with --search once the API is reachable.
+# (layer name, Poly Haven asset id, tile size in metres, detail strength 0..1)
 LAYERS = [
-    ("floor", None, 2.0),  # conifer forest floor: needles, moss, twigs
-    ("rock", None, 4.0),   # weathered grey rock
-    ("snow", None, 3.0),   # packed / wind-blown snow
-    ("dirt", None, 1.6),   # trail dirt, mud
+    ("floor", "forest_leaves_04", 2.2, 1.0),  # pine forest floor: needles, twigs, duff
+    ("rock", "aerial_rocks_02", 6.0, 0.9),    # broken grey rock with moss in the cracks
+    ("snow", "snow_02", 3.0, 0.45),           # clean snow; its dark specks need toning down
+    ("dirt", "brown_mud_02", 2.0, 0.9),       # wet trail mud
 ]
 SIZES = (1024, 512)
 
@@ -57,13 +56,13 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--search":
         search(sys.argv[2:])
         return
-    missing = [name for name, asset, _ in LAYERS if not asset]
+    missing = [name for name, asset, _, _ in LAYERS if not asset]
     if missing:
         sys.exit(f"Pick Poly Haven asset ids for: {', '.join(missing)} (use --search)")
 
     os.makedirs(OUT, exist_ok=True)
     manifest = {"source": "Poly Haven (CC0)", "layers": []}
-    for name, asset, tile in LAYERS:
+    for name, asset, tile, strength in LAYERS:
         files = json.loads(get(f"{API}/files/{asset}"))
         diff = Image.open(io.BytesIO(get(files["Diffuse"]["2k"]["jpg"]["url"]))).convert("RGB")
         nrm = Image.open(io.BytesIO(get(files["nor_gl"]["2k"]["jpg"]["url"]))).convert("RGB")
@@ -71,10 +70,10 @@ def main():
             diff.resize((size, size), Image.LANCZOS).save(os.path.join(OUT, f"{name}_{size}_albedo.jpg"), quality=86)
             nrm.resize((size, size), Image.LANCZOS).save(os.path.join(OUT, f"{name}_{size}_normal.jpg"), quality=92)
         small = diff.resize((64, 64), Image.BOX)
-        px = list(small.getdata())
+        px = list(small.get_flattened_data()) if hasattr(small, 'get_flattened_data') else list(small.getdata())
         avg = [sum(srgb_to_linear(p[i]) for p in px) / len(px) for i in range(3)]
         manifest["layers"].append({
-            "name": name, "asset": asset, "tile": tile, "avg": [round(a, 5) for a in avg],
+            "name": name, "asset": asset, "tile": tile, "strength": strength, "avg": [round(a, 5) for a in avg],
             "url": f"https://polyhaven.com/a/{asset}",
         })
         print(f"{name}: {asset} avg={avg}")
