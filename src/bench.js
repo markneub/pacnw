@@ -161,7 +161,12 @@ export async function runBench({
   await nextFrame();
   // in short slices, so the page stays responsive and shows a countdown
   for (const t0 = performance.now(); performance.now() - t0 < WARM_MS;) {
-    for (const t1 = performance.now(); performance.now() - t1 < 200;) { render(); sync(); }
+    // back-to-back frames with one wait, like a measuring batch: waiting after
+    // every frame leaves the GPU idle in between, and it never heats up
+    for (const t1 = performance.now(); performance.now() - t1 < 200;) {
+      for (let i = 0; i < 12; i++) render();
+      sync();
+    }
     const left = Math.ceil((WARM_MS - (performance.now() - t0)) / 1000);
     if (heat) show(`Heating up the GPU… ${Math.max(0, left)} s\n${lines.join('\n')}`);
     await nextFrame();
