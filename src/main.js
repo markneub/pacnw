@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildTerrain, buildWater, heightAt } from './terrain.js';
 import { loadPrototypes, buildVegetation } from './vegetation.js';
+import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
 import { shared } from './materials.js';
@@ -29,10 +30,15 @@ async function init() {
   scene.add(buildTerrain());
   scene.add(buildWater());
 
+  status.textContent = 'Cutting the trail…';
+  await nextFrame();
+  const trail = buildTrail();
+  scene.add(trail.mesh);
+
   status.textContent = 'Growing the forest…';
   const protos = await loadPrototypes(`${import.meta.env.BASE_URL}models/forest.glb`);
   await nextFrame();
-  const veg = buildVegetation(protos);
+  const veg = buildVegetation(protos, trail);
   scene.add(veg.group);
 
   const weather = new Weather(scene, renderer);
@@ -65,6 +71,7 @@ async function init() {
   });
 
   const clock = new THREE.Clock();
+  const lookDir = new THREE.Vector3();
   let visTimer = 0;
   veg.updateVisibility(camera.position);
 
@@ -90,7 +97,15 @@ async function init() {
       const zone = alt > SNOWLINE + 10 ? 'Subalpine snowfield'
         : alt > SNOWLINE - 30 ? 'Upper slopes'
           : alt < 8 ? 'Lakeshore' : 'Temperate rainforest';
-      hud.textContent = `${zone} · ${alt} m`;
+      let text = `${zone} · ${alt} m`;
+      camera.getWorldDirection(lookDir);
+      const g = trail.guide(player.pos.x, player.pos.z, lookDir.x, lookDir.z);
+      if (g) {
+        text += g.next
+          ? ` · Trail: ${g.next.label} ${g.metres >= 950 ? `${(g.metres / 1000).toFixed(1)} km` : `${Math.round(g.metres / 10) * 10} m`}`
+          : ' · On the trail';
+      }
+      hud.textContent = text;
     }
 
     renderer.render(scene, camera);
@@ -100,7 +115,7 @@ async function init() {
     }
   });
 
-  window.__pacnw = { scene, camera, player, weather, heightAt, renderer };
+  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail };
 }
 
 let flashTimer;

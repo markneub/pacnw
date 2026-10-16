@@ -89,6 +89,44 @@ export function heightAt(x, z) {
   return h;
 }
 
+// Heights at the terrain mesh vertices, so groundAt() can return the height of
+// the rendered (triangulated) surface rather than the smooth noise function.
+const GRID_N = TERRAIN_SEGMENTS + 1;
+const GRID_STEP = WORLD_SIZE / TERRAIN_SEGMENTS;
+let grid = null;
+
+function heightGrid() {
+  if (grid) return grid;
+  grid = new Float32Array(GRID_N * GRID_N);
+  for (let iz = 0; iz < GRID_N; iz++) {
+    for (let ix = 0; ix < GRID_N; ix++) {
+      grid[iz * GRID_N + ix] = heightAt(ix * GRID_STEP - WORLD_SIZE / 2, iz * GRID_STEP - WORLD_SIZE / 2);
+    }
+  }
+  return grid;
+}
+
+/**
+ * Height of the rendered terrain surface at (x, z). Matches PlaneGeometry's
+ * triangulation (diagonal from (ix, iz+1) to (ix+1, iz)), so things placed with
+ * it sit exactly on the ground instead of floating or sinking between vertices.
+ */
+export function groundAt(x, z) {
+  const g = heightGrid();
+  const gx = THREE.MathUtils.clamp((x + WORLD_SIZE / 2) / GRID_STEP, 0, TERRAIN_SEGMENTS - 1e-4);
+  const gz = THREE.MathUtils.clamp((z + WORLD_SIZE / 2) / GRID_STEP, 0, TERRAIN_SEGMENTS - 1e-4);
+  const ix = Math.floor(gx);
+  const iz = Math.floor(gz);
+  const fx = gx - ix;
+  const fz = gz - iz;
+  const ha = g[iz * GRID_N + ix];
+  const hb = g[(iz + 1) * GRID_N + ix];
+  const hc = g[(iz + 1) * GRID_N + ix + 1];
+  const hd = g[iz * GRID_N + ix + 1];
+  if (fx + fz <= 1) return ha + (hd - ha) * fx + (hb - ha) * fz;
+  return hc + (hb - hc) * (1 - fx) + (hd - hc) * (1 - fz);
+}
+
 /** Local snowline altitude; wanders ±18 m so the snow edge isn't a contour line. */
 export function snowlineAt(x, z) {
   return SNOWLINE + nSnow(x * 0.006, z * 0.006) * 18;
@@ -127,8 +165,11 @@ export function buildTerrain() {
   const geo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
+  const g = heightGrid();
   for (let i = 0; i < pos.count; i++) {
-    pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
+    const ix = Math.round((pos.getX(i) + WORLD_SIZE / 2) / GRID_STEP);
+    const iz = Math.round((pos.getZ(i) + WORLD_SIZE / 2) / GRID_STEP);
+    pos.setY(i, g[iz * GRID_N + ix]);
   }
   geo.computeVertexNormals();
 

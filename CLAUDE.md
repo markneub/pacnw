@@ -23,17 +23,22 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   then `<scratch>/bvenv/bin/python blender/build_assets.py`.
 - Preview renders: Workbench/EEVEE fail (no libEGL). Use Cycles on the CPU with low samples.
 - Object names (`fir`, `fir_snow`, `hemlock`, `cedar`, `sapling`, `snag`, `rock_a/b/c`, `fern_a/b`,
-  `log`, `stump`) and material names are looked up in `src/vegetation.js`. Keep them in sync.
+  `log`, `stump`, `signpost`, `cairn`, `bench`) and material names are looked up in `src/vegetation.js`. Keep them in sync.
 - Blender is Z-up; the exporter converts to Y-up. Each asset is one object at the origin, with one glTF primitive per material.
 
 ## Code map / conventions
 
 - `src/config.js`: world size, `SNOWLINE` (115), `TREELINE`, `SPAWN`, view distances, player tuning.
-- `src/terrain.js`: `heightAt(x,z)` is the single source of truth for terrain, placement and player
-  ground. `snowlineAt`/`snowAmount` keep ground snow, snowy-tree choice and rain→snow consistent.
+- `src/terrain.js`: `heightAt(x,z)` is the smooth noise height that drives terrain generation and scatter
+  decisions. `groundAt(x,z)` is the height of the *rendered* triangulated mesh. Use it for anything that
+  must sit on the ground (instances, player feet, trail ribbon). `snowlineAt`/`snowAmount` keep ground snow, snowy-tree choice and rain→snow consistent.
 - `src/vegetation.js`: jittered-grid scatter (seeded `mulberry32`), per-125 m-chunk `InstancedMesh`
   with distance culling, collision spatial hash. Materials are patched by asset kind
   (trees/ferns → wind sway, rocks/logs/stumps → moss/snow cover) from `src/materials.js`.
+- `src/trail.js`: A* over a 6 m grid between `TRAIL_STOPS` (trailhead → lake → ridge at (120,−510),
+  the only gentle snowy spot). The grade penalty makes it switchback. Chaikin smoothing, then resampled
+  every 1.5 m. `distanceTo` keeps scatter off the tread; `guide()` feeds the HUD. Furniture is placed in
+  `vegetation.js` `placeTrailFurniture`. Mesh winding must face up (+Y) or it gets back-face culled.
 - `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera, with fog/light
   lerped by altitude relative to the local snowline, and WebAudio noise ambience.
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.

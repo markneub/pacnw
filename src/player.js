@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PLAYER, WORLD_SIZE, WATER_LEVEL } from './config.js';
-import { heightAt } from './terrain.js';
+import { groundAt } from './terrain.js';
 
 /**
  * First-person walker: mouse look via pointer lock, WASD/arrows to move,
@@ -52,7 +52,7 @@ export class Player {
   place(x, z, yaw = 0, pitch = 0) {
     this.pos.set(x, 0, z);
     this.collide(this.pos, PLAYER.radius);
-    this.pos.y = heightAt(this.pos.x, this.pos.z);
+    this.pos.y = groundAt(this.pos.x, this.pos.z);
     this.yaw = yaw;
     this.pitch = pitch;
     this.syncCamera();
@@ -64,7 +64,7 @@ export class Player {
     const strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     const running = k.has('ShiftLeft') || k.has('ShiftRight');
 
-    const ground = heightAt(this.pos.x, this.pos.z);
+    const ground = groundAt(this.pos.x, this.pos.z);
     const wading = ground < WATER_LEVEL - 0.4;
     let speed = running ? PLAYER.runSpeed : PLAYER.walkSpeed;
     if (wading) speed *= 0.45;
@@ -86,7 +86,7 @@ export class Player {
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, -lim, lim);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, -lim, lim);
 
-    const floor = heightAt(this.pos.x, this.pos.z);
+    const floor = groundAt(this.pos.x, this.pos.z);
     if (this.pos.y <= floor) {
       this.pos.y = floor;
       this.vel.y = 0;

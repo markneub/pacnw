@@ -3,17 +3,21 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, WATER_LEVEL, SNOWLINE, TREELINE, SEED, SPAWN,
 } from './config.js';
-import { heightAt, slopeAt, snowAmount, nForest, mulberry32 } from './terrain.js';
+import {
+  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32,
+} from './terrain.js';
+import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover } from './materials.js';
 
 const KIND = (name) => (name.startsWith('fern') ? 'ferns'
-  : /^(rock|log|stump)/.test(name) ? 'rocks' : 'trees');
+  : /^(rock|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
 
 // Trunk radius (m, at scale 1) used for walking collisions.
 const COLLIDE = {
   fir: 0.75, fir_snow: 0.75, hemlock: 0.6, hemlock_snow: 0.6, cedar: 1.1,
   sapling: 0.25, sapling_snow: 0.25, snag: 0.65,
   rock_a: 1.6, rock_b: 1.2, rock_c: 2.0, stump: 1.0,
+  signpost: 0.25, cairn: 0.6, bench: 0.9,
 };
 
 /** Load forest.glb and turn each top-level node into a list of {geometry, material}. */
@@ -60,6 +64,53 @@ function convertMaterial(src, assetName, cache) {
 
 // ---------------------------------------------------------------------------
 
+/** Signposts at each stop, a bench at the lake, cairns along the snowy section. */
+function placeTrailFurniture(trail, add) {
+  const { points, stops } = trail;
+  const tangent = (i) => {
+    const a = points[Math.max(0, i - 2)];
+    const b = points[Math.min(points.length - 1, i + 2)];
+    return new THREE.Vector2(b.x - a.x, b.y - a.y).normalize();
+  };
+  const beside = (i, offset) => {
+    const t = tangent(i);
+    const p = points[i];
+    return { x: p.x - t.y * offset, z: p.y + t.x * offset, t };
+  };
+  const put = (name, x, z, rotY) => add(name, { x, y: groundAt(x, z), z, rotY, scale: 1, tint: 0.5 });
+
+  for (const stop of stops) {
+    // boards point along local +X; rotate that onto the trail direction
+    const i = Math.min(stop.index + 3, points.length - 3);
+    const { x, z, t } = beside(i, TRAIL_WIDTH + 0.6);
+    put('signpost', x, z, Math.atan2(-t.y, t.x));
+  }
+
+  const lake = stops.find((s) => s.name === 'lake');
+  if (lake) {
+    // bench on whichever side is lower (the water side), facing away from the
+    // trail; the bench model faces local +Z
+    let best = null;
+    for (const side of [1, -1]) {
+      const c = beside(lake.index, side * (TRAIL_WIDTH + 1.4));
+      const h = groundAt(c.x, c.z);
+      if (!best || h < best.h) best = { ...c, h, side };
+    }
+    const fx = -best.t.y * best.side;
+    const fz = best.t.x * best.side;
+    put('bench', best.x, best.z, Math.atan2(fx, fz));
+  }
+
+  let side = 1;
+  for (let i = 0; i < points.length; i += 30) {
+    const p = points[i];
+    if (groundAt(p.x, p.y) < snowlineAt(p.x, p.y) - 15) continue;
+    const { x, z } = beside(i, side * (TRAIL_WIDTH + 1.0));
+    put('cairn', x, z, i * 1.7);
+    side = -side;
+  }
+}
+
 function pickWeighted(rng, table) {
   let total = 0;
   for (const [, w] of table) total += w;
@@ -71,10 +122,11 @@ function pickWeighted(rng, table) {
 }
 
 /**
- * Scatter instances over the terrain on a jittered grid. Returns
- * placements grouped by prototype name: [{x, y, z, rotY, scale, tint}].
+ * Scatter instances over the terrain on a jittered grid, keeping the trail
+ * clear. Returns placements grouped by prototype name:
+ * [{x, y, z, rotY, scale, tint}].
  */
-function scatter() {
+function scatter(trail) {
   const rng = mulberry32(SEED * 7 + 3);
   const out = {};
   const add = (name, p) => (out[name] ||= []).push(p);
@@ -89,6 +141,7 @@ function scatter() {
       const h = heightAt(x, z);
       if (h < WATER_LEVEL + 1.5) continue;
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.3) continue;
       const slope = slopeAt(x, z);
       if (slope > 0.45) continue;
 
@@ -108,7 +161,7 @@ function scatter() {
       const name = pickWeighted(rng, table);
 
       const scale = (0.65 + rng() * 0.6) * (1 - alt * 0.35);
-      add(name, { x, y: h - 0.3, z, rotY: rng() * Math.PI * 2, scale, tint: rng() });
+      add(name, { x, y: groundAt(x, z) - 0.3, z, rotY: rng() * Math.PI * 2, scale, tint: rng() });
     }
   }
 
@@ -120,15 +173,16 @@ function scatter() {
       const z = gz + rng() * rockCell;
       const h = heightAt(x, z);
       if (h < WATER_LEVEL - 2) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.5) continue;
       const slope = slopeAt(x, z);
       const r = rng();
       if (r < 0.12 + slope * 0.5) {
         const name = ['rock_a', 'rock_b', 'rock_c'][Math.floor(rng() * 3)];
-        add(name, { x, y: h - 0.35, z, rotY: rng() * 6.28, scale: 0.5 + rng() * rng() * 2.2, tint: rng() });
+        add(name, { x, y: groundAt(x, z) - 0.35, z, rotY: rng() * 6.28, scale: 0.5 + rng() * rng() * 2.2, tint: rng() });
       } else if (r < 0.2 && h < SNOWLINE + 30 && slope < 0.25) {
-        add('log', { x, y: h - 0.25, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.5, tint: rng() });
+        add('log', { x, y: groundAt(x, z) - 0.25, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.5, tint: rng() });
       } else if (r < 0.24 && h < SNOWLINE && slope < 0.3) {
-        add('stump', { x, y: h - 0.1, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.6, tint: rng() });
+        add('stump', { x, y: groundAt(x, z) - 0.1, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.6, tint: rng() });
       }
     }
   }
@@ -145,12 +199,14 @@ function scatter() {
       const h = heightAt(x, z);
       if (h < WATER_LEVEL + 1 || h > SNOWLINE - 25) continue;
       if (slopeAt(x, z) > 0.35) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.4) continue;
       add(rng() < 0.5 ? 'fern_a' : 'fern_b', {
-        x, y: h - 0.05, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.8, tint: rng(),
+        x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.8, tint: rng(),
       });
     }
   }
 
+  placeTrailFurniture(trail, add);
   return out;
 }
 
@@ -158,8 +214,8 @@ function scatter() {
  * Builds the vegetation as per-chunk InstancedMeshes so far-away chunks can be
  * hidden cheaply, and a spatial hash of trunks/rocks for player collisions.
  */
-export function buildVegetation(protos) {
-  const placements = scatter();
+export function buildVegetation(protos, trail) {
+  const placements = scatter(trail);
   const group = new THREE.Group();
   group.name = 'vegetation';
   const chunks = new Map(); // key -> { cx, cz, kind -> Object3D[] }

@@ -110,6 +110,7 @@ def mats():
         "rock": material("Rock", (0.45, 0.45, 0.43), 0.95),
         "fern": material("Fern", (0.2, 0.38, 0.12), 0.8),
         "wood": material("Wood", (0.62, 0.47, 0.3)),
+        "sign_post": material("SignPost", (0.33, 0.23, 0.15)),
     }
 
 
@@ -419,6 +420,105 @@ def stump(M, name, seed, radius=0.8, height=1.1, sides=9):
 
 
 # ---------------------------------------------------------------------------
+# Trail furniture
+# ---------------------------------------------------------------------------
+
+def recalc_normals(obj):
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(obj.data)
+    bm.free()
+    return obj
+
+
+def prism(b, mat, outline, y0, y1, origin=(0.0, 0.0, 0.0)):
+    """Extrude a convex outline given in the XZ plane between y0 and y1."""
+    ox, oy, oz = origin
+    front = [b.v((ox + x, oy + y0, oz + z)) for x, z in outline]
+    back = [b.v((ox + x, oy + y1, oz + z)) for x, z in outline]
+    b.face(front, mat)
+    b.face(list(reversed(back)), mat)
+    n = len(outline)
+    for i in range(n):
+        j = (i + 1) % n
+        b.face((front[i], front[j], back[j], back[i]), mat)
+
+
+def box(b, mat, cx, cy, cz, sx, sy, sz):
+    hx, hz = sx / 2, sz / 2
+    prism(b, mat, [(-hx, -hz), (hx, -hz), (hx, hz), (-hx, hz)], -sy / 2, sy / 2, (cx, cy, cz))
+
+
+def signpost(M, name):
+    """Trailhead post with two arrow boards pointing along local +X / -X."""
+    b = MeshBuilder()
+    box(b, M["sign_post"], 0, 0, 1.15, 0.14, 0.14, 2.3)
+    prism(b, M["sign_post"], [(-0.07, 0), (0.07, 0), (0, 0.1)], -0.07, 0.07, (0, 0, 2.3))
+    for z, d, length in ((1.85, 1, 0.95), (1.55, -1, 0.8)):
+        h = 0.22
+        tip = 0.16
+        pts = [(0.0, -h / 2), (length, -h / 2), (length + tip, 0.0), (length, h / 2), (0.0, h / 2)]
+        if d < 0:
+            pts = [(-x, zz) for x, zz in reversed(pts)]
+        prism(b, M["wood"], pts, 0.075, 0.115, (d * -0.05, 0, z))
+    return recalc_normals(b.build(name))
+
+
+def cairn(M, name, seed=51):
+    """A stack of flat stones marking the route above the treeline."""
+    import bmesh
+    rng = random.Random(seed)
+    bm = bmesh.new()
+    z = 0.0
+    r = 0.55
+    for k in range(6):
+        h = r * rng.uniform(0.45, 0.6)
+        ret = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=1.0)
+        verts = ret["verts"]
+        off = Vector((rng.uniform(-0.06, 0.06), rng.uniform(-0.06, 0.06), 0))
+        for v in verts:
+            v.co.x *= r * rng.uniform(0.9, 1.1)
+            v.co.y *= r * rng.uniform(0.85, 1.05)
+            v.co.z *= h / 2
+            v.co += off + Vector((0, 0, z + h / 2))
+        z += h * 0.85
+        r *= 0.78
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    me.materials.append(M["rock"])
+    for p in me.polygons:
+        p.use_smooth = False
+    obj = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def bench(M, name):
+    """Split-log bench; the seat runs along local X, sitter faces -Y."""
+    b = MeshBuilder()
+    for x in (-0.65, 0.65):
+        box(b, M["bark"], x, 0, 0.22, 0.32, 0.36, 0.44)
+    # half-round seat running along X: flat top, rounded underside
+    n = 6
+    loops = []
+    for x in (-0.95, 0.95):
+        loop = []
+        for i in range(n + 1):
+            a = math.pi + math.pi * i / n
+            loop.append(b.v((x, math.cos(a) * 0.22, 0.56 + math.sin(a) * 0.12)))
+        loops.append(loop)
+    for i in range(n):
+        b.face((loops[0][i], loops[0][i + 1], loops[1][i + 1], loops[1][i]), M["bark"])
+    b.face((loops[0][0], loops[0][n], loops[1][n], loops[1][0]), M["wood"])  # flat top
+    b.face(list(loops[0]), M["wood"])
+    b.face(list(reversed(loops[1])), M["wood"])
+    return recalc_normals(b.build(name))
+
+
+# ---------------------------------------------------------------------------
 
 def main():
     reset_scene()
@@ -440,6 +540,10 @@ def main():
     fern(M, "fern_b", 22, fronds=9)
     log(M, "log", 31)
     stump(M, "stump", 41)
+
+    signpost(M, "signpost")
+    cairn(M, "cairn")
+    bench(M, "bench")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     bpy.ops.object.select_all(action="SELECT")
