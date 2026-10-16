@@ -36,8 +36,10 @@ const RINGS = {
     { size: 52, count: 20000, fade: [6.5, 9, 14, 26] }, // ~7 tufts/m2
   ],
   phone: [
-    { size: 13, count: 3000, fade: [0, 0, 4.5, 6.5] },
-    { size: 32, count: 5600, fade: [4.5, 6.5, 9, 16] },
+    // 65% of the first phone counts: ?bench showed the cost scales with the count
+    // (1.7 ms of a throttled ~15 ms frame at 3000 + 5600)
+    { size: 13, count: 2000, fade: [0, 0, 4.5, 6.5] },
+    { size: 32, count: 3600, fade: [4.5, 6.5, 9, 16] },
   ],
 };
 
@@ -87,6 +89,7 @@ function tuftGeometry() {
 }
 
 const smooth = THREE.MathUtils.smoothstep;
+const CELL = 16; // m, for skipping rings with no grass in reach
 const LUSH = new THREE.Color('#566f2e');
 const DRY = new THREE.Color('#857f4c');
 
@@ -153,7 +156,17 @@ function bakeGrassMap(terrain, canopyAt) {
 
   const ht = new THREE.DataTexture(heights, n, n, THREE.RedFormat, THREE.FloatType);
   ht.needsUpdate = true; // read with texelFetch only (no filtering needed)
-  return { map: tex, height: ht, n, step };
+  // highest density per CELL-metre cell, so whole rings can be skipped where
+  // there's no grass in reach (snowfields, deep forest, the lake)
+  const cells = Math.ceil(WORLD_SIZE / CELL);
+  const cellMax = new Uint8Array(cells * cells);
+  for (let iz = 0; iz < n; iz++) {
+    for (let ix = 0; ix < n; ix++) {
+      const c = Math.min(cells - 1, Math.floor((iz * step) / CELL)) * cells + Math.min(cells - 1, Math.floor((ix * step) / CELL));
+      cellMax[c] = Math.max(cellMax[c], data[(iz * n + ix) * 4 + 3]);
+    }
+  }
+  return { map: tex, height: ht, n, step, cellMax, cells };
 }
 
 /**
@@ -176,6 +189,7 @@ export function buildGrass(terrain, canopyAt, { lowPower, density = 1 }) {
     geo.userData.count = count;
     const mesh = new THREE.Mesh(geo, grassMaterial(baked, ring));
     mesh.frustumCulled = false; // the tile follows the camera; the GPU clips
+    mesh.userData.reach = ring.fade[3];
     return mesh;
   });
   const group = new THREE.Group();
@@ -189,12 +203,28 @@ export function buildGrass(terrain, canopyAt, { lowPower, density = 1 }) {
     /** Once per frame (no allocation). */
     update(cameraPos) {
       for (const c of cams) c.set(cameraPos.x, cameraPos.z);
+      // a ring with no grass anywhere in reach costs nothing if it isn't drawn
+      for (const m of rings) m.visible = grassNear(baked, cameraPos.x, cameraPos.z, m.userData.reach);
     },
     /** Draw only a share (0..1) of the tufts that were built (?bench). */
     setShare(f) {
       for (const m of rings) m.geometry.instanceCount = Math.max(1, Math.round(m.geometry.userData.count * f));
     },
   };
+}
+
+/** Any grass within r of (x, z)? Checks the per-cell maxima (no allocation). */
+function grassNear(baked, x, z, r) {
+  const { cellMax, cells } = baked;
+  const half = WORLD_SIZE / 2;
+  const x0 = Math.max(0, Math.floor((x - r + half) / CELL));
+  const x1 = Math.min(cells - 1, Math.floor((x + r + half) / CELL));
+  const z0 = Math.max(0, Math.floor((z - r + half) / CELL));
+  const z1 = Math.min(cells - 1, Math.floor((z + r + half) / CELL));
+  for (let cz = z0; cz <= z1; cz++) {
+    for (let cx = x0; cx <= x1; cx++) if (cellMax[cz * cells + cx] > 5) return true;
+  }
+  return false;
 }
 
 function grassMaterial(baked, ring) {
@@ -254,11 +284,15 @@ function grassMaterial(baked, ring) {
         float gEdge = (uGrassFade.y > 0.0 ? smoothstep(uGrassFade.x, uGrassFade.y, gDist) : 1.0)
           * (1.0 - smoothstep(uGrassFade.z, uGrassFade.w, gDist));
         float gScale = smoothstep(0.0, 0.12, gMap.a * gEdge - gR1 * 0.999);
-        vec2 gCutUv = (gXZ - uCutRect.xy) / uCutRect.zw;
-        if (all(greaterThan(gCutUv, vec2(0.0))) && all(lessThan(gCutUv, vec2(1.0)))
-            && texture2D(uCutMask, gCutUv).r > 0.5) gScale = 0.0;
-        float gY = gGround(gXZ);
-        if (gY < ${(WATER_LEVEL + 0.15).toFixed(2)}) gScale = 0.0;
+        // most tufts in sparse places are absent: skip the rest of their lookups
+        float gY = 0.0;
+        if (gScale > 0.0) {
+          vec2 gCutUv = (gXZ - uCutRect.xy) / uCutRect.zw;
+          if (all(greaterThan(gCutUv, vec2(0.0))) && all(lessThan(gCutUv, vec2(1.0)))
+              && texture2D(uCutMask, gCutUv).r > 0.5) gScale = 0.0;
+          gY = gGround(gXZ);
+          if (gY < ${(WATER_LEVEL + 0.15).toFixed(2)}) gScale = 0.0;
+        }
         float gHeight = mix(0.7, 1.35, gR3) * mix(0.55, 1.0, gMap.a); // sparse grass is shorter
         float gA = gR2 * 6.2831853;
         mat2 gRot = mat2(cos(gA), -sin(gA), sin(gA), cos(gA));
