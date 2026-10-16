@@ -1,7 +1,7 @@
 # Cascadia Woods
 
 A small walkable Pacific Northwest world built with three.js. You start in a wet, foggy valley
-of Douglas fir, western hemlock and red cedar with sword ferns and mossy boulders, beside a misty
+of Douglas fir, western hemlock and red cedar with sword ferns, grassy clearings and mossy boulders, beside a misty
 lake. A hiking trail leads from the trailhead at your feet to a lakeside bench, then
 switchbacks north and up. Follow it and the land climbs into a ridged range where the rain turns to sleet, then snow.
 Up there the ground and the trees are snow-covered.
@@ -59,6 +59,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/perf.js` | `?perf` overlay |
 | `src/bench.js` | `?bench` device benchmark |
 | `src/autores.js` | Lowers render resolution if frames keep missing 60 fps |
+| `src/grass.js` | Grass blades around the camera (instanced tufts, GPU-placed, wind) |
 | `src/weather.js` | GPU rain streaks and snowflakes in a box around the camera, fog and light that shift with altitude, procedural rain/wind audio |
 | `src/player.js` | First-person walker that follows the terrain (keyboard/mouse, plus an analog `stick` and `look()` for touch) |
 | `src/touch.js` | One-thumb phone controls (no on-screen UI) |

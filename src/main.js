@@ -15,6 +15,7 @@ import { loadSurfaceDetail } from './surfacedetail.js';
 import { loadTextureSet } from './textures.js';
 import { runBench } from './bench.js';
 import { AutoResolution } from './autores.js';
+import { buildGrass } from './grass.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -37,7 +38,7 @@ shared.uLodRadius.value = VIEW_DIST.treeDetail;
 shared.uFernRadius.value = VIEW_DIST.ferns;
 
 // ?off=a,b,... switches parts off to find what costs the most on a device:
-// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail.
+// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass.
 // ?dpr=1 forces the render resolution scale.
 const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
 
@@ -111,6 +112,12 @@ async function init() {
   shadeGround(trail.mesh, veg.canopyAt);
   step('ground shading');
 
+  // grass reads the ground's baked shade, so it comes after shading. ?grass=50 = half the tufts.
+  const grass = off.has('grass') ? null
+    : buildGrass(terrain, veg.canopyAt, { lowPower, density: params.has('grass') ? parseFloat(params.get('grass')) / 100 : 1 });
+  if (grass) scene.add(grass.mesh);
+  step('grass');
+
   const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1 });
   const player = new Player(camera, renderer.domElement, veg.collide);
 
@@ -153,7 +160,7 @@ async function init() {
   // ?bench: once started, pause play and run the benchmark (see bench.js)
   const startBench = () => setTimeout(async () => {
     renderer.setAnimationLoop(null);
-    await runBench({ renderer, scene, camera, player, veg, weather, spawn: SPAWN, quick: params.get('bench') === 'quick' });
+    await runBench({ renderer, scene, camera, player, veg, weather, grass, spawn: SPAWN, quick: params.get('bench') === 'quick' });
   }, 1000);
   overlay.addEventListener('click', () => {
     weather.enableAudio();
@@ -210,6 +217,7 @@ async function init() {
     weather.update(dt, t, camera);
 
     veg.updateNear(camera.position);
+    grass?.update(camera.position);
     visTimer -= dt;
     if (visTimer <= 0) {
       veg.updateVisibility(camera.position);
@@ -242,7 +250,7 @@ async function init() {
     }
   });
 
-  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail, veg };
+  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail, veg, grass };
 }
 
 let flashTimer;

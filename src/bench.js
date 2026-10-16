@@ -22,7 +22,7 @@ const VIEWS = [
   { name: 'snowy slope', x: -60, z: -250, yaw: 0.4, pitch: 0 },
 ];
 
-export async function runBench({ renderer, scene, camera, player, veg, weather, spawn, quick = false }) {
+export async function runBench({ renderer, scene, camera, player, veg, weather, grass, spawn, quick = false }) {
   // quick: a smoke test for slow software renderers (one view, tiny batches)
   const N = quick ? 2 : 12; // frames per batch
   const PAIRS = quick ? 1 : 5; // alternating full/config batch pairs per row (median taken)
@@ -72,6 +72,12 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
       const was = r.clone();
       r.set(0, 0.001);
       return () => r.copy(was);
+    }],
+    ['- grass', () => (byName('grass') ? hide(byName('grass')) : () => {})],
+    ['grass 50%', () => {
+      if (!grass) return () => {};
+      grass.setShare(0.5);
+      return () => grass.setShare(1);
     }],
     ['- water', () => hide(byName('lake'))],
     ['- sky', () => hide(byName('sky'))],
@@ -145,6 +151,7 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
     veg.updateNear(camera.position, true);
     veg.updateVisibility(camera.position);
     weather.update(10, 0, camera); // snap weather and fog to this spot
+    grass?.update(camera.position); // the game loop is paused: move the grass tile here
     render();
     const { calls, triangles } = renderer.info.render;
     lines.push('', `${view.name} (${calls} draws, ${(triangles / 1e6).toFixed(2)}M tris)`,

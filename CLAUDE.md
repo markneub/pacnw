@@ -141,6 +141,20 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   (`footprint()`). The script runs in ~25 s. Scans are cached in `.cache/scans` (gitignored). Budget: phone draws
   140 → 152 at spawn (110 → 127 at the ridge), tris +2–5%. Good boulder spots: `x=371.9&z=104.5&yaw=0.79&pitch=-0.15`,
   `x=-128.8&z=8.2&yaw=-0.79&pitch=-0.2`.
+- **Grass** (`src/grass.js`): one tuft geometry (8 curved, tapered blades of real triangles, no alpha test), drawn by
+  instancing in two **rings**, each a square tile that wraps around the camera like the rain (one draw call each):
+  dense inner (desktop 18 m tile / 7000 tufts, fading out 6.5–9 m; phone 13 m / 3000, 4.5–6.5 m) and sparse outer (52 m /
+  20000, fading in 6.5–9 m and out 14–26 m; phone 32 m / 5600, out 9–16 m). The vertex shader picks each tuft's world spot
+  (stable while in range), reads the baked **grass map** (terrain-grid resolution: alpha = density from the forest-floor
+  layer × no-snow × (open sky² × meadow noise + lakeshore); rgb = grass palette × the terrain's baked shade, taken as
+  shaded/unshaded tile vertex colour), sits on `gGround()` (texelFetch of the height grid with the terrain's exact
+  triangulation, so it matches groundAt), and skips the trail via the terrain's `cutUniforms` mask and water. Tufts
+  shrink into the ground (smoothstep on density − hash) instead of popping. They widen with distance (up to 2.6× by
+  26 m), because 1–2 cm blades go sub-pixel at ~10 m and vanish. Wind: travelling gusts plus flutter (`shared.uWind`). Normals
+  are up-biased, and the back-face flip is undone after `normal_fragment_begin`. `?off=grass`, `?grass=50` (% of tufts,
+  built), `?bench` rows "- grass" and "grass 50%" (`setShare`). Cost (container): +2 draws, desktop +0.65M / phone +0.2M
+  submitted tris (most collapse to points where it's sparse), +0.2 s load. Good grass views: spawn `pitch=-0.12`,
+  lake `x=110&z=470&yaw=-0.67&pitch=-0.12`.
 - Shader noise: use the sine-free hash (`fract(p.xyx * .1031)`, Hoskins). `fract(sin(x)*43758)` is
   unreliable on mobile GPUs.
 - `src/bake.js`: prototype vertex AO (vertex colours × instance colours), `bakeCanopy` (2 m grid) feeds

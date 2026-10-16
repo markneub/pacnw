@@ -130,6 +130,11 @@ export function rawGroundAt(x, z) {
   return hc + (hb - hc) * (1 - fx) + (hd - hc) * (1 - fz);
 }
 
+/** The raw height grid behind the terrain mesh: heights[iz * n + ix] at (ix * step - WORLD_SIZE / 2, iz * step - WORLD_SIZE / 2). */
+export function terrainGrid() {
+  return { heights: heightGrid(), n: GRID_N, step: GRID_STEP };
+}
+
 // The trail registers a modifier that cuts its level bench into the hillside.
 let groundModifier = null;
 
@@ -237,8 +242,9 @@ export function groundColor(x, y, z, slope, target = new THREE.Color()) {
   return c;
 }
 
-// The terrain hides itself wherever the trail corridor mesh takes over.
-const cutUniforms = {
+// The terrain hides itself wherever the trail corridor mesh takes over
+// (grass.js uses the same mask to keep blades off the trail).
+export const cutUniforms = {
   uCutMask: { value: new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat) },
   uCutRect: { value: new THREE.Vector4(0, 0, 1, 1) }, // minX, minZ, sizeX, sizeZ
 };
