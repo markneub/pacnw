@@ -8,6 +8,7 @@ export const shared = {
   uSnowline: { value: SNOWLINE },
   uWet: { value: 1 }, // 0 dry .. 1 soaked: darker, glossier surfaces
   uLodRadius: { value: 85 }, // m; full-detail trees inside, far LOD outside
+  uLodBand: { value: 12 }, // m either side of uLodRadius over which the tiers crossfade
   uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
 };
 
@@ -33,17 +34,32 @@ function patchLod(shader, mode) {
         #endif`);
     return;
   }
+  // Crossfade band: across uLodRadius ± uLodBand both tiers are drawn and each
+  // pixel belongs to exactly one of them (complementary screen-space dither),
+  // so trees dissolve between detail levels instead of snapping. Outside the
+  // band the hidden tier is culled in the vertex shader as before.
   shader.uniforms.uLodRadius = shared.uLodRadius;
-  const test = mode === 'near' ? 'lodD2 >= lodR2' : 'lodD2 < lodR2';
+  shader.uniforms.uLodBand = shared.uLodBand;
+  const cull = mode === 'near' ? 'lodDist >= uLodRadius + uLodBand' : 'lodDist < uLodRadius - uLodBand';
+  const keep = mode === 'near' ? 'lodDither < vLodFade' : 'lodDither >= vLodFade';
   shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nuniform float uLodRadius;')
+    .replace('#include <common>', '#include <common>\nuniform float uLodRadius;\nuniform float uLodBand;\nvarying float vLodFade;')
     .replace('#include <project_vertex>', `#include <project_vertex>
+      vLodFade = 1.0;
       #ifdef USE_INSTANCING
-        vec2 lodD = (modelMatrix * instanceMatrix[3]).xz - cameraPosition.xz;
-        float lodD2 = dot(lodD, lodD);
-        float lodR2 = uLodRadius * uLodRadius;
-        if (${test}) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+        float lodDist = length((modelMatrix * instanceMatrix[3]).xz - cameraPosition.xz);
+        // 1 = fully near tier, 0 = fully far tier
+        vLodFade = smoothstep(uLodRadius + uLodBand, uLodRadius - uLodBand, lodDist);
+        if (${cull}) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
       #endif`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying float vLodFade;')
+    .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+      {
+        // interleaved gradient noise: a fine, stable per-pixel threshold
+        float lodDither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        if (vLodFade < 1.0 && vLodFade > 0.0 && !(${keep})) discard;
+      }`);
 }
 
 /**

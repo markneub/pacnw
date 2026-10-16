@@ -63,9 +63,12 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - **Distance tiers (the architecture for that goal):**
   - Trees: a full-detail **near pool** (`detail.js` `NearPool`, radius `VIEW_DIST.treeDetail`: 85 m
     desktop, 60 m phone) plus **far LOD chunks** (`*_lod` models, ~1/3 the tris, one vertex-coloured
-    material). `patchLod` in `materials.js` hides each instance in the vertex shader on the wrong side
-    of `shared.uLodRadius`, so the tiers are exact complements and the pool can refill lazily (every 4 m
-    of travel, holding radius + 10 m).
+    material). `patchLod` in `materials.js` decides tiers per instance from `shared.uLodRadius`. Within
+    ±`uLodBand` (12 m) both tiers draw and a complementary screen-space dither (interleaved gradient noise,
+    `discard`) gives each pixel to exactly one, so trees dissolve between levels instead of snapping.
+    Outside the band the other tier is culled in the vertex shader. The pool holds radius + band + 10 m and
+    refills lazily (every 4 m). The dither uses `discard`, which can cost fill rate on Apple GPUs
+    (hidden-surface removal), so re-check phone `?perf` after changing tree materials.
   - Ferns: near pool only, and they shrink into the ground at `uFernRadius` ('fade' mode).
   - Rocks, logs and furniture: 125 m chunks.
   - Close-up / photoreal assets belong in near pools. Their cost is bounded by the radius, not the

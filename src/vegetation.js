@@ -7,12 +7,15 @@ import {
   heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
-import { addWindSway, addGroundCover } from './materials.js';
+import { addWindSway, addGroundCover, shared } from './materials.js';
 import { bakePrototypeAO, bakeCanopy } from './bake.js';
 import { NearPool } from './detail.js';
 
 const KIND = (name) => (name.startsWith('fern') ? 'ferns'
   : /^(rock|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
+
+/** How far out a near pool must hold instances: trees also cover the crossfade band. */
+const poolRadius = (key) => VIEW_DIST[key] + (key === 'treeDetail' ? shared.uLodBand.value : 0);
 
 /** Numeric spatial-hash key (no string garbage in per-frame lookups). */
 const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
@@ -333,7 +336,7 @@ export function buildVegetation(protos, trail) {
     if (nearParts) {
       const nearColors = nearParts.map((part) => instanceColors(part.material.name, tints, shades, n));
       const radiusKey = kind === 'ferns' ? 'ferns' : 'treeDetail';
-      const pool = new NearPool(nearParts, matrices, nearColors, xz, VIEW_DIST[radiusKey]);
+      const pool = new NearPool(nearParts, matrices, nearColors, xz, poolRadius(radiusKey));
       pool.radiusKey = radiusKey;
       for (const im of pool.meshes) {
         im.name = `${name}:${im.material.name}@near`;
@@ -384,7 +387,7 @@ export function buildVegetation(protos, trail) {
 
   /** Keep the full-detail near ring filled around the camera (cheap; refills every few metres). */
   function updateNear(cameraPos, force = false) {
-    for (const pool of nearPools) pool.update(cameraPos, VIEW_DIST[pool.radiusKey], force);
+    for (const pool of nearPools) pool.update(cameraPos, poolRadius(pool.radiusKey), force);
   }
 
   function disable(kind) {
