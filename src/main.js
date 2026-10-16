@@ -40,7 +40,7 @@ const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
 
 const renderer = new THREE.WebGLRenderer({ antialias: !off.has('aa'), powerPreference: 'high-performance' });
 renderer.setPixelRatio(params.has('dpr') ? parseFloat(params.get('dpr'))
-  : Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5));
+  : Math.min(window.devicePixelRatio, 1.5)); // phones too: ?bench showed 1.25 → 1.5 costs ~0.4–1.4 ms
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.45;

@@ -51,7 +51,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   screen width), and its vertical offset from the touch point is the throttle (up 80 px = full, run when
   >0.92; down = slow reverse). It sets `player.levelPitch`, which eases pitch to level. An optional second
   finger is free look. No on-screen touch UI and no jumping (both removed at the user's request). Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
-  turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, DPR ≤1.25, half the
+  turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, half the
   particles). Override with `?quality=low|high`.
 - `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera, with fog/light
   lerped by altitude relative to the local snowline, and WebAudio noise ambience.
@@ -127,7 +127,12 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216
   (the user's phone ran ~18 ms/frame avg, worst mid-20s, no hitches). After tiers: desktop 1.57M/286,
   phone 0.65M/140. Phone `?bench` v1 (iOS 18, 502×812 @1.25): full frame 2.5–3.0 ms, empty scene 0.3–0.5 ms,
-  trees ~1 ms, ground ~0.3 ms, everything else (ground detail included) within noise. Lots of headroom. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
+  trees ~1 ms, ground ~0.3 ms, everything else (ground detail included) within noise.
+  Bench v2: the *same* full scene went from ~3 ms to ~9 ms partway through the run (the phone's GPU clock dropped:
+  power saving or heat), so absolute ms vary ~3× with phone state. Paired "saves" stayed steady (± ≤0.5). At the slow clock:
+  trees 4.1, ground 1.5, others ~0, empty scene ~1 ms. DPR from 1.25: 1.5 = +0.4–1.4 ms, 2 = +0.9–4.1, 3 = +2.8–11.2.
+  Plan for the slow state (~9 ms at the current settings), since that's what sustained play can drop to. So phone DPR went 1.25 → 1.5 (same as
+  desktop). 2 would leave only ~3 ms when throttled. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
   warm-up; much faster on a real GPU.
 
 ## Headless screenshots (how to see the scene)
