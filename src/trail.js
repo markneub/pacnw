@@ -3,6 +3,7 @@ import { WATER_LEVEL } from './config.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
 } from './terrain.js';
+import { shared, wetChunks } from './materials.js';
 
 // The trail runs from the trailhead at the spawn point, down to a viewpoint on
 // the lake's west shore, then climbs north through the forest to the one gentle
@@ -12,6 +13,9 @@ export const TRAIL_STOPS = [
   { name: 'lake', label: 'Lake viewpoint', x: 55, z: 385 },
   { name: 'ridge', label: 'Ridge viewpoint', x: 120, z: -510 },
 ];
+/** Numeric spatial-hash key (no string garbage in per-frame lookups). */
+const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
+
 export const TRAIL_WIDTH = 1.05; // half-width of the visible tread (it wanders ±15%)
 
 // Cross-section of the bench cut into the hillside: level out to BENCH_HALF,
@@ -220,7 +224,7 @@ export function buildTrail() {
     const maxZ = Math.floor((Math.max(p.y, q.y) + 12) / HASH);
     for (let gz = minZ; gz <= maxZ; gz++) {
       for (let gx = minX; gx <= maxX; gx++) {
-        const k = `${gx},${gz}`;
+        const k = cellKey(gx, gz);
         if (!segs.has(k)) segs.set(k, []);
         segs.get(k).push(i);
       }
@@ -232,7 +236,7 @@ export function buildTrail() {
    * segment's start index. d is Infinity if the trail is more than ~12 m away.
    */
   function nearest(x, z) {
-    const list = segs.get(`${Math.floor(x / HASH)},${Math.floor(z / HASH)}`);
+    const list = segs.get(cellKey(Math.floor(x / HASH), Math.floor(z / HASH)));
     let best = Infinity;
     let bestI = -1;
     if (!list) return { d: best, i: bestI };
@@ -307,7 +311,7 @@ export function buildTrail() {
    * level and the ground between them becomes a short bank, still continuous.
    */
   function benchHeight(x, z, g) {
-    const list = segs.get(`${Math.floor(x / HASH)},${Math.floor(z / HASH)}`);
+    const list = segs.get(cellKey(Math.floor(x / HASH), Math.floor(z / HASH)));
     if (!list) return g;
     let acc = 0;
     let wsum = 0;
@@ -454,7 +458,9 @@ function buildCorridorMesh(points, distanceTo) {
     polygonOffsetUnits: -2,
   });
   // Same mottling as the terrain shader so the two match, plus grit on the tread.
+  const wet = wetChunks(0.9);
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uWet = shared.uWet;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aTread;\nvarying float vTread;\nvarying vec3 vGroundPos;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTread = aTread;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -462,6 +468,8 @@ function buildCorridorMesh(points, distanceTo) {
       .replace('#include <common>', `#include <common>
         varying float vTread;
         varying vec3 vGroundPos;
+        uniform float uWet;
+        float puddle;
         float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float gNoise(vec2 p) {
           vec2 i = floor(p);
@@ -474,7 +482,15 @@ function buildCorridorMesh(points, distanceTo) {
         float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
         diffuseColor.rgb *= 0.78 + gn * 0.44;
         float grit = gNoise(vGroundPos.xz * 7.0) * 0.6 + gNoise(vGroundPos.xz * 2.2) * 0.4;
-        diffuseColor.rgb *= mix(1.0, 0.82 + grit * 0.36, vTread);`);
+        diffuseColor.rgb *= mix(1.0, 0.82 + grit * 0.36, vTread);
+        ${wet.color}
+        // puddles collect in low spots of the tread when it's wet
+        puddle = smoothstep(0.6, 0.7, gNoise(vGroundPos.xz * 0.45 + 3.7) * 0.7 + gNoise(vGroundPos.xz * 1.7) * 0.3)
+          * smoothstep(0.55, 0.9, vTread) * smoothstep(0.5, 0.9, uWet);
+        diffuseColor.rgb *= mix(1.0, 0.5, puddle);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        ${wet.roughness}
+        roughnessFactor = mix(roughnessFactor, 0.04, puddle);`);
   };
 
   const mesh = new THREE.Mesh(geo, mat);

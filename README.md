@@ -27,6 +27,9 @@ right half to look, and tap the on-screen button to jump. Weather always follows
 lighter render profile (lower resolution, shorter draw distance, fewer particles); force either with
 `?quality=low` or `?quality=high`.
 
+Add `?perf` to show frame times (average and worst, which is the one to watch for stutter), draw calls
+and triangles, and to log how long each loading step took.
+
 URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 
 ## How it's put together
@@ -38,6 +41,9 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/vegetation.js` | Loads the GLB, scatters ~70k trees/rocks/ferns by altitude, slope and forest-density noise, chunked `InstancedMesh`es with distance culling, trunk collisions |
 | `src/trail.js` | Hiking trail: A* route over the terrain (grade-penalised, so it switchbacks), smoothed and draped as a dirt/packed-snow ribbon; distance queries keep vegetation off the tread; HUD guide to the next stop |
 | `src/materials.js` | Shader patches: wind sway for foliage, moss/snow cover on rocks and logs |
+| `src/atmosphere.js` | Height fog (pools in valleys), overcast sky dome, environment map for reflections, drifting mist |
+| `src/bake.js` | Lighting baked at load: per-vertex AO on models, canopy shade map, terrain horizon AO |
+| `src/perf.js` | `?perf` overlay |
 | `src/weather.js` | GPU rain streaks and snowflakes in a box around the camera, fog and light that shift with altitude, procedural rain/wind audio |
 | `src/player.js` | First-person walker that follows the terrain (keyboard/mouse, plus an analog `stick`, `look()` and `jump()` for touch) |
 | `src/touch.js` | Phone controls: floating thumbstick on the left, swipe-to-look on the right, jump/weather buttons |

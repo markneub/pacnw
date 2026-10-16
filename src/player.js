@@ -22,6 +22,7 @@ export class Player {
     this.bob = 0;
     this.locked = false;
     this.stick = new THREE.Vector2(); // analog input: x = strafe, y = forward, length 0..1
+    this.moveDir = new THREE.Vector3(); // reused each frame (no per-frame garbage)
 
     camera.rotation.order = 'YXZ';
 
@@ -88,7 +89,7 @@ export class Player {
     if (wading) speed *= 0.45;
     speed *= throttle;
 
-    const dir = new THREE.Vector3(strafeIn, 0, -fwdIn);
+    const dir = this.moveDir.set(strafeIn, 0, -fwdIn);
     if (dir.lengthSq() > 0) dir.normalize().applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.yaw);
     const accel = this.onGround ? 12 : 2.5;
     const blend = 1 - Math.exp(-accel * dt);

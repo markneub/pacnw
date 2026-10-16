@@ -6,15 +6,38 @@ export const shared = {
   uTime: { value: 0 },
   uWind: { value: 1 },
   uSnowline: { value: SNOWLINE },
+  uWet: { value: 1 }, // 0 dry .. 1 soaked: darker, glossier surfaces
 };
+
+/**
+ * GLSL for wet surfaces: water darkens porous materials and makes them
+ * smoother, so they pick up sky reflections from the environment map.
+ * `strength` scales the effect per material (bark soaks, needles shed water).
+ */
+export function wetChunks(strength = 1) {
+  return {
+    color: `diffuseColor.rgb *= mix(1.0, 0.72, uWet * ${strength.toFixed(2)});`,
+    roughness: `roughnessFactor *= mix(1.0, 0.5, uWet * ${strength.toFixed(2)});`,
+  };
+}
+
+function patchWet(shader, strength) {
+  const w = wetChunks(strength);
+  shader.uniforms.uWet = shared.uWet;
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform float uWet;')
+    .replace('#include <color_fragment>', `#include <color_fragment>\n${w.color}`)
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${w.roughness}`);
+}
 
 /**
  * Gentle wind sway for foliage. Displacement grows with height above the
  * instance origin so trunks stay planted. Phase comes from instance position
  * so neighbouring trees don't move in lockstep.
  */
-export function addWindSway(material, strength = 0.012) {
+export function addWindSway(material, strength = 0.012, wet = 0.25) {
   material.onBeforeCompile = (shader) => {
+    patchWet(shader, wet);
     shader.uniforms.uTime = shared.uTime;
     shader.uniforms.uWind = shared.uWind;
     shader.vertexShader = shader.vertexShader
@@ -38,7 +61,7 @@ export function addWindSway(material, strength = 0.012) {
         transformed.z += cos(uTime * 1.1 + swayPhase.y) * swayH * swayH * ${strength.toFixed(4)} * 0.03 * uWind;`,
       );
   };
-  material.customProgramCacheKey = () => `wind${strength}`;
+  material.customProgramCacheKey = () => `wind${strength}|${wet}`;
   return material;
 }
 
@@ -48,6 +71,7 @@ export function addWindSway(material, strength = 0.012) {
  */
 export function addGroundCover(material) {
   material.onBeforeCompile = (shader) => {
+    patchWet(shader, 1);
     shader.uniforms.uSnowline = shared.uSnowline;
     shader.vertexShader = shader.vertexShader
       .replace(

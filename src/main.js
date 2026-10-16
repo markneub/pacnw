@@ -7,6 +7,11 @@ import { Player } from './player.js';
 import { shared } from './materials.js';
 import { SNOWLINE, SPAWN, VIEW_DIST } from './config.js';
 import { TouchControls, isTouchDevice } from './touch.js';
+import { installHeightFog, createEnvironment } from './atmosphere.js';
+import { shadeGround } from './bake.js';
+import { PerfOverlay } from './perf.js';
+
+installHeightFog(); // must run before any material compiles
 import './style.css';
 
 const params = new URLSearchParams(location.search);
@@ -30,30 +35,51 @@ renderer.toneMappingExposure = 1.45;
 document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
+scene.environment = createEnvironment(renderer);
+scene.environmentIntensity = 0.55;
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, lowPower ? 420 : 900);
 
 const overlay = document.getElementById('overlay');
 const status = document.getElementById('status');
 const hud = document.getElementById('hud');
 
+// ?perf also logs how long each loading step takes
+const timings = [];
+let stepStart = performance.now();
+function step(label) {
+  const now = performance.now();
+  timings.push(`${label} ${(now - stepStart).toFixed(0)} ms`);
+  stepStart = now;
+}
+
 async function init() {
   status.textContent = 'Shaping the valley…';
   await nextFrame();
-  scene.add(buildTerrain());
+  const terrain = buildTerrain();
+  scene.add(terrain);
   scene.add(buildWater());
+  step('terrain');
 
   status.textContent = 'Cutting the trail…';
   await nextFrame();
   const trail = buildTrail();
   scene.add(trail.mesh);
+  step('trail');
 
   status.textContent = 'Growing the forest…';
   const protos = await loadPrototypes(`${import.meta.env.BASE_URL}models/forest.glb`);
   await nextFrame();
   const veg = buildVegetation(protos, trail);
   scene.add(veg.group);
+  step('vegetation');
 
-  const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1 });
+  status.textContent = 'Letting the light in…';
+  await nextFrame();
+  shadeGround(terrain, veg.canopyAt);
+  shadeGround(trail.mesh, veg.canopyAt);
+  step('ground shading');
+
+  const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1, mist: lowPower ? 6 : 12 });
   const player = new Player(camera, renderer.domElement, veg.collide);
 
   // Spawn in the southern valley looking north toward the mountains.
@@ -68,6 +94,12 @@ async function init() {
     document.body.classList.add('touch');
     touchUi = new TouchControls(renderer.domElement, player);
   }
+
+  status.textContent = 'Warming up…';
+  await nextFrame();
+  warmUp();
+  step('warm-up');
+  if (params.has('perf')) console.info('load:', timings.join(' · '));
 
   status.textContent = touch ? 'Tap to walk' : 'Click to walk';
   overlay.classList.add('ready');
@@ -102,6 +134,9 @@ async function init() {
   let visTimer = 0;
   veg.updateVisibility(camera.position);
 
+  const perf = params.has('perf') ? new PerfOverlay(renderer) : null;
+  let hudTimer = 0;
+
   let frames = 0;
   renderer.setAnimationLoop(() => {
     // ?still=N renders N frames then stops (for headless screenshots)
@@ -119,7 +154,9 @@ async function init() {
       visTimer = 0.25;
     }
 
-    if (showHud) {
+    hudTimer -= dt;
+    if (showHud && hudTimer <= 0) {
+      hudTimer = 0.25; // DOM text updates are cheap at 4 Hz, wasteful at 60
       const alt = Math.round(player.pos.y);
       const zone = alt > SNOWLINE + 10 ? 'Subalpine snowfield'
         : alt > SNOWLINE - 30 ? 'Upper slopes'
@@ -136,6 +173,7 @@ async function init() {
     }
 
     renderer.render(scene, camera);
+    perf?.tick();
     if (still) {
       renderer.setAnimationLoop(null);
       window.__still = renderer.domElement.toDataURL('image/png');
@@ -152,6 +190,33 @@ function flash(msg) {
   el.classList.add('show');
   clearTimeout(flashTimer);
   flashTimer = setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+/**
+ * Draw everything once, off-screen, before play starts: compiles every shader
+ * and uploads every buffer (including far-away instance chunks) so nothing
+ * hitches the first time it comes into view.
+ */
+function warmUp() {
+  const restore = [];
+  scene.traverse((o) => {
+    restore.push([o, o.visible, o.frustumCulled]);
+    o.visible = true;
+    o.frustumCulled = false;
+  });
+  renderer.compile(scene, camera);
+  const target = new THREE.WebGLRenderTarget(16, 16);
+  renderer.setRenderTarget(target);
+  renderer.render(scene, camera);
+  // reading a pixel back blocks until the GPU has really finished (shader
+  // linking and buffer uploads included), so that cost lands in loading, not play
+  renderer.readRenderTargetPixels(target, 0, 0, 1, 1, new Uint8Array(4));
+  renderer.setRenderTarget(null);
+  target.dispose();
+  for (const [o, visible, culled] of restore) {
+    o.visible = visible;
+    o.frustumCulled = culled;
+  }
 }
 
 function nextFrame() {

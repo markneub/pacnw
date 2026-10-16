@@ -52,8 +52,26 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   particles). Override with `?quality=low|high`.
 - `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera, with fog/light
   lerped by altitude relative to the local snowline, and WebAudio noise ambience.
+- **Realism direction (agreed): "A" = richer stylized low-poly, keeping the door open to "B" (photo-textured
+  PBR assets, needle-card trees with far trees as impostors).** Keep new work asset-agnostic: lighting is
+  baked from geometry (`bake.js`), materials are made in one place (`vegetation.js` `convertMaterial`), and
+  shader tweaks are chunk patches that also work on textured materials.
+- **No stutter rule:** build everything at load, never mid-play. No per-frame allocations (reuse vectors;
+  spatial hashes use numeric `cellKey`). `warmUp()` in `main.js` renders the whole scene once off-screen
+  and reads a pixel back so shader linking and buffer uploads finish during loading. Phones get the same
+  features scaled by density and distance. Check with `?perf` (frame avg/worst, hitches >50 ms, load-step
+  timings in the console).
+- `src/atmosphere.js`: `installHeightFog()` replaces three's fog chunks globally, so it must run before
+  any material compiles. Fog thickens below ~18 m + 45 m falloff. Sky dome + PMREM environment
+  (`scene.environmentIntensity` 0.55; foliage `envMapIntensity` 0.35 or it looks grey). `Mist` sprites
+  (12 desktop, 6 phone).
+- `src/bake.js`: prototype vertex AO (vertex colours × instance colours), `bakeCanopy` (2 m grid) feeds
+  instance tints and `shadeGround` (terrain + corridor), and `horizonAO` from the terrain grid.
+  `shared.uWet` (from `weather.js`) drives wet darkening/gloss (`wetChunks`), trail puddles and lake rain
+  rings.
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
-- Perf at spawn: ~3.1M tris, ~450 draw calls. Watch this when adding instanced content.
+- Perf at spawn: ~3.1M tris, ~450 draw calls. Watch this when adding instanced content. Load in the container
+  (SwiftShader): ~11 s, ~8 s of it the software-rendered warm-up. It's much faster on a real GPU.
 
 ## Headless screenshots (how to see the scene)
 

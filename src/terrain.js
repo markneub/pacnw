@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED } from './config.js';
+import { shared, wetChunks } from './materials.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -252,14 +253,17 @@ export function buildTerrain() {
   });
   // Mottle the vertex colours with a little world-space value noise so the
   // ground doesn't look like flat-shaded polygons up close.
+  const wet = wetChunks(0.9);
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, cutUniforms);
+    shader.uniforms.uWet = shared.uWet;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGroundPos;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         varying vec3 vGroundPos;
+        uniform float uWet;
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
         float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -275,7 +279,10 @@ export function buildTerrain() {
         if (all(greaterThan(cutUv, vec2(0.0))) && all(lessThan(cutUv, vec2(1.0)))
             && texture2D(uCutMask, cutUv).r > 0.5) discard;
         float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
-        diffuseColor.rgb *= 0.78 + gn * 0.44;`);
+        diffuseColor.rgb *= 0.78 + gn * 0.44;
+        ${wet.color}`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        ${wet.roughness}`);
   };
 
   const mesh = new THREE.Mesh(geo, mat);
@@ -287,12 +294,48 @@ export function buildWater() {
   const geo = new THREE.CircleGeometry(LAKE.r * 1.6, 64);
   geo.rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x1d2f33,
-    roughness: 0.08,
-    metalness: 0.2,
+    color: 0x16262a,
+    roughness: 0.06,
+    metalness: 0.0,
+    envMapIntensity: 1.6,
     transparent: true,
-    opacity: 0.88,
+    opacity: 0.92,
   });
+  // Wave normals: two slow swell layers plus expanding rain rings, scaled by
+  // wetness. The reflection itself comes from the scene's environment map.
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = shared.uTime;
+    shader.uniforms.uWet = shared.uWet;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vWaterXZ;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWaterXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uTime;
+        uniform float uWet;
+        varying vec2 vWaterXZ;
+        float wHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
+        vec2 rainRing(vec2 p, float t) {
+          vec2 cell = floor(p);
+          vec2 f = fract(p) - 0.5;
+          float h = wHash(cell);
+          float ph = fract(t * 0.8 + h * 7.0);
+          vec2 c = (vec2(wHash(cell + 3.1), wHash(cell + 7.7)) - 0.5) * 0.5;
+          vec2 d = f - c;
+          float r = length(d) + 1e-4;
+          float ring = exp(-pow((r - ph * 0.45) * 22.0, 2.0)) * (1.0 - ph);
+          return d / r * ring;
+        }`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          vec2 p = vWaterXZ;
+          vec2 g = vec2(cos(p.x * 0.31 + uTime * 0.8), cos(p.y * 0.27 - uTime * 0.65)) * 0.035
+                 + vec2(cos(p.x * 1.1 + p.y * 0.6 + uTime * 1.9), cos(p.y * 0.9 - p.x * 0.4 + uTime * 1.6)) * 0.018;
+          g += (rainRing(p * 0.9, uTime) + rainRing(p * 1.3 + 17.0, uTime * 1.1)) * 0.35 * uWet;
+          vec3 nWorld = normalize(vec3(-g.x, 1.0, -g.y));
+          normal = normalize((viewMatrix * vec4(nWorld, 0.0)).xyz);
+        }`);
+  };
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(LAKE.x, WATER_LEVEL, LAKE.z);
   mesh.scale.z = 1 / 1.4;

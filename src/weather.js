@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { snowlineAt } from './terrain.js';
+import { createSky, Mist } from './atmosphere.js';
 import { shared } from './materials.js';
 
 const smooth = THREE.MathUtils.smoothstep;
@@ -145,24 +146,29 @@ function createSnow(count = 14000) {
 // Atmosphere presets: overcast temperate rainforest vs. high-country snow.
 const LOW = {
   fog: new THREE.Color(0x7d8b8c),
-  density: 0.0105,
+  density: 0.0085, // valley pooling in the height fog adds ~35% low down
+  zenith: new THREE.Color(0xa9b5b9),
   hemiSky: new THREE.Color(0xaab8bd),
   hemiGround: new THREE.Color(0x2c3a22),
-  hemiIntensity: 2.1,
-  sunIntensity: 0.9,
+  hemiIntensity: 1.5,
+  sunIntensity: 0.8,
 };
 const HIGH = {
   fog: new THREE.Color(0xc4ccd4),
-  density: 0.0125,
+  density: 0.0145,
+  zenith: new THREE.Color(0xe1e6ec),
   hemiSky: new THREE.Color(0xdfe6ee),
   hemiGround: new THREE.Color(0x8a96a3),
-  hemiIntensity: 1.9,
-  sunIntensity: 0.6,
+  hemiIntensity: 1.4,
+  sunIntensity: 0.5,
 };
 
 export class Weather {
-  constructor(scene, renderer, { particles = 1 } = {}) {
+  constructor(scene, renderer, { particles = 1, mist = 12 } = {}) {
     this.scene = scene;
+    this.sky = createSky();
+    scene.add(this.sky.mesh);
+    this.mist = new Mist(scene, mist);
     this.rain = createRain(Math.round(14000 * particles));
     this.snow = createSnow(Math.round(14000 * particles));
     this.snow.material.uniforms.uPixelRatio.value = renderer.getPixelRatio();
@@ -222,6 +228,17 @@ export class Weather {
     this.hemi.intensity = THREE.MathUtils.lerp(LOW.hemiIntensity, HIGH.hemiIntensity, snowT);
     this.sun.intensity = THREE.MathUtils.lerp(LOW.sunIntensity, HIGH.sunIntensity, snowT)
       * (this.override === 'clear' ? 2.2 : 1);
+
+    this.sky.uniforms.uHorizon.value.copy(this.scene.fog.color);
+    this.sky.uniforms.uZenith.value.copy(LOW.zenith).lerp(HIGH.zenith, snowT);
+    this.sky.uniforms.uTime.value = time;
+    this.mist.update(dt, camera, Mist.amountAt(camera.position, this.rainAmount, this.override === 'clear'));
+
+    // Surfaces stay damp in the rainforest even between showers; they dry out
+    // in clear weather and there's no liquid water up in the snow.
+    const wetTarget = (this.override === 'clear' ? 0.15 : 0.55 + 0.45 * this.rainAmount) * (1 - snowT);
+    shared.uWet.value += (wetTarget - shared.uWet.value) * (this.wetStarted ? 1 - Math.exp(-dt * 0.3) : 1);
+    this.wetStarted = true;
 
     shared.uWind.value = 0.7 + this.snowAmount * 0.8 + Math.sin(time * 0.13) * 0.3;
 

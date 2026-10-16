@@ -8,9 +8,13 @@ import {
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover } from './materials.js';
+import { bakePrototypeAO, bakeCanopy } from './bake.js';
 
 const KIND = (name) => (name.startsWith('fern') ? 'ferns'
   : /^(rock|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
+
+/** Numeric spatial-hash key (no string garbage in per-frame lookups). */
+const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
 
 // Trunk radius (m, at scale 1) used for walking collisions.
 const COLLIDE = {
@@ -37,6 +41,7 @@ export async function loadPrototypes(url) {
       geometry.computeBoundingSphere();
       parts.push({ geometry, material: convertMaterial(o.material, root.name, materialCache) });
     });
+    bakePrototypeAO(parts, KIND(root.name));
     protos[root.name] = parts;
   }
   return protos;
@@ -55,6 +60,8 @@ function convertMaterial(src, assetName, cache) {
     flatShading: true,
     side: kind === 'ferns' ? THREE.DoubleSide : THREE.FrontSide,
   });
+  // needles shed water and scatter light: keep sky reflections off foliage
+  if (/Needles|Foliage|Fern/.test(src.name)) mat.envMapIntensity = 0.35;
   if (kind === 'trees') addWindSway(mat);
   else if (kind === 'ferns') addWindSway(mat, 2.5);
   else addGroundCover(mat);
@@ -216,6 +223,7 @@ function scatter(trail) {
  */
 export function buildVegetation(protos, trail) {
   const placements = scatter(trail);
+  const canopyAt = bakeCanopy(placements);
   const group = new THREE.Group();
   group.name = 'vegetation';
   const chunks = new Map(); // key -> { cx, cz, kind -> Object3D[] }
@@ -250,7 +258,7 @@ export function buildVegetation(protos, trail) {
 
       const r = COLLIDE[name];
       if (r) {
-        const ck = `${Math.floor(inst.x / COLL_CELL)},${Math.floor(inst.z / COLL_CELL)}`;
+        const ck = cellKey(Math.floor(inst.x / COLL_CELL), Math.floor(inst.z / COLL_CELL));
         if (!colliders.has(ck)) colliders.set(ck, []);
         colliders.get(ck).push({ x: inst.x, z: inst.z, r: r * inst.scale });
       }
@@ -279,6 +287,9 @@ export function buildVegetation(protos, trail) {
           } else {
             col.setRGB(1, 1, 1);
           }
+          // baked shade: understory under a closed canopy gets much less light
+          const occ = canopyAt(it.x, it.z);
+          col.multiplyScalar(1 - occ * (kind === 'trees' ? 0.22 : 0.45));
           im.setColorAt(i, col);
         });
         im.instanceMatrix.needsUpdate = true;
@@ -309,7 +320,7 @@ export function buildVegetation(protos, trail) {
     const gz = Math.floor(pos.z / COLL_CELL);
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
-        const list = colliders.get(`${gx + dx},${gz + dz}`);
+        const list = colliders.get(cellKey(gx + dx, gz + dz));
         if (!list) continue;
         for (const c of list) {
           const ox = pos.x - c.x;
@@ -326,5 +337,5 @@ export function buildVegetation(protos, trail) {
     }
   }
 
-  return { group, updateVisibility, collide, counts };
+  return { group, updateVisibility, collide, counts, canopyAt, chunks };
 }
