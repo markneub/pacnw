@@ -95,7 +95,10 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   and pastes the result. **Parameterized (v3):** `?bench=trees,grass` runs only those rows (keys: trees, ferns, rocks,
   ground, detail, tex, grass, grass50, water, sky, weather, empty, dpr) plus the full baseline. `&views=spawn,forest,snow`,
   and `&heat=30` renders flat out first (in 200 ms slices), so the run measures the throttled state directly. The full
-  run takes ~2 min. Ask for just the rows a change touches. `quick` (combinable: `?bench=quick,trees`) is the SwiftShader
+  run takes ~2 min. Ask for just the rows a change touches. **The user prefers not to heat up:** links go without `&heat` and measure
+  the full-clock state. Judge by relative cost (paired "saves"); autores covers throttling. Rule of thumb: keep the
+  full-clock phone frame at spawn ≲6 ms (throttled has been ~2.5× full clock). Tree culling at full clock: trees spawn
+  1.5 → 1.2 ms, forest 1.1 → 0.7 ms; full frame 5.3 / 4.7 ms. `quick` (combinable: `?bench=quick,trees`) is the SwiftShader
   smoke test. SwiftShader's *relative* costs don't carry
   over to phones (it showed ferns/ground at ~18% each; the phone showed ~0), so use it for counts and regressions only.
   To find what costs the most on a device, use `?off=trees,ferns,rocks,terrain,trail,
