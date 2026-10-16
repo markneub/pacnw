@@ -19,8 +19,11 @@ import { loadTextureSet } from './textures.js';
  * Textures: public/textures/surface/ (tools/fetch_textures.py surface).
  */
 
-// GLB material name -> texture layer
-const MATERIAL_LAYER = { Bark: 'bark', CedarBark: 'cedar', SnagBark: 'snag', Rock: 'rock' };
+// GLB material name -> texture layer. Scanned rocks have their own photo and
+// baked normals; the tiling lichen adds fine grain on top (see `amount`).
+const MATERIAL_LAYER = {
+  Bark: 'bark', CedarBark: 'cedar', SnagBark: 'snag', Rock: 'rock', ScanRockA: 'rock', ScanRockB: 'rock',
+};
 
 export const surfaceDetail = {
   enabled: false,
@@ -51,22 +54,24 @@ export async function loadSurfaceDetail(renderer, { lowPower }) {
 /**
  * Add surface detail to a material on top of its existing onBeforeCompile
  * patches. The detail only compiles in once loadSurfaceDetail has succeeded.
+ * `amount` scales it (colour and relief), e.g. as a fine detail layer over a
+ * material that has its own textures.
  */
-export function addSurfaceDetail(material, layer, { swapXY = false } = {}) {
+export function addSurfaceDetail(material, layer, { swapXY = false, amount = 1 } = {}) {
   const prev = material.onBeforeCompile;
   const prevKey = material.customProgramCacheKey;
   material.onBeforeCompile = (shader, renderer) => {
     prev.call(material, shader, renderer);
-    patchSurfaceDetail(shader, layer, swapXY);
+    patchSurfaceDetail(shader, layer, swapXY, amount);
   };
   material.customProgramCacheKey = () => {
     const on = surfaceDetail.enabled && surfaceDetail.layers[layer];
-    return `${prevKey.call(material)}|${on ? `sd:${layer}${swapXY ? 'x' : ''}` : 'sd0'}`;
+    return `${prevKey.call(material)}|${on ? `sd:${layer}${swapXY ? 'x' : ''}${amount}` : 'sd0'}`;
   };
   return material;
 }
 
-function patchSurfaceDetail(shader, layer, swapXY) {
+function patchSurfaceDetail(shader, layer, swapXY, amount) {
   const u = surfaceDetail.enabled && surfaceDetail.layers[layer];
   if (!u) return;
   Object.assign(shader.uniforms, u, { uSDRange: surfaceDetail.uSDRange, uSDNormal: surfaceDetail.uSDNormal });
@@ -89,7 +94,7 @@ function patchSurfaceDetail(shader, layer, swapXY) {
         vSDPos = transformed${swz} * length(sdInst[0]); // metres, so every instance gets the same texel size
         vSDN = objectNormal${swz};
         vSDWorld = (sdModel * vec4(transformed, 1.0)).xyz;
-        vSDToView = normalMatrix * sdInst;
+        vSDToView = normalMatrix * sdInst / length(sdInst[0]); // rotation only
       }`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
@@ -121,7 +126,7 @@ function patchSurfaceDetail(shader, layer, swapXY) {
           vec3 aX = textureGrad(uSDAlb, p.zy, dx.zy, dy.zy).rgb;
           vec3 aY = textureGrad(uSDAlb, p.xz, dx.xz, dy.xz).rgb;
           vec3 aZ = textureGrad(uSDAlb, p.xy, dx.xy, dy.xy).rgb;
-          float sdStrength = uSDStrength;
+          float sdStrength = uSDStrength * ${amount.toFixed(3)};
           #ifdef GROUND_COVER
             // moss and snow lying on top hide most of the rock's own pattern
             sdStrength *= 1.0 - 0.9 * gcMoss - 0.85 * gcSnow;
@@ -131,9 +136,10 @@ function patchSurfaceDetail(shader, layer, swapXY) {
           vec2 nX = textureGrad(uSDNrm, p.zy, dx.zy, dy.zy).xy * 2.0 - 1.0;
           vec2 nY = textureGrad(uSDNrm, p.xz, dx.xz, dy.xz).xy * 2.0 - 1.0;
           vec2 nZ = textureGrad(uSDNrm, p.xy, dx.xy, dy.xy).xy * 2.0 - 1.0;
-          vec3 sdOff = (vec3(0.0, nX.y, nX.x) * bw.x + vec3(nY.x, 0.0, nY.y) * bw.y + vec3(nZ.x, nZ.y, 0.0) * bw.z) * uSDNormal;
-          vec3 sdN = normalize(vSDToView * (sdBase + sdOff)${swz});
-          normal = normalize(mix(normal, sdN, sdFade));
+          vec3 sdOff = (vec3(0.0, nX.y, nX.x) * bw.x + vec3(nY.x, 0.0, nY.y) * bw.y + vec3(nZ.x, nZ.y, 0.0) * bw.z)
+            * uSDNormal * ${amount.toFixed(3)};
+          // tilt whatever normal the material already has (it may carry its own normal map)
+          normal = normalize(normal + vSDToView * sdOff${swz} * sdFade);
         }
       }`);
 }

@@ -2,3 +2,4 @@ node_modules
 dist
 *.blend1
 __pycache__
+.cache/

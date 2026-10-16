@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildTerrain, buildWater, heightAt } from './terrain.js';
-import { loadPrototypes, buildVegetation } from './vegetation.js';
+import { loadPrototypes, buildVegetation, applyRockTextures } from './vegetation.js';
 import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
@@ -12,6 +12,7 @@ import { shadeGround } from './bake.js';
 import { PerfOverlay } from './perf.js';
 import { loadGroundDetail } from './grounddetail.js';
 import { loadSurfaceDetail } from './surfacedetail.js';
+import { loadTextureSet } from './textures.js';
 import { runBench } from './bench.js';
 import { AutoResolution } from './autores.js';
 
@@ -82,6 +83,8 @@ async function init() {
   // close-up ground and bark/rock textures download while the world is being built
   const detailReady = off.has('detail') ? Promise.resolve([false, false])
     : Promise.all([loadGroundDetail(renderer, { lowPower }), loadSurfaceDetail(renderer, { lowPower })]);
+  // scanned boulders' photos and baked normals (glTF UVs: no flip)
+  const rockTexReady = loadTextureSet(renderer, 'rocks', { lowPower, flipY: false });
   progress(0.1, 500);
   await nextFrame();
   const terrain = buildTerrain();
@@ -96,7 +99,7 @@ async function init() {
   step('trail');
 
   progress(0.5, 1600);
-  const protos = await loadPrototypes(`${import.meta.env.BASE_URL}models/forest.glb`);
+  const protos = await loadPrototypes(['forest', 'rocks'].map((m) => `${import.meta.env.BASE_URL}models/${m}.glb`));
   await nextFrame();
   const veg = buildVegetation(protos, trail);
   scene.add(veg.group);
@@ -133,7 +136,9 @@ async function init() {
   if (touch) new TouchControls(renderer.domElement, player); // eslint-disable-line no-new
 
   const [ground, surface] = await detailReady; // before warm-up so their shaders compile now
-  step(`detail textures (ground ${ground ? 'on' : 'off'}, surface ${surface ? 'on' : 'off'})`);
+  const rockTex = await rockTexReady;
+  applyRockTextures(rockTex);
+  step(`detail textures (ground ${ground ? 'on' : 'off'}, surface ${surface ? 'on' : 'off'}, rocks ${rockTex ? 'on' : 'off'})`);
 
   progress(0.98, 2500);
   await nextFrame();

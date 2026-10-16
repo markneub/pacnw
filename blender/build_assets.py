@@ -328,33 +328,6 @@ def _stick(b, mat, p0, p1, r, sides=4):
 # Ground clutter
 # ---------------------------------------------------------------------------
 
-def rock(M, name, seed, scale=(1.5, 1.1, 0.8), subdiv=2):
-    import bmesh
-    rng = random.Random(seed)
-    bm = bmesh.new()
-    bmesh.ops.create_icosphere(bm, subdivisions=subdiv, radius=1.0)
-    off = Vector((rng.uniform(0, 100), rng.uniform(0, 100), rng.uniform(0, 100)))
-    for v in bm.verts:
-        n = noise.noise(v.co * 1.3 + off)
-        n2 = noise.noise(v.co * 3.1 + off * 2.0)
-        v.co *= 1.0 + 0.32 * n + 0.1 * n2
-        v.co.x *= scale[0]
-        v.co.y *= scale[1]
-        v.co.z *= scale[2]
-        if v.co.z < -0.25:
-            v.co.z = -0.25 - (v.co.z + 0.25) * 0.15
-        v.co.z += 0.2
-    me = bpy.data.meshes.new(name)
-    bm.to_mesh(me)
-    bm.free()
-    me.materials.append(M["rock"])
-    for p in me.polygons:
-        p.use_smooth = False
-    obj = bpy.data.objects.new(name, me)
-    bpy.context.scene.collection.objects.link(obj)
-    return obj
-
-
 def fern(M, name, seed, fronds=11):
     """Western sword fern: arching, tapering fronds with serrated edges."""
     rng = random.Random(seed)
@@ -575,9 +548,6 @@ def main():
     sapling(M, "sapling_snow_lod", snow=True, lod=True)
     snag_lod(M, "snag_lod")
 
-    rock(M, "rock_a", 11, (1.5, 1.1, 0.8))
-    rock(M, "rock_b", 12, (1.1, 1.0, 1.05))
-    rock(M, "rock_c", 13, (2.2, 1.4, 0.65))
     fern(M, "fern_a", 21)
     fern(M, "fern_b", 22, fronds=9)
     log(M, "log", 31)

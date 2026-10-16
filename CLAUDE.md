@@ -17,12 +17,13 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 
 ## Assets (Blender)
 
-- Every model is procedural in `blender/build_assets.py` → `public/models/forest.glb` (committed).
+- Trees/ferns/logs/furniture are procedural in `blender/build_assets.py` → `public/models/forest.glb` (committed).
+  Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
 - No Blender binary in the container. Use the PyPI module:
   `python3 -m venv <scratch>/bvenv && <scratch>/bvenv/bin/pip install bpy` (bpy 5.x works with Python 3.13),
   then `<scratch>/bvenv/bin/python blender/build_assets.py`.
 - Preview renders: Workbench/EEVEE fail (no libEGL). Use Cycles on the CPU with low samples.
-- Object names (`fir`, `fir_snow`, `hemlock`, `cedar`, `sapling`, `snag`, `rock_a/b/c`, `fern_a/b`,
+- Object names (`fir`, `fir_snow`, `hemlock`, `cedar`, `sapling`, `snag`, `boulder_a..f`, `fern_a/b`,
   `log`, `stump`, `signpost`, `cairn`, `bench`) and material names are looked up in `src/vegetation.js` (and `src/surfacedetail.js`). Keep them in sync.
 - Blender is Z-up; the exporter converts to Y-up. Each asset is one object at the origin, with one glTF primitive per material.
 
@@ -70,7 +71,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
     refills lazily (every 4 m). The dither uses `discard`, which can cost fill rate on Apple GPUs
     (hidden-surface removal), so re-check phone `?perf` after changing tree materials.
   - Ferns: near pool only, and they shrink into the ground at `uFernRadius` ('fade' mode).
-  - Rocks, logs and furniture: 125 m chunks.
+  - Boulders: near pool + far chunks like trees (`boulder_x` + `boulder_x_lod`). Logs, stumps and furniture: 125 m chunks only.
+    Any node with a `<name>_lod` partner gets two tiers (`loadPrototypes` loads forest.glb and rocks.glb).
   - Close-up / photoreal assets belong in near pools. Their cost is bounded by the radius, not the
     forest size. Pool capacity is computed at load (`maxNearby`). If a pool fills, trees go missing, so
     `budget.mjs`-style checks report full pools.
@@ -126,6 +128,19 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   (0.36, 0.28, 0.21). Near-black trunks hid the texture. Three's `flatShading` is off for *Bark materials.
   Budget: draws unchanged, tris +1%. Good close-up spots: fir `x=531.9&z=44.3&yaw=2.36`, snag `x=242.3&z=-78.3&yaw=0.79`,
   rock `x=288.8&z=-100.8&yaw=-3.14&pitch=-0.3`, cairn `x=21.9&z=-179.9&yaw=-3.14&pitch=-0.4`.
+- **Scanned boulders** (`blender/build_rocks.py`): 6 rocks from Poly Haven `rock_moss_set_02` (grey, "scanA") and `_01`
+  ("scanB", warm sandstone regraded 70% toward scanA's grey). Each is welded (glTF import splits verts at UV seams, and
+  decimating unwelded meshes opens cracks), then decimated to near ~1600 / far ~220 tris with the scan UVs kept. The scan's
+  shading normals (mesh + its own normal map) are baked (Cycles, selected-to-active, tangent space) into a 2048 atlas in
+  the scan's UV layout. It's exported with tangents and no images. The game loads `textures/rocks` (`sizes` [2048, 1024],
+  `flipY: false` for glTF UVs) and `applyRockTextures` sets map (both tiers) + normalMap (near only) before warm-up.
+  Materials `ScanRockA/B`: smooth-shaded, ground cover with `moss: 0.35`, triplanar lichen grain at `amount: 0.3`. The
+  surface-detail normal now *adds* to the existing normal, so normal maps survive. Origin: footprint centre, 18% of the
+  height below ground. Scatter keeps the same rng calls (the variant comes from the same draw, so no tree moved), scale
+  0.6–2.5, seated at the lowest ground in a 0.8×scale ring minus 0.12×scale. Colliders come from the footprint
+  (`footprint()`). The script runs in ~25 s. Scans are cached in `.cache/scans` (gitignored). Budget: phone draws
+  140 → 152 at spawn (110 → 127 at the ridge), tris +2–5%. Good boulder spots: `x=371.9&z=104.5&yaw=0.79&pitch=-0.15`,
+  `x=-128.8&z=8.2&yaw=-0.79&pitch=-0.2`.
 - Shader noise: use the sine-free hash (`fract(p.xyx * .1031)`, Hoskins). `fract(sin(x)*43758)` is
   unreliable on mobile GPUs.
 - `src/bake.js`: prototype vertex AO (vertex colours × instance colours), `bakeCanopy` (2 m grid) feeds

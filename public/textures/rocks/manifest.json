@@ -1,0 +1,29 @@
+{
+  "source": "Poly Haven (CC0)",
+  "sizes": [
+    2048,
+    1024
+  ],
+  "layers": [
+    {
+      "name": "scanA",
+      "asset": "rock_moss_set_02",
+      "avg": [
+        0.09292,
+        0.0813,
+        0.05189
+      ],
+      "url": "https://polyhaven.com/a/rock_moss_set_02"
+    },
+    {
+      "name": "scanB",
+      "asset": "rock_moss_set_01",
+      "avg": [
+        0.06686,
+        0.0537,
+        0.03191
+      ],
+      "url": "https://polyhaven.com/a/rock_moss_set_01"
+    }
+  ]
+}

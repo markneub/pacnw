@@ -13,10 +13,23 @@ import { NearPool } from './detail.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
 
 const KIND = (name) => (name.startsWith('fern') ? 'ferns'
-  : /^(rock|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
+  : /^(boulder|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
+
+/** Scanned boulders (blender/build_rocks.py). The same random draw picks one, so the scatter is unchanged. */
+const BOULDERS = ['boulder_a', 'boulder_b', 'boulder_c', 'boulder_d', 'boulder_e', 'boulder_f'];
 
 /** How far out a near pool must hold instances: trees also cover the crossfade band. */
 const poolRadius = (key) => VIEW_DIST[key] + (key === 'treeDetail' ? shared.uLodBand.value : 0);
+
+/** Collision radius (m, at scale 1) for a model without a COLLIDE entry: most of its narrower half-width. */
+const footprint = (parts) => {
+  const box = new THREE.Box3();
+  for (const { geometry } of parts) {
+    geometry.computeBoundingBox();
+    box.union(geometry.boundingBox);
+  }
+  return 0.4 * Math.min(box.max.x - box.min.x, box.max.z - box.min.z);
+};
 
 /** Numeric spatial-hash key (no string garbage in per-frame lookups). */
 const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
@@ -25,26 +38,36 @@ const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
 const COLLIDE = {
   fir: 0.75, fir_snow: 0.75, hemlock: 0.6, hemlock_snow: 0.6, cedar: 1.1,
   sapling: 0.25, sapling_snow: 0.25, snag: 0.65,
-  rock_a: 1.6, rock_b: 1.2, rock_c: 2.0, stump: 1.0,
+  stump: 1.0, // boulders: from their footprint (buildVegetation)
   signpost: 0.25, cairn: 0.6, bench: 0.9,
 };
 
-/** Load forest.glb and turn each top-level node into a list of {geometry, material}. */
-export async function loadPrototypes(url) {
-  const gltf = await new GLTFLoader().loadAsync(url);
-  gltf.scene.updateMatrixWorld(true);
+/**
+ * Load the model files (forest.glb, rocks.glb) and turn each top-level node
+ * into a list of {geometry, material}. A node with a `<name>_lod` partner gets
+ * two tiers: the full model for the near pool, the _lod one for far chunks.
+ */
+export async function loadPrototypes(urls) {
+  const loader = new GLTFLoader();
+  const scenes = await Promise.all(urls.map((url) => loader.loadAsync(url)));
+  const roots = scenes.flatMap((gltf) => {
+    gltf.scene.updateMatrixWorld(true);
+    return [...gltf.scene.children];
+  });
+  const names = new Set(roots.map((r) => r.name));
   const materialCache = new Map();
   const protos = {};
 
-  for (const root of gltf.scene.children) {
+  for (const root of roots) {
     const parts = [];
     const rootInv = root.matrixWorld.clone().invert();
+    const lod = root.name.endsWith('_lod') ? 'far' : names.has(`${root.name}_lod`) ? 'near' : null;
     root.traverse((o) => {
       if (!o.isMesh) return;
       const geometry = o.geometry.clone();
       geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(rootInv, o.matrixWorld));
       geometry.computeBoundingSphere();
-      parts.push({ geometry, material: convertMaterial(o.material, root.name, materialCache) });
+      parts.push({ geometry, material: convertMaterial(o.material, root.name, lod, materialCache) });
     });
     bakePrototypeAO(parts, KIND(root.name));
     protos[root.name] = parts;
@@ -52,32 +75,55 @@ export async function loadPrototypes(url) {
   return protos;
 }
 
-function convertMaterial(src, assetName, cache) {
+// Scanned-rock materials waiting for their textures (applyRockTextures).
+const scanMaterials = [];
+
+function convertMaterial(src, assetName, lod, cache) {
   const kind = KIND(assetName);
-  // trees come in two tiers: full models for the near pool, *_lod for far chunks
-  const lod = kind !== 'trees' ? null : assetName.endsWith('_lod') ? 'far' : 'near';
   const swapXY = assetName === 'log'; // lies along X: run the bark furrows along it
+  const scan = src.name.startsWith('ScanRock');
   const key = `${src.name}|${kind}|${lod}|${swapXY}`;
   if (cache.has(key)) return cache.get(key);
 
   const mat = new THREE.MeshStandardMaterial({
     name: src.name,
-    color: src.color.clone(),
+    // scans: plain grey until their photo arrives (applyRockTextures)
+    color: scan ? new THREE.Color(0.3, 0.3, 0.29) : src.color.clone(),
     roughness: src.roughness ?? 0.9,
     metalness: 0,
-    flatShading: !src.name.endsWith('Bark'), // trunks are smooth so bark reads as round
+    // bark is smooth so trunks read as round; scans have real smooth surfaces
+    flatShading: !src.name.endsWith('Bark') && !scan,
     side: kind === 'ferns' ? THREE.DoubleSide : THREE.FrontSide,
   });
   // needles shed water and scatter light: keep sky reflections off foliage
   if (/Needles|Foliage|Fern/.test(src.name)) mat.envMapIntensity = 0.35;
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns') addWindSway(mat, 2.5, undefined, 'fade');
-  else addGroundCover(mat);
-  // close-up bark / rock photos (not on far trees: they're never close)
+  else addGroundCover(mat, { lod, moss: scan ? 0.35 : 1 }); // scans have their own moss
+  // close-up bark / rock photos (not on far tiers: they're never close).
+  // On scans the tiling lichen is only a fine grain over their own photo.
   const layer = surfaceLayerFor(src.name);
-  if (layer && lod !== 'far') addSurfaceDetail(mat, layer, { swapXY });
+  if (layer && lod !== 'far') addSurfaceDetail(mat, layer, { swapXY, amount: scan ? 0.3 : 1 });
+  if (scan) scanMaterials.push({ mat, set: `scan${src.name.slice(-1)}`, near: lod !== 'far' });
   cache.set(key, mat);
   return mat;
+}
+
+/**
+ * Give the scanned rocks their photo (both tiers) and baked normal map (near
+ * tier only; far away it's sub-pixel). Call before the warm-up compiles them.
+ */
+export function applyRockTextures(layers) {
+  if (!layers) return;
+  const byName = Object.fromEntries(layers.map((l) => [l.name, l]));
+  for (const { mat, set, near } of scanMaterials) {
+    const tex = byName[set];
+    if (!tex) continue;
+    mat.color.setRGB(1, 1, 1);
+    mat.map = tex.alb;
+    if (near) mat.normalMap = tex.nrm; // tangent-space, with the GLB's tangents
+    mat.needsUpdate = true;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -195,8 +241,15 @@ function scatter(trail) {
       const slope = slopeAt(x, z);
       const r = rng();
       if (r < 0.12 + slope * 0.5) {
-        const name = ['rock_a', 'rock_b', 'rock_c'][Math.floor(rng() * 3)];
-        add(name, { x, y: groundAt(x, z) - 0.35, z, rotY: rng() * 6.28, scale: 0.5 + rng() * rng() * 2.2, tint: rng() });
+        const name = BOULDERS[Math.floor(rng() * BOULDERS.length)];
+        const rotY = rng() * 6.28;
+        const scale = 0.6 + rng() * rng() * 1.9; // scans are real size, 1.7-3.4 m across
+        // seat it on the lowest ground under its footprint, so on a slope the
+        // uphill side is buried instead of the downhill side floating
+        const rr = 0.8 * scale;
+        let y = groundAt(x, z);
+        for (let k = 0; k < 6; k++) y = Math.min(y, groundAt(x + Math.cos(k * 1.047) * rr, z + Math.sin(k * 1.047) * rr));
+        add(name, { x, y: y - 0.12 * scale, z, rotY, scale, tint: rng() });
       } else if (r < 0.2 && h < SNOWLINE + 30 && slope < 0.25) {
         add('log', { x, y: groundAt(x, z) - 0.25, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.5, tint: rng() });
       } else if (r < 0.24 && h < SNOWLINE && slope < 0.3) {
@@ -274,6 +327,7 @@ export function buildVegetation(protos, trail) {
       continue;
     }
     counts[name] = list.length;
+    const collideR = COLLIDE[name] ?? (name.startsWith('boulder') ? footprint(nearParts ?? farParts) : 0);
 
     // per-instance data, computed once and shared by both tiers
     const n = list.length;
@@ -294,7 +348,7 @@ export function buildVegetation(protos, trail) {
       xz[i * 2 + 1] = it.z;
       it.idx = i;
 
-      const r = COLLIDE[name];
+      const r = collideR;
       if (r) {
         const ck = cellKey(Math.floor(it.x / COLL_CELL), Math.floor(it.z / COLL_CELL));
         if (!colliders.has(ck)) colliders.set(ck, []);

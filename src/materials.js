@@ -122,10 +122,13 @@ export function addWindSway(material, strength = 0.012, wet = 0.25, lod = null) 
 /**
  * Moss (below the snowline) or snow (above it) on the upward-facing surfaces
  * of rocks, logs and stumps, driven by world-space normal and altitude.
+ * `moss` scales the moss (scanned rocks already have their own); `lod` is the
+ * near/far tier for models that have both (see patchLod).
  */
-export function addGroundCover(material) {
+export function addGroundCover(material, { moss = 1, lod = null } = {}) {
   material.onBeforeCompile = (shader) => {
     patchWet(shader, 1);
+    patchLod(shader, lod);
     shader.uniforms.uSnowline = shared.uSnowline;
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -163,12 +166,12 @@ export function addGroundCover(material) {
         sp3 += dot(sp3, sp3.yzx + 33.33);
         float speck = fract((sp3.x + sp3.y) * sp3.z);
         vec3 moss = mix(vec3(0.045, 0.085, 0.02), vec3(0.08, 0.13, 0.03), speck);
-        float gcMoss = up * (1.0 - snowy) * 0.85; // read by surfacedetail.js
+        float gcMoss = up * (1.0 - snowy) * ${(0.85 * moss).toFixed(3)}; // read by surfacedetail.js
         float gcSnow = up * snowy;
         diffuseColor.rgb = mix(diffuseColor.rgb, moss, gcMoss);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), gcSnow);`,
       );
   };
-  material.customProgramCacheKey = () => 'groundcover';
+  material.customProgramCacheKey = () => `groundcover|${moss}|${lod}`;
   return material;
 }
