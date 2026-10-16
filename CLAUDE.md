@@ -50,7 +50,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - `src/touch.js`: one-thumb scheme. The first finger is the steer: its horizontal movement turns (swipe-style, ~130° per
   screen width), and its vertical offset from the touch point is the throttle (up 80 px = full, run when
   >0.92; down = slow reverse). It sets `player.levelPitch`, which eases pitch to level. An optional second
-  finger is free look. Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
+  finger is free look. No on-screen touch UI and no jumping (both removed at the user's request). Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
   turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, DPR ≤1.25, half the
   particles). Override with `?quality=low|high`.
 - `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera, with fog/light
@@ -97,8 +97,11 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   instance tints and `shadeGround` (terrain + corridor), and `horizonAO` from the terrain grid.
   `shared.uWet` (from `weather.js`) drives wet darkening/gloss (`wetChunks`), trail puddles and lake rain
   rings.
-- Loading screen: `progress(to, expectedMs)` in `main.js` animates the bar with a compositor transform,
-  so it keeps moving while a blocking step runs. Re-tune the expected times if loading steps change.
+- Loading screen: one fixed-size box (title + a single slot holding the bar, then "Tap/Click to start"). Keep
+  it that simple, with no instructions or flavour text and nothing that changes the box mid-load. A one-line
+  controls hint toasts once on start. `progress(to, expectedMs)` in `main.js` animates the bar with a
+  compositor transform, so it keeps moving while a blocking step runs. Re-tune the expected times if
+  loading steps change.
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216
   (the user's phone ran ~18 ms/frame avg, worst mid-20s, no hitches). After tiers: desktop 1.57M/286,

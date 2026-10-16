@@ -15,17 +15,11 @@
     <div id="overlay">
       <div class="card">
         <h1>Cascadia Woods</h1>
-        <div id="progress" role="progressbar" aria-label="Loading"><div id="progress-fill"></div></div>
-        <p id="status"></p>
-        <ul class="keys">
-          <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump</li>
-          <li>Mouse to look · <kbd>R</kbd> cycle weather · <kbd>H</kbd> toggle HUD · <kbd>Esc</kbd> pause</li>
-        </ul>
-        <ul class="touch-help">
-          <li>Thumb down, slide up to walk, further to run</li>
-          <li>Slide sideways to turn</li>
-          <li><span class="chip">⤒</span> jump</li>
-        </ul>
+        <!-- one fixed-size slot: the loading bar, then the start prompt in its place -->
+        <div class="slot">
+          <div id="progress" role="progressbar" aria-label="Loading"><div id="progress-fill"></div></div>
+          <p id="status"></p>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>

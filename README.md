@@ -16,14 +16,15 @@ npm run dev      # http://localhost:5173
 npm run build    # static site in dist/ (relative paths, so it can be hosted from any sub-path)
 ```
 
-Controls: click to start · **WASD** move · **Shift** run · **Space** jump · mouse look ·
+Controls: click to start · **WASD** move · **Shift** run · mouse look ·
 **R** cycle weather (auto → rain → snow → clear) · **H** toggle HUD · **Esc** release the mouse.
 
 Pushes to the default branch are built and published to GitHub Pages by
 `.github/workflows/pages.yml` (other branches just get a build check).
 
-On phones and tablets: drag on the left half to walk (push the stick to its edge to run), swipe on the
-right half to look, and tap the on-screen button to jump. Weather always follows altitude on phones. Touch devices also get a
+On phones and tablets, put your thumb down anywhere: slide up to walk (further up to run, down to back up)
+and slide sideways to turn. A second finger looks up and down. Nothing is drawn on screen, and weather always
+follows altitude on phones. Touch devices also get a
 lighter render profile (lower resolution, shorter draw distance, fewer particles); force either with
 `?quality=low` or `?quality=high`.
 
@@ -49,8 +50,8 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/bake.js` | Lighting baked at load: per-vertex AO on models, canopy shade map, terrain horizon AO |
 | `src/perf.js` | `?perf` overlay |
 | `src/weather.js` | GPU rain streaks and snowflakes in a box around the camera, fog and light that shift with altitude, procedural rain/wind audio |
-| `src/player.js` | First-person walker that follows the terrain (keyboard/mouse, plus an analog `stick`, `look()` and `jump()` for touch) |
-| `src/touch.js` | Phone controls: floating thumbstick on the left, swipe-to-look on the right, jump/weather buttons |
+| `src/player.js` | First-person walker that follows the terrain (keyboard/mouse, plus an analog `stick` and `look()` for touch) |
+| `src/touch.js` | One-thumb phone controls (no on-screen UI) |
 | `src/config.js` | World size, snowline, treeline, view distances, player tuning |
 
 ### Assets (Blender)

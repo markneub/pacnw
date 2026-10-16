@@ -16,6 +16,7 @@ import './style.css';
 
 const params = new URLSearchParams(location.search);
 const touch = isTouchDevice();
+if (touch) document.body.classList.add('touch');
 
 // Phones get a lighter profile: lower resolution, shorter draw distances
 // (mostly hidden by fog anyway) and fewer rain/snow particles.
@@ -121,11 +122,7 @@ async function init() {
   }
 
   const cycleWeather = () => flash(`Weather: ${weather.cycleOverride()}`);
-  let touchUi = null;
-  if (touch) {
-    document.body.classList.add('touch');
-    touchUi = new TouchControls(renderer.domElement, player);
-  }
+  if (touch) new TouchControls(renderer.domElement, player); // eslint-disable-line no-new
 
   progress(0.98, 2500);
   await nextFrame();
@@ -136,22 +133,23 @@ async function init() {
   progress(1, 200);
   status.textContent = touch ? 'Tap to start' : 'Click to start';
   overlay.classList.add('ready');
+  let started = false;
   overlay.addEventListener('click', () => {
     weather.enableAudio();
-    if (touch) {
-      overlay.classList.add('hidden');
-      touchUi.show(true);
-    } else {
-      player.lock();
+    if (touch) overlay.classList.add('hidden');
+    else player.lock();
+    if (!started) {
+      started = true;
+      // the start box has no instructions, so give a brief hint once
+      flash(touch ? 'Slide up to walk · slide sideways to turn' : 'WASD to walk · Shift to run · mouse to look', 4000);
     }
   });
   document.addEventListener('pointerlockchange', () => {
-    overlay.classList.toggle('hidden', document.pointerLockElement === renderer.domElement);
+    const locked = document.pointerLockElement === renderer.domElement;
+    overlay.classList.toggle('hidden', locked);
+    if (!locked) status.textContent = 'Click to resume';
   });
-  if (params.has('autostart')) {
-    overlay.classList.add('hidden');
-    touchUi?.show(true);
-  }
+  if (params.has('autostart')) overlay.classList.add('hidden');
 
   let showHud = true;
   document.addEventListener('keydown', (e) => {
@@ -218,12 +216,12 @@ async function init() {
 }
 
 let flashTimer;
-function flash(msg) {
+function flash(msg, ms = 1500) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => el.classList.remove('show'), 1500);
+  flashTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
 /**

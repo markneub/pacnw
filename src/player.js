@@ -4,8 +4,8 @@ import { groundAt } from './terrain.js';
 
 /**
  * First-person walker: mouse look via pointer lock, WASD/arrows to move,
- * Shift to run, Space to jump. Touch controls drive it through `stick`,
- * look() and jump(). Feet follow the terrain and are pushed out of
+ * Shift to run. Touch controls drive it through `stick` and look().
+ * Feet follow the terrain and are pushed out of
  * trunks and boulders by the supplied collide() function.
  */
 export class Player {
@@ -27,10 +27,7 @@ export class Player {
 
     camera.rotation.order = 'YXZ';
 
-    document.addEventListener('keydown', (e) => {
-      this.keys.add(e.code);
-      if (e.code === 'Space' && this.locked) this.jump();
-    });
+    document.addEventListener('keydown', (e) => this.keys.add(e.code));
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
 
@@ -46,12 +43,6 @@ export class Player {
   look(dx, dy) {
     this.yaw -= dx;
     this.pitch = THREE.MathUtils.clamp(this.pitch - dy, -1.45, 1.45);
-  }
-
-  jump() {
-    if (!this.onGround) return;
-    this.vel.y = PLAYER.jumpSpeed;
-    this.onGround = false;
   }
 
   lock() {

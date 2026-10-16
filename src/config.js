@@ -23,6 +23,5 @@ export const PLAYER = {
   radius: 0.4,
   walkSpeed: 5,
   runSpeed: 13,
-  jumpSpeed: 6,
   gravity: 20,
 };

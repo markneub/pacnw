@@ -60,7 +60,8 @@ canvas {
 }
 
 .card {
-  max-width: 440px;
+  width: min(320px, calc(100vw - 32px));
+  box-sizing: border-box;
   margin: 16px;
   padding: 26px 30px;
   border-radius: 14px;
@@ -76,10 +77,20 @@ canvas {
   letter-spacing: 0.02em;
 }
 
+.slot {
+  display: grid;
+  place-items: center;
+  height: 28px;
+  margin-top: 16px;
+}
+
+.slot > * {
+  grid-area: 1 / 1;
+}
+
 #progress {
+  width: 100%;
   height: 4px;
-  margin: 18px auto 20px;
-  max-width: 260px;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.14);
   overflow: hidden;
@@ -100,34 +111,9 @@ canvas {
 }
 
 #status {
-  margin: 0 0 18px;
-  font-size: 18px;
-  color: #cfe3c4;
-}
-
-#status:empty {
-  display: none;
-}
-
-.card ul {
-  list-style: none;
-  padding: 0;
   margin: 0;
-  font-size: 13px;
-  line-height: 2;
-  opacity: 0.85;
-}
-
-kbd {
-  display: inline-block;
-  min-width: 1.4em;
-  padding: 0 5px;
-  margin: 0 1px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.14);
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 17px;
+  color: #cfe3c4;
 }
 
 /* ---- touch ---------------------------------------------------------------- */
@@ -144,97 +130,6 @@ body {
 
 canvas {
   touch-action: none;
-}
-
-.touch-help {
-  display: none;
-}
-
-body.touch .keys {
-  display: none;
-}
-
-body.touch .touch-help {
-  display: block;
-}
-
-.chip {
-  display: inline-block;
-  width: 1.6em;
-  height: 1.6em;
-  line-height: 1.6em;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-}
-
-#touch-ui {
-  display: none;
-}
-
-#touch-ui.active {
-  display: block;
-}
-
-#touch-ui .stick {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
-  pointer-events: none;
-}
-
-#touch-ui .stick.on {
-  opacity: 1;
-}
-
-#touch-ui .stick::before,
-#touch-ui .knob {
-  content: '';
-  position: absolute;
-  border-radius: 50%;
-}
-
-/* vertical throttle track: origin at the touch point, up = forward */
-#touch-ui .stick::before {
-  left: -26px;
-  top: -108px;
-  width: 52px;
-  height: 160px;
-  border-radius: 26px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  background: linear-gradient(to top, rgba(20, 30, 25, 0.12), rgba(20, 30, 25, 0.28));
-}
-
-#touch-ui .knob {
-  left: -22px;
-  top: -22px;
-  width: 44px;
-  height: 44px;
-  background: rgba(240, 245, 240, 0.55);
-}
-
-.tbtn {
-  position: fixed;
-  right: calc(18px + env(safe-area-inset-right));
-  width: 58px;
-  height: 58px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(20, 30, 25, 0.38);
-  color: #eef2ee;
-  font-size: 24px;
-  touch-action: none;
-}
-
-.tbtn:active {
-  background: rgba(240, 245, 240, 0.35);
-}
-
-.tbtn.jump {
-  bottom: calc(26px + env(safe-area-inset-bottom));
 }
 
 body.touch #hud {
