@@ -120,7 +120,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216
   (the user's phone ran ~18 ms/frame avg, worst mid-20s, no hitches). After tiers: desktop 1.57M/286,
-  phone 0.65M/140. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
+  phone 0.65M/140. With ground detail, the user's phone (iOS, `?perf` sync "work") measures 12–13 ms at
+  spawn, forest and snowy slope, the same with `off=detail`. Ground textures are ~free; ~3 ms of headroom left. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
   warm-up; much faster on a real GPU.
 
 ## Headless screenshots (how to see the scene)
