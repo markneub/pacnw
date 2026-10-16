@@ -15,6 +15,7 @@ export const VIEW_DIST = {
   trees: 520,
   rocks: 320,
   ferns: 150,
+  treeDetail: 85, // full-detail trees inside this radius, cheap LOD beyond
 };
 
 export const PLAYER = {

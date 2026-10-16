@@ -79,15 +79,30 @@ class MeshBuilder:
         self.faces.append(tuple(idx))
         self.face_mats.append(self.mat_index(mat))
 
-    def build(self, name):
+    def build(self, name, bake_colors=None):
+        """
+        bake_colors: a single material to use instead of the per-face ones, with
+        each face's original base colour written to a vertex colour attribute.
+        Used for far-LOD models so they draw in one call.
+        """
         mesh = bpy.data.meshes.new(name)
         mesh.from_pydata(self.verts, [], self.faces)
         mesh.validate()
-        for m in self.mats:
-            mesh.materials.append(m)
-        for poly, mi in zip(mesh.polygons, self.face_mats):
-            poly.material_index = mi
-            poly.use_smooth = False
+        if bake_colors is not None:
+            mesh.materials.append(bake_colors)
+            col = mesh.color_attributes.new(name="Col", type="FLOAT_COLOR", domain="CORNER")
+            for poly, mi in zip(mesh.polygons, self.face_mats):
+                rgba = self.mats[mi].node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value
+                for li in poly.loop_indices:
+                    col.data[li].color = tuple(rgba)
+                poly.use_smooth = False
+            mesh.color_attributes.active_color = col
+        else:
+            for m in self.mats:
+                mesh.materials.append(m)
+            for poly, mi in zip(mesh.polygons, self.face_mats):
+                poly.material_index = mi
+                poly.use_smooth = False
         obj = bpy.data.objects.new(name, mesh)
         bpy.context.scene.collection.objects.link(obj)
         return obj
@@ -111,6 +126,7 @@ def mats():
         "fern": material("Fern", (0.2, 0.38, 0.12), 0.8),
         "wood": material("Wood", (0.62, 0.47, 0.3)),
         "sign_post": material("SignPost", (0.33, 0.23, 0.15)),
+        "lod": material("LodVertexColor", (1.0, 1.0, 1.0), 0.85),
     }
 
 
@@ -201,11 +217,16 @@ def tier(b, rng, mat, apex, z_bottom, radius, points, droop, inner=0.72, twist=0
 
 def conifer(name, M, seed, height, crown_base, max_radius, tiers, points,
             foliage, trunk_mat, droop=0.35, top_radius=0.35, r_trunk=0.45,
-            flare=1.3, snow=False, leader_lean=0.0, shape_pow=0.9, tier_overlap=2.2):
+            flare=1.3, snow=False, leader_lean=0.0, shape_pow=0.9, tier_overlap=2.2, lod=False):
+    """lod=True builds the far-distance version: same silhouette, ~1/5 the triangles."""
     rng = random.Random(seed)
     b = MeshBuilder()
+    if lod:
+        tiers = max(3, round(tiers * 0.5))
+        points = 5
+        tier_overlap *= 1.5
     trunk(b, trunk_mat, height * 0.9, r_trunk, r_trunk * 0.18, flare=flare,
-          lean=(leader_lean * 0.6, 0.0))
+          lean=(leader_lean * 0.6, 0.0), sides=5 if lod else 7, rings=1 if lod else 4)
 
     span = height - crown_base
     step = span / tiers
@@ -226,36 +247,43 @@ def conifer(name, M, seed, height, crown_base, max_radius, tiers, points,
              points=points, droop=droop * radius * (0.6 + 0.6 * (1.0 - t)),
              twist=rng.uniform(0, TAU), offset=(lean * 0.85, 0.0),
              snow_mat=M["snow"] if snow else None,
-             snow_reach=0.72 + 0.16 * (1.0 - t))
-    return b.build(name)
+             # LOD tiers are taller, so the same reach would bury them in snow
+             snow_reach=(0.72 + 0.16 * (1.0 - t)) * (0.62 if lod else 1.0))
+    return b.build(name, bake_colors=M["lod"] if lod else None)
 
 
-def douglas_fir(M, name, snow, seed=1):
+def douglas_fir(M, name, snow, seed=1, lod=False):
     return conifer(name, M, seed, height=26.0, crown_base=6.0, max_radius=4.4, tiers=11,
                    points=7, foliage=[M["needles_frost"] if snow else M["needles"],
                                       M["needles_dark"]],
-                   trunk_mat=M["bark"], droop=0.45, r_trunk=0.6, snow=snow)
+                   trunk_mat=M["bark"], droop=0.45, r_trunk=0.6, snow=snow, lod=lod)
 
 
-def hemlock(M, name, snow, seed=2):
+def hemlock(M, name, snow, seed=2, lod=False):
     return conifer(name, M, seed, height=22.0, crown_base=3.5, max_radius=4.0, tiers=13,
                    points=8, foliage=[M["needles_dark"],
                                       M["needles_frost"] if snow else M["needles"]],
                    trunk_mat=M["bark"], droop=0.7, r_trunk=0.5, snow=snow,
-                   leader_lean=1.4, shape_pow=1.1)
+                   leader_lean=1.4, shape_pow=1.1, lod=lod)
 
 
-def cedar(M, name, seed=3):
+def cedar(M, name, seed=3, lod=False):
     return conifer(name, M, seed, height=21.0, crown_base=2.2, max_radius=5.2, tiers=10,
                    points=9, foliage=[M["cedar"], M["needles"]], trunk_mat=M["cedar_bark"],
-                   droop=0.9, r_trunk=0.75, flare=1.7, shape_pow=0.75, top_radius=0.6)
+                   droop=0.9, r_trunk=0.75, flare=1.7, shape_pow=0.75, top_radius=0.6, lod=lod)
 
 
-def sapling(M, name, snow, seed=4):
+def sapling(M, name, snow, seed=4, lod=False):
     return conifer(name, M, seed, height=6.5, crown_base=0.4, max_radius=2.0, tiers=6,
                    points=6, foliage=[M["needles_frost"] if snow else M["needles"]],
                    trunk_mat=M["bark"], droop=0.35, r_trunk=0.16, flare=1.1, snow=snow,
-                   top_radius=0.2)
+                   top_radius=0.2, lod=lod)
+
+
+def snag_lod(M, name):
+    b = MeshBuilder()
+    trunk(b, M["snag"], 15.0, 0.55, 0.22, flare=1.25, sides=5, rings=1)
+    return b.build(name, bake_colors=M["lod"])
 
 
 def snag(M, name, seed=5):
@@ -533,6 +561,16 @@ def main():
     sapling(M, "sapling_snow", snow=True)
     snag(M, "snag")
 
+    # far-distance versions (one material, colours in vertex colours)
+    douglas_fir(M, "fir_lod", snow=False, lod=True)
+    douglas_fir(M, "fir_snow_lod", snow=True, lod=True)
+    hemlock(M, "hemlock_lod", snow=False, lod=True)
+    hemlock(M, "hemlock_snow_lod", snow=True, lod=True)
+    cedar(M, "cedar_lod", lod=True)
+    sapling(M, "sapling_lod", snow=False, lod=True)
+    sapling(M, "sapling_snow_lod", snow=True, lod=True)
+    snag_lod(M, "snag_lod")
+
     rock(M, "rock_a", 11, (1.5, 1.1, 0.8))
     rock(M, "rock_b", 12, (1.1, 1.0, 1.05))
     rock(M, "rock_c", 13, (2.2, 1.4, 0.65))
@@ -556,6 +594,7 @@ def main():
         export_normals=True,
         export_texcoords=False,
         export_materials="EXPORT",
+        export_vertex_color="ACTIVE",
     )
     total = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH")
     print(f"Exported {len(bpy.data.objects)} assets ({total} faces) to {OUT}")

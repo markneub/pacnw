@@ -9,6 +9,7 @@ import {
 import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover } from './materials.js';
 import { bakePrototypeAO, bakeCanopy } from './bake.js';
+import { NearPool } from './detail.js';
 
 const KIND = (name) => (name.startsWith('fern') ? 'ferns'
   : /^(rock|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
@@ -49,7 +50,9 @@ export async function loadPrototypes(url) {
 
 function convertMaterial(src, assetName, cache) {
   const kind = KIND(assetName);
-  const key = `${src.name}|${kind}`;
+  // trees come in two tiers: full models for the near pool, *_lod for far chunks
+  const lod = kind !== 'trees' ? null : assetName.endsWith('_lod') ? 'far' : 'near';
+  const key = `${src.name}|${kind}|${lod}`;
   if (cache.has(key)) return cache.get(key);
 
   const mat = new THREE.MeshStandardMaterial({
@@ -62,8 +65,8 @@ function convertMaterial(src, assetName, cache) {
   });
   // needles shed water and scatter light: keep sky reflections off foliage
   if (/Needles|Foliage|Fern/.test(src.name)) mat.envMapIntensity = 0.35;
-  if (kind === 'trees') addWindSway(mat);
-  else if (kind === 'ferns') addWindSway(mat, 2.5);
+  if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
+  else if (kind === 'ferns') addWindSway(mat, 2.5, undefined, 'fade');
   else addGroundCover(mat);
   cache.set(key, mat);
   return mat;
@@ -238,16 +241,61 @@ export function buildVegetation(protos, trail) {
   const col = new THREE.Color();
   const counts = {};
 
+  const nearPools = [];
+
+  // Instance colour for one part: foliage/rock parts get the per-instance
+  // tint, everything gets the baked canopy shade.
+  const TINTABLE = /Needles|Foliage|Fern|Rock|LodVertexColor/;
+  const instanceColors = (partName, tints, shades, n) => {
+    const out = new Float32Array(n * 3);
+    const tinted = TINTABLE.test(partName);
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < 3; c++) out[i * 3 + c] = (tinted ? tints[i * 3 + c] : 1) * shades[i];
+    }
+    return out;
+  };
+
   for (const [name, list] of Object.entries(placements)) {
-    const parts = protos[name];
-    if (!parts) {
+    const kind = KIND(name);
+    // trees: far LOD chunks + full-detail near pool; ferns: near pool only
+    // (they're invisible past a short radius); everything else: chunks only
+    const farParts = kind === 'ferns' ? [] : protos[`${name}_lod`] ?? protos[name];
+    const nearParts = kind === 'ferns' ? protos[name] : protos[`${name}_lod`] ? protos[name] : null;
+    if (!farParts || (kind === 'ferns' && !nearParts)) {
       console.warn('missing prototype', name);
       continue;
     }
     counts[name] = list.length;
-    const kind = KIND(name);
 
-    // bucket placements per chunk
+    // per-instance data, computed once and shared by both tiers
+    const n = list.length;
+    const matrices = new Float32Array(n * 16);
+    const tints = new Float32Array(n * 3);
+    const shades = new Float32Array(n);
+    const xz = new Float32Array(n * 2);
+    list.forEach((it, i) => {
+      q.setFromAxisAngle(up, it.rotY);
+      s.setScalar(it.scale);
+      p.set(it.x, it.y, it.z);
+      m.compose(p, q, s).toArray(matrices, i * 16);
+      const t = it.tint;
+      tints.set([0.85 + t * 0.3, 0.88 + t * 0.24, 0.85 + (1 - t) * 0.25], i * 3);
+      // baked shade: understory under a closed canopy gets much less light
+      shades[i] = 1 - canopyAt(it.x, it.z) * (kind === 'trees' ? 0.22 : 0.45);
+      xz[i * 2] = it.x;
+      xz[i * 2 + 1] = it.z;
+      it.idx = i;
+
+      const r = COLLIDE[name];
+      if (r) {
+        const ck = cellKey(Math.floor(it.x / COLL_CELL), Math.floor(it.z / COLL_CELL));
+        if (!colliders.has(ck)) colliders.set(ck, []);
+        colliders.get(ck).push({ x: it.x, z: it.z, r: r * it.scale });
+      }
+    });
+    const farColors = farParts.map((part) => instanceColors(part.material.name, tints, shades, n));
+
+    // far tier (or the only tier, for non-trees): one InstancedMesh per chunk per part
     const buckets = new Map();
     for (const inst of list) {
       const cx = Math.floor(inst.x / CHUNK_SIZE);
@@ -255,15 +303,7 @@ export function buildVegetation(protos, trail) {
       const key = `${cx},${cz}`;
       if (!buckets.has(key)) buckets.set(key, { cx, cz, items: [] });
       buckets.get(key).items.push(inst);
-
-      const r = COLLIDE[name];
-      if (r) {
-        const ck = cellKey(Math.floor(inst.x / COLL_CELL), Math.floor(inst.z / COLL_CELL));
-        if (!colliders.has(ck)) colliders.set(ck, []);
-        colliders.get(ck).push({ x: inst.x, z: inst.z, r: r * inst.scale });
-      }
     }
-
     for (const [key, { cx, cz, items }] of buckets) {
       if (!chunks.has(key)) {
         chunks.set(key, {
@@ -272,43 +312,48 @@ export function buildVegetation(protos, trail) {
         });
       }
       const chunk = chunks.get(key);
-      for (const part of parts) {
+      farParts.forEach((part, pi) => {
         const im = new THREE.InstancedMesh(part.geometry, part.material, items.length);
-        const tintable = /Needles|Foliage|Fern|Rock/.test(part.material.name);
-        items.forEach((it, i) => {
-          q.setFromAxisAngle(up, it.rotY);
-          s.setScalar(it.scale);
-          p.set(it.x, it.y, it.z);
-          m.compose(p, q, s);
-          im.setMatrixAt(i, m);
-          if (tintable) {
-            const t = it.tint;
-            col.setRGB(0.85 + t * 0.3, 0.88 + t * 0.24, 0.85 + (1 - t) * 0.25);
-          } else {
-            col.setRGB(1, 1, 1);
-          }
-          // baked shade: understory under a closed canopy gets much less light
-          const occ = canopyAt(it.x, it.z);
-          col.multiplyScalar(1 - occ * (kind === 'trees' ? 0.22 : 0.45));
-          im.setColorAt(i, col);
+        im.setColorAt(0, col.setRGB(1, 1, 1)); // allocate instanceColor
+        items.forEach((it, j) => {
+          im.instanceMatrix.array.set(matrices.subarray(it.idx * 16, it.idx * 16 + 16), j * 16);
+          im.instanceColor.array.set(farColors[pi].subarray(it.idx * 3, it.idx * 3 + 3), j * 3);
         });
         im.instanceMatrix.needsUpdate = true;
+        im.instanceColor.needsUpdate = true;
         im.computeBoundingSphere();
         im.name = `${name}:${part.material.name}@${key}`;
+        im.userData.kind = kind;
         group.add(im);
         chunk[kind].push(im);
+      });
+    }
+
+    // near tier: full-detail models around the camera
+    if (nearParts) {
+      const nearColors = nearParts.map((part) => instanceColors(part.material.name, tints, shades, n));
+      const radiusKey = kind === 'ferns' ? 'ferns' : 'treeDetail';
+      const pool = new NearPool(nearParts, matrices, nearColors, xz, VIEW_DIST[radiusKey]);
+      pool.radiusKey = radiusKey;
+      for (const im of pool.meshes) {
+        im.name = `${name}:${im.material.name}@near`;
+        im.userData.kind = kind;
+        group.add(im);
       }
+      nearPools.push(pool);
     }
   }
 
   console.info('vegetation instances', JSON.stringify(counts));
+
+  const disabled = new Set(); // kinds switched off for perf testing (?off=)
 
   function updateVisibility(cameraPos) {
     const halfDiag = CHUNK_SIZE * 0.7072;
     for (const chunk of chunks.values()) {
       const d = Math.hypot(chunk.center.x - cameraPos.x, chunk.center.y - cameraPos.z) - halfDiag;
       for (const kind of ['trees', 'rocks', 'ferns']) {
-        const vis = d < VIEW_DIST[kind];
+        const vis = !disabled.has(kind) && d < VIEW_DIST[kind];
         for (const mesh of chunk[kind]) mesh.visible = vis;
       }
     }
@@ -337,5 +382,15 @@ export function buildVegetation(protos, trail) {
     }
   }
 
-  return { group, updateVisibility, collide, counts, canopyAt, chunks };
+  /** Keep the full-detail near ring filled around the camera (cheap; refills every few metres). */
+  function updateNear(cameraPos, force = false) {
+    for (const pool of nearPools) pool.update(cameraPos, VIEW_DIST[pool.radiusKey], force);
+  }
+
+  function disable(kind) {
+    disabled.add(kind);
+    for (const pool of nearPools) for (const im of pool.meshes) if (im.userData.kind === kind) im.visible = false;
+  }
+
+  return { group, updateVisibility, updateNear, disable, collide, counts, canopyAt, chunks, nearPools };
 }

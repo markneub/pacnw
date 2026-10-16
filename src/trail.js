@@ -493,7 +493,34 @@ function buildCorridorMesh(points, distanceTo) {
         roughnessFactor = mix(roughnessFactor, 0.04, puddle);`);
   };
 
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'trail';
-  return mesh;
+  // Split into ~150 m segments so off-screen stretches are frustum-culled.
+  // Normals come from the full strip, so segment joins don't show.
+  const rowLen = across + 1;
+  const rows = points.length;
+  const SEG = 100; // rows per segment (1.5 m each)
+  const group = new THREE.Group();
+  group.name = 'trail';
+  for (let r0 = 0; r0 < rows - 1; r0 += SEG) {
+    const r1 = Math.min(rows - 1, r0 + SEG);
+    const v0 = r0 * rowLen;
+    const v1 = (r1 + 1) * rowLen;
+    const part = new THREE.BufferGeometry();
+    for (const name of ['position', 'normal', 'color', 'aTread']) {
+      const attr = geo.attributes[name];
+      part.setAttribute(name, new THREE.BufferAttribute(attr.array.slice(v0 * attr.itemSize, v1 * attr.itemSize), attr.itemSize));
+    }
+    const idx = [];
+    for (let i = 1; i <= r1 - r0; i++) {
+      const a = (i - 1) * rowLen;
+      const b = i * rowLen;
+      for (let j = 0; j < across; j++) idx.push(a + j, a + j + 1, b + j, a + j + 1, b + j + 1, b + j);
+    }
+    part.setIndex(idx);
+    part.computeBoundingSphere();
+    const mesh = new THREE.Mesh(part, mat);
+    mesh.name = `trail ${r0}`;
+    group.add(mesh);
+  }
+  geo.dispose();
+  return group;
 }

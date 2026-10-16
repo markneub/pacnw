@@ -25,10 +25,19 @@ if (lowPower) {
   VIEW_DIST.trees = 270;
   VIEW_DIST.rocks = 170;
   VIEW_DIST.ferns = 80;
+  VIEW_DIST.treeDetail = 60;
 }
+shared.uLodRadius.value = VIEW_DIST.treeDetail;
+shared.uFernRadius.value = VIEW_DIST.ferns;
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5));
+// ?off=a,b,... switches parts off to find what costs the most on a device:
+// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa.
+// ?dpr=1 forces the render resolution scale.
+const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
+
+const renderer = new THREE.WebGLRenderer({ antialias: !off.has('aa'), powerPreference: 'high-performance' });
+renderer.setPixelRatio(params.has('dpr') ? parseFloat(params.get('dpr'))
+  : Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.45;
@@ -98,6 +107,18 @@ async function init() {
   const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
   player.place(num('x', SPAWN.x), num('z', SPAWN.z), num('yaw', SPAWN.yaw), num('pitch', SPAWN.pitch));
   if (['rain', 'snow', 'clear'].includes(params.get('weather'))) weather.override = params.get('weather');
+  veg.updateNear(camera.position, true); // fill the near ring before warm-up uploads it
+
+  for (const kind of ['trees', 'ferns', 'rocks']) if (off.has(kind)) veg.disable(kind);
+  for (const name of ['terrain', 'trail', 'lake', 'sky']) {
+    if (off.has(name === 'lake' ? 'water' : name)) scene.getObjectByName(name).visible = false;
+  }
+  if (off.has('weather')) weather.particlesOff = true;
+  if (off.has('env')) scene.environment = null;
+  if (off.has('fog')) {
+    weather.fogOff = scene.fog;
+    scene.fog = null;
+  }
 
   const cycleWeather = () => flash(`Weather: ${weather.cycleOverride()}`);
   let touchUi = null;
@@ -160,6 +181,7 @@ async function init() {
     player.update(dt);
     weather.update(dt, t, camera);
 
+    veg.updateNear(camera.position);
     visTimer -= dt;
     if (visTimer <= 0) {
       veg.updateVisibility(camera.position);
@@ -192,7 +214,7 @@ async function init() {
     }
   });
 
-  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail };
+  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail, veg };
 }
 
 let flashTimer;

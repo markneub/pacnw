@@ -223,28 +223,66 @@ export function setTerrainCutout(mask, minX, minZ, sizeX, sizeZ) {
   cutUniforms.uCutRect.value.set(minX, minZ, sizeX, sizeZ);
 }
 
-export function buildTerrain() {
-  const geo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
-  geo.rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position;
-  const g = heightGrid();
-  for (let i = 0; i < pos.count; i++) {
-    const ix = Math.round((pos.getX(i) + WORLD_SIZE / 2) / GRID_STEP);
-    const iz = Math.round((pos.getZ(i) + WORLD_SIZE / 2) / GRID_STEP);
-    pos.setY(i, g[iz * GRID_N + ix]);
-  }
-  geo.computeVertexNormals();
+const TILES = 8; // per side; each tile is culled on its own
 
-  const nrm = geo.attributes.normal;
-  const colors = new Float32Array(pos.count * 3);
+/**
+ * One terrain tile straight from the height grid. Same triangulation as
+ * PlaneGeometry (diagonal (ix, iz+1)-(ix+1, iz)), so groundAt() stays exact,
+ * and normals come from the shared grid so tiles meet without shading seams.
+ */
+function buildTile(tx, tz) {
+  const g = heightGrid();
+  const seg = TERRAIN_SEGMENTS / TILES;
+  const ix0 = tx * seg;
+  const iz0 = tz * seg;
+  const n = seg + 1;
+  const positions = new Float32Array(n * n * 3);
+  const normals = new Float32Array(n * n * 3);
+  const colors = new Float32Array(n * n * 3);
+  const h = (ix, iz) => g[Math.min(GRID_N - 1, Math.max(0, iz)) * GRID_N + Math.min(GRID_N - 1, Math.max(0, ix))];
   const c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    groundColor(pos.getX(i), pos.getY(i), pos.getZ(i), 1 - nrm.getY(i), c);
-    colors[i * 3] = c.r;
-    colors[i * 3 + 1] = c.g;
-    colors[i * 3 + 2] = c.b;
+  const nv = new THREE.Vector3();
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const ix = ix0 + i;
+      const iz = iz0 + j;
+      const k = (j * n + i) * 3;
+      const x = ix * GRID_STEP - WORLD_SIZE / 2;
+      const z = iz * GRID_STEP - WORLD_SIZE / 2;
+      const y = h(ix, iz);
+      positions[k] = x;
+      positions[k + 1] = y;
+      positions[k + 2] = z;
+      nv.set(h(ix - 1, iz) - h(ix + 1, iz), 2 * GRID_STEP, h(ix, iz - 1) - h(ix, iz + 1)).normalize();
+      normals[k] = nv.x;
+      normals[k + 1] = nv.y;
+      normals[k + 2] = nv.z;
+      groundColor(x, y, z, 1 - nv.y, c);
+      colors[k] = c.r;
+      colors[k + 1] = c.g;
+      colors[k + 2] = c.b;
+    }
   }
+  const index = [];
+  for (let j = 0; j < seg; j++) {
+    for (let i = 0; i < seg; i++) {
+      const a = j * n + i;
+      const b = (j + 1) * n + i;
+      const cc = (j + 1) * n + i + 1;
+      const d = j * n + i + 1;
+      index.push(a, b, d, b, cc, d);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setIndex(index);
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+export function buildTerrain() {
 
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -285,9 +323,16 @@ export function buildTerrain() {
         ${wet.roughness}`);
   };
 
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'terrain';
-  return mesh;
+  const group = new THREE.Group();
+  group.name = 'terrain';
+  for (let tz = 0; tz < TILES; tz++) {
+    for (let tx = 0; tx < TILES; tx++) {
+      const tile = new THREE.Mesh(buildTile(tx, tz), mat);
+      tile.name = `terrain ${tx},${tz}`;
+      group.add(tile);
+    }
+  }
+  return group;
 }
 
 export function buildWater() {

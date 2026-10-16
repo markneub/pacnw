@@ -36,6 +36,9 @@ export function bakePrototypeAO(parts, kind) {
   for (const { geometry, material } of parts) {
     const pos = geometry.attributes.position;
     const colors = new Float32Array(pos.count * 3);
+    // models may already carry colours (far-LOD trees bake their materials
+    // into vertex colours): multiply rather than replace
+    const base = geometry.attributes.color;
     for (let i = 0; i < pos.count; i++) {
       const y = pos.getY(i);
       const t = Math.max(0, y) / height;
@@ -48,9 +51,9 @@ export function bakePrototypeAO(parts, kind) {
       } else {
         ao = 0.5 + 0.5 * smooth(t, 0, 0.6);
       }
-      colors[i * 3] = ao;
-      colors[i * 3 + 1] = ao;
-      colors[i * 3 + 2] = ao;
+      colors[i * 3] = ao * (base ? base.getX(i) : 1);
+      colors[i * 3 + 1] = ao * (base ? base.getY(i) : 1);
+      colors[i * 3 + 2] = ao * (base ? base.getZ(i) : 1);
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     material.vertexColors = true;
@@ -160,7 +163,13 @@ export function horizonAO(x, z, h0 = rawGroundAt(x, z)) {
  * Darken a ground mesh's vertex colours by terrain AO and canopy shade.
  * Works on the terrain (RGB) and the trail corridor (RGBA).
  */
-export function shadeGround(mesh, canopyAt) {
+export function shadeGround(object, canopyAt) {
+  object.traverse((o) => {
+    if (o.isMesh) shadeMesh(o, canopyAt);
+  });
+}
+
+function shadeMesh(mesh, canopyAt) {
   const pos = mesh.geometry.attributes.position;
   const col = mesh.geometry.attributes.color;
   for (let i = 0; i < pos.count; i++) {

@@ -55,15 +55,33 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   particles). Override with `?quality=low|high`.
 - `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera, with fog/light
   lerped by altitude relative to the local snowline, and WebAudio noise ambience.
-- **Realism direction (agreed): "A" = richer stylized low-poly, keeping the door open to "B" (photo-textured
-  PBR assets, needle-card trees with far trees as impostors).** Keep new work asset-agnostic: lighting is
-  baked from geometry (`bake.js`), materials are made in one place (`vegetation.js` `convertMaterial`), and
-  shader tweaks are chunk patches that also work on textured materials.
+- **Realism direction (agreed): stylized low-poly now ("A"). The long-term goal is near-photoreal *up
+  close*, with cheap representations further out, working incrementally with careful, measured
+  engineering decisions.** Keep new work asset-agnostic: lighting is baked from geometry (`bake.js`),
+  materials are made in one place (`vegetation.js` `convertMaterial`), and shader tweaks are chunk patches
+  that also work on textured materials.
+- **Distance tiers (the architecture for that goal):**
+  - Trees: a full-detail **near pool** (`detail.js` `NearPool`, radius `VIEW_DIST.treeDetail`: 85 m
+    desktop, 60 m phone) plus **far LOD chunks** (`*_lod` models, ~1/3 the tris, one vertex-coloured
+    material). `patchLod` in `materials.js` hides each instance in the vertex shader on the wrong side
+    of `shared.uLodRadius`, so the tiers are exact complements and the pool can refill lazily (every 4 m
+    of travel, holding radius + 10 m).
+  - Ferns: near pool only, and they shrink into the ground at `uFernRadius` ('fade' mode).
+  - Rocks, logs and furniture: 125 m chunks.
+  - Close-up / photoreal assets belong in near pools. Their cost is bounded by the radius, not the
+    forest size. Pool capacity is computed at load (`maxNearby`). If a pool fills, trees go missing, so
+    `budget.mjs`-style checks report full pools.
+  - Terrain is 8×8 tiles built from the height grid (same triangulation, so `groundAt` stays exact).
+    The trail corridor is ~150 m segments. Both are frustum-culled.
 - **No stutter rule:** build everything at load, never mid-play. No per-frame allocations (reuse vectors;
   spatial hashes use numeric `cellKey`). `warmUp()` in `main.js` renders the whole scene once off-screen
   and reads a pixel back so shader linking and buffer uploads finish during loading. Phones get the same
   features scaled by density and distance. Check with `?perf` (frame avg/worst, hitches >50 ms, load-step
-  timings in the console).
+  timings in the console). To find what costs the most on a device, use `?off=trees,ferns,rocks,terrain,trail,
+  water,sky,weather,env,fog,aa` (any subset) and `?dpr=1`.
+- **Measure before and after any perf change.** Count draw calls and triangles at fixed views (spawn, lake,
+  forest `x=-30&z=420`, ridge `x=-60&z=-250`) with `?quality=high` and `?quality=low` via
+  `renderer.info.render` after a `still` render. Note: `info.triangles` counts LOD-hidden instances too.
 - `src/atmosphere.js`: `installHeightFog()` replaces three's fog chunks globally, so it must run before
   any material compiles. **`scene.fog` is a `THREE.Fog` used as a carrier: `near` = density, `far` = time**
   (three refreshes those uniforms on every material). Fog thickens below ~18 m + 45 m falloff, and
@@ -79,8 +97,10 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - Loading screen: `progress(to, expectedMs)` in `main.js` animates the bar with a compositor transform,
   so it keeps moving while a blocking step runs. Re-tune the expected times if loading steps change.
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
-- Perf at spawn: ~3.1M tris, ~450 draw calls. Watch this when adding instanced content. Load in the container
-  (SwiftShader): ~11 s, ~8 s of it the software-rendered warm-up. It's much faster on a real GPU.
+- Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216
+  (the user's phone ran ~18 ms/frame avg, worst mid-20s, no hitches). After tiers: desktop 1.57M/286,
+  phone 0.65M/140. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
+  warm-up; much faster on a real GPU.
 
 ## Headless screenshots (how to see the scene)
 

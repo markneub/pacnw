@@ -215,13 +215,14 @@ export class Weather {
       u.uTime.value = time;
       u.uCam.value.copy(camera.position);
       u.uIntensity.value = amount;
-      obj.visible = amount > 0.01;
+      obj.visible = amount > 0.01 && !this.particlesOff;
     }
 
     // Atmosphere follows altitude; clear weather thins the fog.
     const clear = this.override === 'clear' ? 0.55 : 1;
-    this.scene.fog.color.copy(LOW.fog).lerp(HIGH.fog, snowT);
-    this.scene.fog.near = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT)
+    const fog = this.scene.fog ?? this.fogOff; // ?off=fog keeps updating a detached copy
+    fog.color.copy(LOW.fog).lerp(HIGH.fog, snowT);
+    fog.near = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT)
       * THREE.MathUtils.lerp(clear, 1, Math.max(this.rainAmount, this.snowAmount));
     this.hemi.color.copy(LOW.hemiSky).lerp(HIGH.hemiSky, snowT);
     this.hemi.groundColor.copy(LOW.hemiGround).lerp(HIGH.hemiGround, snowT);
@@ -229,10 +230,10 @@ export class Weather {
     this.sun.intensity = THREE.MathUtils.lerp(LOW.sunIntensity, HIGH.sunIntensity, snowT)
       * (this.override === 'clear' ? 2.2 : 1);
 
-    this.sky.uniforms.uHorizon.value.copy(this.scene.fog.color);
+    this.sky.uniforms.uHorizon.value.copy(fog.color);
     this.sky.uniforms.uZenith.value.copy(LOW.zenith).lerp(HIGH.zenith, snowT);
     this.sky.uniforms.uTime.value = time;
-    this.scene.fog.far = time; // drifts the mist banks
+    fog.far = time; // drifts the mist banks
 
     // Surfaces stay damp in the rainforest even between showers; they dry out
     // in clear weather and there's no liquid water up in the snow.

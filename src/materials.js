@@ -7,7 +7,44 @@ export const shared = {
   uWind: { value: 1 },
   uSnowline: { value: SNOWLINE },
   uWet: { value: 1 }, // 0 dry .. 1 soaked: darker, glossier surfaces
+  uLodRadius: { value: 85 }, // m; full-detail trees inside, far LOD outside
+  uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
 };
+
+/**
+ * Per-instance level-of-detail switch, decided in the vertex shader so the
+ * near pool and the far chunks are exact complements. 'near' draws only
+ * instances inside uLodRadius (horizontal distance from the camera), 'far'
+ * only those outside. A hidden instance's vertices are moved outside the clip
+ * volume, so its triangles are discarded before rasterisation.
+ */
+function patchLod(shader, mode) {
+  if (!mode) return;
+  if (mode === 'fade') {
+    // near-only objects (ferns): shrink into the ground over the last 15% of
+    // the radius instead of popping out
+    shader.uniforms.uFernRadius = shared.uFernRadius;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uFernRadius;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec2 fadeD = (modelMatrix * instanceMatrix[3]).xz - cameraPosition.xz;
+          transformed *= smoothstep(uFernRadius, uFernRadius * 0.85, length(fadeD));
+        #endif`);
+    return;
+  }
+  shader.uniforms.uLodRadius = shared.uLodRadius;
+  const test = mode === 'near' ? 'lodD2 >= lodR2' : 'lodD2 < lodR2';
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform float uLodRadius;')
+    .replace('#include <project_vertex>', `#include <project_vertex>
+      #ifdef USE_INSTANCING
+        vec2 lodD = (modelMatrix * instanceMatrix[3]).xz - cameraPosition.xz;
+        float lodD2 = dot(lodD, lodD);
+        float lodR2 = uLodRadius * uLodRadius;
+        if (${test}) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+      #endif`);
+}
 
 /**
  * GLSL for wet surfaces: water darkens porous materials and makes them
@@ -35,9 +72,10 @@ function patchWet(shader, strength) {
  * instance origin so trunks stay planted. Phase comes from instance position
  * so neighbouring trees don't move in lockstep.
  */
-export function addWindSway(material, strength = 0.012, wet = 0.25) {
+export function addWindSway(material, strength = 0.012, wet = 0.25, lod = null) {
   material.onBeforeCompile = (shader) => {
     patchWet(shader, wet);
+    patchLod(shader, lod);
     shader.uniforms.uTime = shared.uTime;
     shader.uniforms.uWind = shared.uWind;
     shader.vertexShader = shader.vertexShader
@@ -61,7 +99,7 @@ export function addWindSway(material, strength = 0.012, wet = 0.25) {
         transformed.z += cos(uTime * 1.1 + swayPhase.y) * swayH * swayH * ${strength.toFixed(4)} * 0.03 * uWind;`,
       );
   };
-  material.customProgramCacheKey = () => `wind${strength}|${wet}`;
+  material.customProgramCacheKey = () => `wind${strength}|${wet}|${lod}`;
   return material;
 }
 
