@@ -22,6 +22,11 @@ Controls: click to start · **WASD** move · **Shift** run · **Space** jump · 
 Pushes to the default branch are built and published to GitHub Pages by
 `.github/workflows/pages.yml` (other branches just get a build check).
 
+On phones and tablets: drag on the left half to walk (push the stick to its edge to run), swipe on the
+right half to look, and use the on-screen buttons to jump and change the weather. Touch devices also get a
+lighter render profile (lower resolution, shorter draw distance, fewer particles); force either with
+`?quality=low` or `?quality=high`.
+
 URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 
 ## How it's put together
@@ -34,7 +39,8 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/trail.js` | Hiking trail: A* route over the terrain (grade-penalised, so it switchbacks), smoothed and draped as a dirt/packed-snow ribbon; distance queries keep vegetation off the tread; HUD guide to the next stop |
 | `src/materials.js` | Shader patches: wind sway for foliage, moss/snow cover on rocks and logs |
 | `src/weather.js` | GPU rain streaks and snowflakes in a box around the camera, fog and light that shift with altitude, procedural rain/wind audio |
-| `src/player.js` | Pointer-lock first-person walker that follows the terrain |
+| `src/player.js` | First-person walker that follows the terrain (keyboard/mouse, plus an analog `stick`, `look()` and `jump()` for touch) |
+| `src/touch.js` | Phone controls: floating thumbstick on the left, swipe-to-look on the right, jump/weather buttons |
 | `src/config.js` | World size, snowline, treeline, view distances, player tuning |
 
 ### Assets (Blender)

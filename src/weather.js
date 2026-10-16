@@ -161,10 +161,10 @@ const HIGH = {
 };
 
 export class Weather {
-  constructor(scene, renderer) {
+  constructor(scene, renderer, { particles = 1 } = {}) {
     this.scene = scene;
-    this.rain = createRain();
-    this.snow = createSnow();
+    this.rain = createRain(Math.round(14000 * particles));
+    this.snow = createSnow(Math.round(14000 * particles));
     this.snow.material.uniforms.uPixelRatio.value = renderer.getPixelRatio();
     scene.add(this.rain, this.snow);
 

@@ -5,20 +5,32 @@ import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
 import { shared } from './materials.js';
-import { SNOWLINE, SPAWN } from './config.js';
+import { SNOWLINE, SPAWN, VIEW_DIST } from './config.js';
+import { TouchControls, isTouchDevice } from './touch.js';
 import './style.css';
 
 const params = new URLSearchParams(location.search);
+const touch = isTouchDevice();
+
+// Phones get a lighter profile: lower resolution, shorter draw distances
+// (mostly hidden by fog anyway) and fewer rain/snow particles.
+// Override with ?quality=low|high.
+const lowPower = params.get('quality') === 'low' || (params.get('quality') !== 'high' && touch);
+if (lowPower) {
+  VIEW_DIST.trees = 270;
+  VIEW_DIST.rocks = 170;
+  VIEW_DIST.ferns = 80;
+}
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.45;
 document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 900);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, lowPower ? 420 : 900);
 
 const overlay = document.getElementById('overlay');
 const status = document.getElementById('status');
@@ -41,7 +53,7 @@ async function init() {
   const veg = buildVegetation(protos, trail);
   scene.add(veg.group);
 
-  const weather = new Weather(scene, renderer);
+  const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1 });
   const player = new Player(camera, renderer.domElement, veg.collide);
 
   // Spawn in the southern valley looking north toward the mountains.
@@ -50,16 +62,31 @@ async function init() {
   player.place(num('x', SPAWN.x), num('z', SPAWN.z), num('yaw', SPAWN.yaw), num('pitch', SPAWN.pitch));
   if (['rain', 'snow', 'clear'].includes(params.get('weather'))) weather.override = params.get('weather');
 
-  status.textContent = 'Click to walk';
+  const cycleWeather = () => flash(`Weather: ${weather.cycleOverride()}`);
+  let touchUi = null;
+  if (touch) {
+    document.body.classList.add('touch');
+    touchUi = new TouchControls(renderer.domElement, player, { onWeather: cycleWeather });
+  }
+
+  status.textContent = touch ? 'Tap to walk' : 'Click to walk';
   overlay.classList.add('ready');
   overlay.addEventListener('click', () => {
-    player.lock();
     weather.enableAudio();
+    if (touch) {
+      overlay.classList.add('hidden');
+      touchUi.show(true);
+    } else {
+      player.lock();
+    }
   });
   document.addEventListener('pointerlockchange', () => {
     overlay.classList.toggle('hidden', document.pointerLockElement === renderer.domElement);
   });
-  if (params.has('autostart')) overlay.classList.add('hidden');
+  if (params.has('autostart')) {
+    overlay.classList.add('hidden');
+    touchUi?.show(true);
+  }
 
   let showHud = true;
   document.addEventListener('keydown', (e) => {
@@ -67,7 +94,7 @@ async function init() {
       showHud = !showHud;
       hud.style.display = showHud ? '' : 'none';
     }
-    if (e.code === 'KeyR') flash(`Weather: ${weather.cycleOverride()}`);
+    if (e.code === 'KeyR') cycleWeather();
   });
 
   const clock = new THREE.Clock();

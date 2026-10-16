@@ -107,3 +107,130 @@ kbd {
   font-size: 12px;
   line-height: 1.6;
 }
+
+/* ---- touch ---------------------------------------------------------------- */
+
+html,
+body {
+  height: 100dvh;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+canvas {
+  touch-action: none;
+}
+
+.touch-help {
+  display: none;
+}
+
+body.touch .keys {
+  display: none;
+}
+
+body.touch .touch-help {
+  display: block;
+}
+
+.chip {
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  line-height: 1.6em;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#touch-ui {
+  display: none;
+}
+
+#touch-ui.active {
+  display: block;
+}
+
+#touch-ui .stick {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+
+#touch-ui .stick.on {
+  opacity: 1;
+}
+
+#touch-ui .stick::before,
+#touch-ui .knob {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+}
+
+#touch-ui .stick::before {
+  left: -60px;
+  top: -60px;
+  width: 116px;
+  height: 116px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(20, 30, 25, 0.18);
+}
+
+#touch-ui .knob {
+  left: -24px;
+  top: -24px;
+  width: 48px;
+  height: 48px;
+  background: rgba(240, 245, 240, 0.55);
+}
+
+.tbtn {
+  position: fixed;
+  right: calc(18px + env(safe-area-inset-right));
+  width: 58px;
+  height: 58px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 30, 25, 0.38);
+  color: #eef2ee;
+  font-size: 24px;
+  touch-action: none;
+}
+
+.tbtn:active {
+  background: rgba(240, 245, 240, 0.35);
+}
+
+.tbtn.jump {
+  bottom: calc(26px + env(safe-area-inset-bottom));
+}
+
+.tbtn.weather {
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  width: 46px;
+  height: 46px;
+  right: calc(24px + env(safe-area-inset-right));
+  font-size: 20px;
+}
+
+body.touch #hud {
+  left: 50%;
+  right: auto;
+  top: calc(10px + env(safe-area-inset-top));
+  bottom: auto;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -39,6 +39,9 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   the only gentle snowy spot). The grade penalty makes it switchback. Chaikin smoothing, then resampled
   every 1.5 m. `distanceTo` keeps scatter off the tread; `guide()` feeds the HUD. Furniture is placed in
   `vegetation.js` `placeTrailFurniture`. Mesh winding must face up (+Y) or it gets back-face culled.
+- `src/touch.js`: touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
+  turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, DPR ≤1.25, half the
+  particles). Override with `?quality=low|high`.
 - `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera, with fog/light
   lerped by altitude relative to the local snowline, and WebAudio noise ambience.
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
@@ -53,5 +56,9 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   (after `npx vite preview --port 4173`). Poll `window.__still` with `page.waitForTimeout` + `evaluate`,
   then decode that PNG data URL. `still=N` renders N frames, captures the canvas, then stops the loop.
 - Yaw 0 faces −z (north); positive yaw turns left.
+- Phone testing: a Playwright context with `devices['iPhone 13']` (hasTouch + coarse pointer). Drive it with CDP
+  `Input.dispatchTouchEvent` (multi-touch works). Without `still`, grab frames via
+  `renderer.render(); renderer.domElement.toDataURL()` inside one `evaluate`. `page.screenshot()` does work
+  for DOM-only views like the start overlay.
 - Good spots: spawn (default), lake `x=110&z=470&yaw=-0.67`, snowy slope `x=-60&z=-250&yaw=0.4`,
   high snow `x=-200&z=-450&yaw=2.8`.

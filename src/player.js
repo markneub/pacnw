@@ -4,7 +4,8 @@ import { groundAt } from './terrain.js';
 
 /**
  * First-person walker: mouse look via pointer lock, WASD/arrows to move,
- * Shift to run, Space to jump. Feet follow the terrain and are pushed out of
+ * Shift to run, Space to jump. Touch controls drive it through `stick`,
+ * look() and jump(). Feet follow the terrain and are pushed out of
  * trunks and boulders by the supplied collide() function.
  */
 export class Player {
@@ -20,29 +21,35 @@ export class Player {
     this.onGround = true;
     this.bob = 0;
     this.locked = false;
+    this.stick = new THREE.Vector2(); // analog input: x = strafe, y = forward, length 0..1
 
     camera.rotation.order = 'YXZ';
 
     document.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
-      if (e.code === 'Space' && this.onGround && this.locked) {
-        this.vel.y = PLAYER.jumpSpeed;
-        this.onGround = false;
-      }
+      if (e.code === 'Space' && this.locked) this.jump();
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
 
     document.addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
-      this.yaw -= e.movementX * 0.0022;
-      this.pitch -= e.movementY * 0.0022;
-      this.pitch = THREE.MathUtils.clamp(this.pitch, -1.45, 1.45);
+      if (this.locked) this.look(e.movementX * 0.0022, e.movementY * 0.0022);
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.dom;
       if (!this.locked) this.keys.clear();
     });
+  }
+
+  look(dx, dy) {
+    this.yaw -= dx;
+    this.pitch = THREE.MathUtils.clamp(this.pitch - dy, -1.45, 1.45);
+  }
+
+  jump() {
+    if (!this.onGround) return;
+    this.vel.y = PLAYER.jumpSpeed;
+    this.onGround = false;
   }
 
   lock() {
@@ -62,14 +69,26 @@ export class Player {
     const k = this.keys;
     const fwd = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    const running = k.has('ShiftLeft') || k.has('ShiftRight');
+    let running = k.has('ShiftLeft') || k.has('ShiftRight');
+    let fwdIn = fwd;
+    let strafeIn = strafe;
+    let throttle = 1;
+    const stickLen = Math.min(1, this.stick.length());
+    if (stickLen > 0.12) {
+      // thumbstick: gentle push walks (proportionally), pushing to the rim runs
+      fwdIn = this.stick.y;
+      strafeIn = this.stick.x;
+      running = stickLen > 0.92;
+      throttle = running ? 1 : Math.min(1, stickLen / 0.8);
+    }
 
     const ground = groundAt(this.pos.x, this.pos.z);
     const wading = ground < WATER_LEVEL - 0.4;
     let speed = running ? PLAYER.runSpeed : PLAYER.walkSpeed;
     if (wading) speed *= 0.45;
+    speed *= throttle;
 
-    const dir = new THREE.Vector3(strafe, 0, -fwd);
+    const dir = new THREE.Vector3(strafeIn, 0, -fwdIn);
     if (dir.lengthSq() > 0) dir.normalize().applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.yaw);
     const accel = this.onGround ? 12 : 2.5;
     const blend = 1 - Math.exp(-accel * dt);

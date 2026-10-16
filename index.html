@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#7d8b8c" />
     <title>Cascadia Woods</title>
   </head>
   <body>
@@ -14,9 +17,14 @@
         <h1>Cascadia Woods</h1>
         <p class="sub">A wet Pacific Northwest forest. Climb north into the snow.</p>
         <p id="status">Loading…</p>
-        <ul>
+        <ul class="keys">
           <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump</li>
           <li>Mouse to look · <kbd>R</kbd> cycle weather · <kbd>H</kbd> toggle HUD · <kbd>Esc</kbd> pause</li>
+        </ul>
+        <ul class="touch-help">
+          <li>Drag on the left to walk; push to the edge to run</li>
+          <li>Swipe on the right to look around</li>
+          <li><span class="chip">⤒</span> jump · <span class="chip">☂</span> change weather</li>
         </ul>
       </div>
     </div>
