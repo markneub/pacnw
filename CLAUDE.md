@@ -143,8 +143,13 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `x=-128.8&z=8.2&yaw=-0.79&pitch=-0.2`.
 - **Grass** (`src/grass.js`): one tuft geometry (8 curved, tapered blades of real triangles, no alpha test), drawn by
   instancing in two **rings**, each a square tile that wraps around the camera like the rain (one draw call each):
-  dense inner (desktop 18 m tile / 7000 tufts, fading out 6.5–9 m; phone 13 m / 2000, 4.5–6.5 m) and sparse outer (52 m /
-  20000, fading in 6.5–9 m and out 14–26 m; phone 32 m / 3600, out 9–16 m). The vertex shader picks each tuft's world spot
+  dense inner (desktop 22 m tile / 10000 tufts, fading out 6–11 m; phone 16 m / 2800, 4–8 m) and sparse outer (56 m /
+  22000, fading in 6–11 m and out 16–28 m; phone 36 m / 4500, in 4–8, out 10–18 m). **No popping:** a tuft's existence depends
+  only on density (smoothstep(density − hash)); distance only *scales* it via the wide fade bands. (Thresholding the hash
+  against a distance fade made tufts sprout in front of the player.) **Culling:** each ring is 6×6 chunk meshes. `update(camera)`
+  wraps each chunk's tile span into the window (`wrapSpan`, 1–2 pieces per axis), drops pieces beyond the ring or inside
+  its fade-in, and frustum-tests a box using the chunk's real ground height range (9 `rawGroundAt` samples; a ±40 m box
+  behind a downward-looking camera never culled). It draws ~48% of tufts, and a culled-vs-all render differs by 0 pixels. The vertex shader picks each tuft's world spot
   (stable while in range), reads the baked **grass map** (terrain-grid resolution: alpha = density from the forest-floor
   layer × no-snow × (open sky² × meadow noise + lakeshore); rgb = grass palette × the terrain's baked shade, taken as
   shaded/unshaded tile vertex colour), sits on `gGround()` (texelFetch of the height grid with the terrain's exact
@@ -153,7 +158,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   26 m), because 1–2 cm blades go sub-pixel at ~10 m and vanish. Wind: travelling gusts plus flutter (`shared.uWind`). Normals
   are up-biased, and the back-face flip is undone after `normal_fragment_begin`. `?off=grass`, `?grass=50` (% of tufts,
   built), `?bench` rows "- grass" and "grass 50%" (`setShare`). Cost (container): +2 draws, desktop +0.65M / phone +0.2M
-  submitted tris (most collapse to points where it's sparse), +0.2 s load. Phone bench (first version, 3000+5600 tufts): 0.5 ms at full
+  submitted tris before culling (most collapse to points where it's sparse), +0.2 s load. With culling: phone spawn
+  185 draws / 0.79M tris (was 154 / 0.91M without culling). Phone bench (first version, 3000+5600 tufts): 0.5 ms at full
   clock, 1.7–1.8 ms throttled, even on the near-grassless snowy slope. It's **vertex-bound**: every tuft runs the vertex
   shader, absent or not, and the cost scales with count (50% saved half). Hence: phone counts −35%, absent tufts skip the
   height/cut lookups, and `grassNear` hides a ring when no 16 m cell in its reach has density >2% (`cellMax`, a few

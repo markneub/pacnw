@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, WATER_LEVEL } from './config.js';
 import {
-  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32,
+  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt,
 } from './terrain.js';
 import { shared } from './materials.js';
 
@@ -32,16 +32,18 @@ const TUFT_BLADES = 8;
 // ring's outer radius.
 const RINGS = {
   desktop: [
-    { size: 18, count: 7000, fade: [0, 0, 6.5, 9] }, // ~22 tufts/m2 (~170 blades)
-    { size: 52, count: 20000, fade: [6.5, 9, 14, 26] }, // ~7 tufts/m2
+    { size: 22, count: 10000, fade: [0, 0, 6, 11] }, // ~21 tufts/m2 (~165 blades)
+    { size: 56, count: 22000, fade: [6, 11, 16, 28] }, // ~7 tufts/m2
   ],
   phone: [
-    // 65% of the first phone counts: ?bench showed the cost scales with the count
-    // (1.7 ms of a throttled ~15 ms frame at 3000 + 5600)
-    { size: 13, count: 2000, fade: [0, 0, 4.5, 6.5] },
-    { size: 32, count: 3600, fade: [4.5, 6.5, 9, 16] },
+    // first phone version (3000 + 5600, no culling) cost 1.7 ms of a throttled
+    // ~15 ms frame; culling now skips about half, which pays for wider fades
+    { size: 16, count: 2800, fade: [0, 0, 4, 8] },
+    { size: 36, count: 4500, fade: [4, 8, 10, 18] },
   ],
 };
+const CHUNKS = 6; // per side: each ring is CHUNKS^2 meshes, culled on the CPU
+const SAMPLES = [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5], [0.5, 0], [0, 0.5], [1, 0.5], [0.5, 1]];
 
 /** One tuft: blades leaning outward, 2 segments each (5 vertices, 3 triangles). */
 function tuftGeometry() {
@@ -176,41 +178,123 @@ function bakeGrassMap(terrain, canopyAt) {
 export function buildGrass(terrain, canopyAt, { lowPower, density = 1 }) {
   const baked = bakeGrassMap(terrain, canopyAt);
   const tuft = tuftGeometry();
-  const rings = (lowPower ? RINGS.phone : RINGS.desktop).map((ring, i) => {
-    const count = Math.max(1, Math.round(ring.count * density));
-    const geo = new THREE.InstancedBufferGeometry();
-    for (const name of ['position', 'normal', 'aT']) geo.setAttribute(name, tuft.attributes[name]);
-    geo.setIndex(tuft.index);
-    const rng = mulberry32(4242 + i);
-    const offsets = new Float32Array(count * 2);
-    for (let k = 0; k < offsets.length; k++) offsets[k] = rng();
-    geo.setAttribute('aOffset', new THREE.InstancedBufferAttribute(offsets, 2));
-    geo.instanceCount = count;
-    geo.userData.count = count;
-    const mesh = new THREE.Mesh(geo, grassMaterial(baked, ring));
-    mesh.frustumCulled = false; // the tile follows the camera; the GPU clips
-    mesh.userData.reach = ring.fade[3];
-    return mesh;
-  });
   const group = new THREE.Group();
   group.name = 'grass';
-  group.add(...rings);
-  const cams = rings.map((m) => m.material.userData.cam);
+  const rings = (lowPower ? RINGS.phone : RINGS.desktop).map((ring, i) => {
+    // spread the tufts over the tile, then bin them into CHUNKS x CHUNKS chunks
+    const count = Math.max(1, Math.round(ring.count * density));
+    const rng = mulberry32(4242 + i);
+    const bins = Array.from({ length: CHUNKS * CHUNKS }, () => []);
+    for (let k = 0; k < count; k++) {
+      const u = rng();
+      const v = rng();
+      bins[Math.floor(v * CHUNKS) * CHUNKS + Math.floor(u * CHUNKS)].push(u, v);
+    }
+    const material = grassMaterial(baked, ring);
+    const chunks = bins.map((offsets, c) => {
+      const geo = new THREE.InstancedBufferGeometry();
+      for (const name of ['position', 'normal', 'aT']) geo.setAttribute(name, tuft.attributes[name]);
+      geo.setIndex(tuft.index);
+      geo.setAttribute('aOffset', new THREE.InstancedBufferAttribute(new Float32Array(offsets), 2));
+      geo.instanceCount = offsets.length / 2;
+      geo.userData.count = geo.instanceCount;
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.frustumCulled = false; // culled per chunk in update()
+      // the chunk's span of the tile, in metres from the tile corner
+      mesh.userData.u = [(c % CHUNKS) * ring.size / CHUNKS, ((c % CHUNKS) + 1) * ring.size / CHUNKS];
+      mesh.userData.v = [Math.floor(c / CHUNKS) * ring.size / CHUNKS, (Math.floor(c / CHUNKS) + 1) * ring.size / CHUNKS];
+      group.add(mesh);
+      return mesh;
+    });
+    return { ring, chunks, cam: material.userData.cam };
+  });
 
+  const frustum = new THREE.Frustum();
+  const viewProj = new THREE.Matrix4();
+  const box = new THREE.Box3();
+  const xs = [0, 0, 0, 0];
+  const zs = [0, 0, 0, 0];
   return {
     mesh: group,
     map: baked.map, // debugging: density in alpha
-    /** Once per frame (no allocation). */
-    update(cameraPos) {
-      for (const c of cams) c.set(cameraPos.x, cameraPos.z);
-      // a ring with no grass anywhere in reach costs nothing if it isn't drawn
-      for (const m of rings) m.visible = grassNear(baked, cameraPos.x, cameraPos.z, m.userData.reach);
+    /** Once per frame, after the camera moved (no allocation). */
+    update(camera) {
+      const { x, z } = camera.position;
+      camera.updateMatrixWorld();
+      viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      frustum.setFromProjectionMatrix(viewProj);
+      for (const { ring, chunks, cam } of rings) {
+        cam.set(x, z);
+        // a ring with no grass anywhere in reach isn't drawn at all
+        const any = grassNear(baked, x, z, ring.fade[3]);
+        const ox = x - ring.size / 2;
+        const oz = z - ring.size / 2;
+        for (const mesh of chunks) {
+          if (!any) {
+            mesh.visible = false;
+            continue;
+          }
+          // where this chunk's tufts are this frame: its span of the tile,
+          // wrapped into the window around the camera (1 or 2 pieces per axis)
+          const nx = wrapSpan(mesh.userData.u, ox, ring.size, xs);
+          const nz = wrapSpan(mesh.userData.v, oz, ring.size, zs);
+          let vis = false;
+          for (let a = 0; a < nx && !vis; a++) {
+            for (let b = 0; b < nz && !vis; b++) {
+              const x0 = xs[a * 2];
+              const x1 = xs[a * 2 + 1];
+              const z0 = zs[b * 2];
+              const z1 = zs[b * 2 + 1];
+              // nearest and farthest horizontal distance from the camera
+              const nearX = Math.max(x0 - x, 0, x - x1);
+              const nearZ = Math.max(z0 - z, 0, z - z1);
+              const farX = Math.max(Math.abs(x0 - x), Math.abs(x1 - x));
+              const farZ = Math.max(Math.abs(z0 - z), Math.abs(z1 - z));
+              if (Math.hypot(nearX, nearZ) > ring.fade[3]) continue; // all beyond the ring
+              if (Math.hypot(farX, farZ) < ring.fade[0]) continue; // all inside its fade-in
+              // its real ground height range (a tall box behind a camera
+              // looking slightly down reaches into the view and never culls)
+              let lo = Infinity;
+              let hi = -Infinity;
+              for (const [sx, sz] of SAMPLES) {
+                const h = rawGroundAt(x0 + (x1 - x0) * sx, z0 + (z1 - z0) * sz);
+                lo = Math.min(lo, h);
+                hi = Math.max(hi, h);
+              }
+              box.min.set(x0, lo - 2, z0);
+              box.max.set(x1, hi + 2.5, z1); // humps between samples, blade height
+              vis = frustum.intersectsBox(box);
+            }
+          }
+          mesh.visible = vis;
+        }
+      }
     },
     /** Draw only a share (0..1) of the tufts that were built (?bench). */
     setShare(f) {
-      for (const m of rings) m.geometry.instanceCount = Math.max(1, Math.round(m.geometry.userData.count * f));
+      for (const { chunks } of rings) {
+        for (const m of chunks) m.geometry.instanceCount = Math.round(m.geometry.userData.count * f);
+      }
     },
   };
+}
+
+/**
+ * World interval(s) covered by tile span [lo, hi) (m) when the tile wraps
+ * into the window [origin, origin + size): out = [a0, a1, b0, b1]; returns 1 or 2.
+ */
+function wrapSpan([lo, hi], origin, size, out) {
+  const a = origin + ((((lo - origin) % size) + size) % size);
+  const b = a + (hi - lo);
+  out[0] = a;
+  if (b <= origin + size) {
+    out[1] = b;
+    return 1;
+  }
+  out[1] = origin + size;
+  out[2] = origin;
+  out[3] = b - size;
+  return 2;
 }
 
 /** Any grass within r of (x, z)? Checks the per-cell maxima (no allocation). */
@@ -283,7 +367,9 @@ function grassMaterial(baked, ring) {
         float gDist = length(gXZ - uGrassCam);
         float gEdge = (uGrassFade.y > 0.0 ? smoothstep(uGrassFade.x, uGrassFade.y, gDist) : 1.0)
           * (1.0 - smoothstep(uGrassFade.z, uGrassFade.w, gDist));
-        float gScale = smoothstep(0.0, 0.12, gMap.a * gEdge - gR1 * 0.999);
+        // whether a tuft exists depends only on the local density (so it never
+        // pops); distance only scales it, smoothly across the fade bands
+        float gScale = smoothstep(0.0, 0.12, gMap.a - gR1 * 0.999) * gEdge;
         // most tufts in sparse places are absent: skip the rest of their lookups
         float gY = 0.0;
         if (gScale > 0.0) {
@@ -302,7 +388,7 @@ function grassMaterial(baked, ring) {
         transformed.xz = gRot * transformed.xz;
         // blades are 1-2 cm wide: past a few metres that's under a pixel, so
         // widen the tuft (blades and spread) with distance to keep it visible
-        transformed.xz *= 1.0 + 1.6 * smoothstep(3.0, 26.0, gDist);
+        transformed.xz *= 1.0 + 1.6 * smoothstep(3.0, 28.0, gDist);
         transformed *= gScale * vec3(1.0, gHeight, 1.0); // gScale 0: collapses to a point
         // wind: gusts travelling across the field, plus a little flutter
         vec2 gWind = vec2(0.912, 0.41);

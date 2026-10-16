@@ -151,7 +151,7 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
     veg.updateNear(camera.position, true);
     veg.updateVisibility(camera.position);
     weather.update(10, 0, camera); // snap weather and fog to this spot
-    grass?.update(camera.position); // the game loop is paused: move the grass tile here
+    grass?.update(camera); // the game loop is paused: move the grass tile here
     render();
     const { calls, triangles } = renderer.info.render;
     lines.push('', `${view.name} (${calls} draws, ${(triangles / 1e6).toFixed(2)}M tris)`,

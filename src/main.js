@@ -217,7 +217,7 @@ async function init() {
     weather.update(dt, t, camera);
 
     veg.updateNear(camera.position);
-    grass?.update(camera.position);
+    grass?.update(camera);
     visTimer -= dt;
     if (visTimer <= 0) {
       veg.updateVisibility(camera.position);
