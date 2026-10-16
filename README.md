@@ -5,6 +5,8 @@ of Douglas fir, western hemlock and red cedar with sword ferns and mossy boulder
 lake. Walk north and the land climbs into a ridged range where the rain turns to sleet, then snow.
 Up there the ground and the trees are snow-covered.
 
+**Play it online:** https://markneub.github.io/pacnw/
+
 ## Running
 
 ```bash
@@ -15,6 +17,9 @@ npm run build    # static site in dist/ (relative paths, so it can be hosted fro
 
 Controls: click to start · **WASD** move · **Shift** run · **Space** jump · mouse look ·
 **R** cycle weather (auto → rain → snow → clear) · **H** toggle HUD · **Esc** release the mouse.
+
+Pushes to the default branch are built and published to GitHub Pages by
+`.github/workflows/pages.yml` (other branches just get a build check).
 
 URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 
