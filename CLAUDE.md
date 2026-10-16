@@ -82,7 +82,11 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   features scaled by density and distance. Check with `?perf` (frame avg/worst, hitches >50 ms, load-step
   timings in the console). Under vsync the frame interval is pinned at 16.7 ms, so line 2 measures the work:
   CPU ms plus GPU ms from `EXT_disjoint_timer_query_webgl2` where available. Safari/iOS has no timer queries, so
-  each frame ends with a 1 px `readPixels` and shows "work" = CPU+GPU (sync, reads slightly high). `?perf=nosync` turns that off. To find what costs the most on a device, use `?off=trees,ferns,rocks,terrain,trail,
+  each frame ends with a 1 px `readPixels` and shows "work" = CPU+GPU (sync, reads slightly high). `?perf=nosync` turns that off.
+  `?bench` (after tapping start) pauses play and, at spawn/forest/snowy slope, times frames with each part switched
+  off (`src/bench.js`). "frame" = N back-to-back renders + one GPU wait (true cost, no vsync); "cpu" = JS in
+  `render()`; "sync" = wait per frame (what `?perf` does on iOS). It shows a copyable table. The user can run it on
+  their phone and paste the result. `?bench=quick` is a one-view smoke test for SwiftShader. To find what costs the most on a device, use `?off=trees,ferns,rocks,terrain,trail,
   water,sky,weather,env,fog,aa` (any subset) and `?dpr=1`.
 - **Measure before and after any perf change.** Count draw calls and triangles at fixed views (spawn, lake,
   forest `x=-30&z=420`, ridge `x=-60&z=-250`) with `?quality=high` and `?quality=low` via

@@ -158,3 +158,30 @@ body.touch #hud {
   pointer-events: none;
   z-index: 10;
 }
+
+#bench {
+  position: fixed;
+  inset: calc(8px + env(safe-area-inset-top)) 8px 8px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  z-index: 20;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#bench pre {
+  margin: 0;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+#bench button {
+  margin-top: 10px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: #cfe3c4;
+  color: #1c2a22;
+  font-size: 14px;
+}

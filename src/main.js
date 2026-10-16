@@ -11,6 +11,7 @@ import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround } from './bake.js';
 import { PerfOverlay } from './perf.js';
 import { loadGroundDetail } from './grounddetail.js';
+import { runBench } from './bench.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -140,12 +141,18 @@ async function init() {
   status.textContent = touch ? 'Tap to start' : 'Click to start';
   overlay.classList.add('ready');
   let started = false;
+  // ?bench: once started, pause play and run the benchmark (see bench.js)
+  const startBench = () => setTimeout(async () => {
+    renderer.setAnimationLoop(null);
+    await runBench({ renderer, scene, camera, player, veg, weather, spawn: SPAWN, quick: params.get('bench') === 'quick' });
+  }, 1000);
   overlay.addEventListener('click', () => {
     weather.enableAudio();
     if (touch) overlay.classList.add('hidden');
     else player.lock();
     if (!started) {
       started = true;
+      if (params.has('bench')) startBench();
       // the start box has no instructions, so give a brief hint once
       flash(touch ? 'Slide up to walk · slide sideways to turn' : 'WASD to walk · Shift to run · mouse to look', 4000);
     }
@@ -155,7 +162,10 @@ async function init() {
     overlay.classList.toggle('hidden', locked);
     if (!locked) status.textContent = 'Click to resume';
   });
-  if (params.has('autostart')) overlay.classList.add('hidden');
+  if (params.has('autostart')) {
+    overlay.classList.add('hidden');
+    if (params.has('bench')) startBench();
+  }
 
   let showHud = true;
   document.addEventListener('keydown', (e) => {

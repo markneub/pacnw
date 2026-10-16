@@ -35,6 +35,8 @@ Add `?perf` to show frame times (average and worst, which is the one to watch fo
 and triangles, and to log how long each loading step took. The second line is the actual work per frame,
 which stays visible even when vsync caps the frame rate: CPU and GPU milliseconds, or, on Safari/iOS (no GPU
 timers), the combined CPU+GPU cost measured by waiting for the GPU each frame (`?perf=nosync` turns that off).
+`?bench` runs a benchmark after you start: it times frames at three spots with each part of the scene
+switched off in turn, and shows a table with a Copy button.
 
 URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 
@@ -52,6 +54,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/grounddetail.js` | Close-up photographic ground detail (textures fetched by `tools/fetch_ground_textures.py`) |
 | `src/bake.js` | Lighting baked at load: per-vertex AO on models, canopy shade map, terrain horizon AO |
 | `src/perf.js` | `?perf` overlay |
+| `src/bench.js` | `?bench` device benchmark |
 | `src/weather.js` | GPU rain streaks and snowflakes in a box around the camera, fog and light that shift with altitude, procedural rain/wind audio |
 | `src/player.js` | First-person walker that follows the terrain (keyboard/mouse, plus an analog `stick` and `look()` for touch) |
 | `src/touch.js` | One-thumb phone controls (no on-screen UI) |

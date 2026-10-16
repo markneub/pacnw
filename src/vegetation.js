@@ -390,10 +390,13 @@ export function buildVegetation(protos, trail) {
     for (const pool of nearPools) pool.update(cameraPos, poolRadius(pool.radiusKey), force);
   }
 
-  function disable(kind) {
-    disabled.add(kind);
-    for (const pool of nearPools) for (const im of pool.meshes) if (im.userData.kind === kind) im.visible = false;
+  /** Switch a kind on or off (perf testing: ?off= and ?bench). Chunks follow on the next updateVisibility. */
+  function setEnabled(kind, on) {
+    if (on) disabled.delete(kind);
+    else disabled.add(kind);
+    for (const pool of nearPools) for (const im of pool.meshes) if (im.userData.kind === kind) im.visible = on;
   }
+  const disable = (kind) => setEnabled(kind, false);
 
-  return { group, updateVisibility, updateNear, disable, collide, counts, canopyAt, chunks, nearPools };
+  return { group, updateVisibility, updateNear, disable, setEnabled, collide, counts, canopyAt, chunks, nearPools };
 }
