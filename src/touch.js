@@ -4,7 +4,7 @@
  * - Left half of the screen: a floating thumbstick appears where you touch.
  *   Drag to walk; push it to the rim to run.
  * - Right half: swipe to look around.
- * - Buttons: jump and weather.
+ * - Button: jump. (Weather always follows altitude on phones.)
  *
  * Several fingers are tracked independently by pointerId, so you can walk and
  * look at the same time.
@@ -17,7 +17,7 @@ export function isTouchDevice() {
 }
 
 export class TouchControls {
-  constructor(surface, player, { onWeather } = {}) {
+  constructor(surface, player) {
     this.player = player;
     this.stickId = null;
     this.stickOrigin = { x: 0, y: 0 };
@@ -29,7 +29,6 @@ export class TouchControls {
     this.root.innerHTML = `
       <div class="stick"><div class="knob"></div></div>
       <button type="button" class="tbtn jump" aria-label="Jump">⤒</button>
-      <button type="button" class="tbtn weather" aria-label="Change weather">☂</button>
     `;
     document.body.appendChild(this.root);
     this.stickEl = this.root.querySelector('.stick');
@@ -41,7 +40,6 @@ export class TouchControls {
       fn();
     });
     tap(this.root.querySelector('.jump'), () => player.jump());
-    tap(this.root.querySelector('.weather'), () => onWeather?.());
 
     surface.addEventListener('pointerdown', (e) => this.down(e));
     window.addEventListener('pointermove', (e) => this.move(e), { passive: false });

@@ -66,7 +66,7 @@ async function init() {
   let touchUi = null;
   if (touch) {
     document.body.classList.add('touch');
-    touchUi = new TouchControls(renderer.domElement, player, { onWeather: cycleWeather });
+    touchUi = new TouchControls(renderer.domElement, player);
   }
 
   status.textContent = touch ? 'Tap to walk' : 'Click to walk';

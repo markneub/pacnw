@@ -23,7 +23,7 @@ Pushes to the default branch are built and published to GitHub Pages by
 `.github/workflows/pages.yml` (other branches just get a build check).
 
 On phones and tablets: drag on the left half to walk (push the stick to its edge to run), swipe on the
-right half to look, and use the on-screen buttons to jump and change the weather. Touch devices also get a
+right half to look, and tap the on-screen button to jump. Weather always follows altitude on phones. Touch devices also get a
 lighter render profile (lower resolution, shorter draw distance, fewer particles); force either with
 `?quality=low` or `?quality=high`.
 

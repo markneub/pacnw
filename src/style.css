@@ -213,14 +213,6 @@ body.touch .touch-help {
   bottom: calc(26px + env(safe-area-inset-bottom));
 }
 
-.tbtn.weather {
-  bottom: calc(96px + env(safe-area-inset-bottom));
-  width: 46px;
-  height: 46px;
-  right: calc(24px + env(safe-area-inset-right));
-  font-size: 20px;
-}
-
 body.touch #hud {
   left: 50%;
   right: auto;
