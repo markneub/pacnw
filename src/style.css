@@ -76,15 +76,37 @@ canvas {
   letter-spacing: 0.02em;
 }
 
-.card .sub {
-  margin: 0 0 18px;
-  opacity: 0.75;
+#progress {
+  height: 4px;
+  margin: 18px auto 20px;
+  max-width: 260px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+#progress-fill {
+  height: 100%;
+  background: #cfe3c4;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition-property: transform;
+  transition-timing-function: linear;
+  will-change: transform;
+}
+
+#overlay.ready #progress {
+  display: none;
 }
 
 #status {
   margin: 0 0 18px;
   font-size: 18px;
   color: #cfe3c4;
+}
+
+#status:empty {
+  display: none;
 }
 
 .card ul {
@@ -175,20 +197,22 @@ body.touch .touch-help {
   border-radius: 50%;
 }
 
+/* vertical throttle track: origin at the touch point, up = forward */
 #touch-ui .stick::before {
-  left: -60px;
-  top: -60px;
-  width: 116px;
-  height: 116px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  background: rgba(20, 30, 25, 0.18);
+  left: -26px;
+  top: -108px;
+  width: 52px;
+  height: 160px;
+  border-radius: 26px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(to top, rgba(20, 30, 25, 0.12), rgba(20, 30, 25, 0.28));
 }
 
 #touch-ui .knob {
-  left: -24px;
-  top: -24px;
-  width: 48px;
-  height: 48px;
+  left: -22px;
+  top: -22px;
+  width: 44px;
+  height: 44px;
   background: rgba(240, 245, 240, 0.55);
 }
 

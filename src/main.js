@@ -52,34 +52,45 @@ function step(label) {
   stepStart = now;
 }
 
+/**
+ * Loading bar. Steps block the main thread, so each step animates the bar
+ * (a compositor transform, which keeps running while JS is busy) toward
+ * where that step should end, over roughly how long it usually takes.
+ */
+const fill = document.getElementById('progress-fill');
+function progress(to, expectedMs) {
+  fill.style.transitionDuration = `${expectedMs}ms`;
+  fill.style.transform = `scaleX(${to})`;
+}
+
 async function init() {
-  status.textContent = 'Shaping the valley…';
+  progress(0.1, 500);
   await nextFrame();
   const terrain = buildTerrain();
   scene.add(terrain);
   scene.add(buildWater());
   step('terrain');
 
-  status.textContent = 'Cutting the trail…';
+  progress(0.22, 700);
   await nextFrame();
   const trail = buildTrail();
   scene.add(trail.mesh);
   step('trail');
 
-  status.textContent = 'Growing the forest…';
+  progress(0.5, 1600);
   const protos = await loadPrototypes(`${import.meta.env.BASE_URL}models/forest.glb`);
   await nextFrame();
   const veg = buildVegetation(protos, trail);
   scene.add(veg.group);
   step('vegetation');
 
-  status.textContent = 'Letting the light in…';
+  progress(0.6, 500);
   await nextFrame();
   shadeGround(terrain, veg.canopyAt);
   shadeGround(trail.mesh, veg.canopyAt);
   step('ground shading');
 
-  const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1, mist: lowPower ? 6 : 12 });
+  const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1 });
   const player = new Player(camera, renderer.domElement, veg.collide);
 
   // Spawn in the southern valley looking north toward the mountains.
@@ -95,13 +106,14 @@ async function init() {
     touchUi = new TouchControls(renderer.domElement, player);
   }
 
-  status.textContent = 'Warming up…';
+  progress(0.98, 2500);
   await nextFrame();
   warmUp();
   step('warm-up');
   if (params.has('perf')) console.info('load:', timings.join(' · '));
 
-  status.textContent = touch ? 'Tap to walk' : 'Click to walk';
+  progress(1, 200);
+  status.textContent = touch ? 'Tap to start' : 'Click to start';
   overlay.classList.add('ready');
   overlay.addEventListener('click', () => {
     weather.enableAudio();

@@ -23,6 +23,7 @@ export class Player {
     this.locked = false;
     this.stick = new THREE.Vector2(); // analog input: x = strafe, y = forward, length 0..1
     this.moveDir = new THREE.Vector3(); // reused each frame (no per-frame garbage)
+    this.levelPitch = false; // one-thumb touch steering: ease the view back to level
 
     camera.rotation.order = 'YXZ';
 
@@ -74,6 +75,8 @@ export class Player {
     let fwdIn = fwd;
     let strafeIn = strafe;
     let throttle = 1;
+    if (this.levelPitch) this.pitch *= Math.exp(-dt * 1.2);
+
     const stickLen = Math.min(1, this.stick.length());
     if (stickLen > 0.12) {
       // thumbstick: gentle push walks (proportionally), pushing to the rim runs

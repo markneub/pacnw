@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { snowlineAt } from './terrain.js';
-import { createSky, Mist } from './atmosphere.js';
+import { createSky } from './atmosphere.js';
 import { shared } from './materials.js';
 
 const smooth = THREE.MathUtils.smoothstep;
@@ -164,17 +164,17 @@ const HIGH = {
 };
 
 export class Weather {
-  constructor(scene, renderer, { particles = 1, mist = 12 } = {}) {
+  constructor(scene, renderer, { particles = 1 } = {}) {
     this.scene = scene;
     this.sky = createSky();
     scene.add(this.sky.mesh);
-    this.mist = new Mist(scene, mist);
     this.rain = createRain(Math.round(14000 * particles));
     this.snow = createSnow(Math.round(14000 * particles));
     this.snow.material.uniforms.uPixelRatio.value = renderer.getPixelRatio();
     scene.add(this.rain, this.snow);
 
-    scene.fog = new THREE.FogExp2(LOW.fog.clone(), LOW.density);
+    // THREE.Fog as a carrier: near = density, far = time (see installHeightFog)
+    scene.fog = new THREE.Fog(LOW.fog.clone(), LOW.density, 0);
     scene.background = scene.fog.color;
 
     this.hemi = new THREE.HemisphereLight(LOW.hemiSky, LOW.hemiGround, LOW.hemiIntensity);
@@ -221,7 +221,7 @@ export class Weather {
     // Atmosphere follows altitude; clear weather thins the fog.
     const clear = this.override === 'clear' ? 0.55 : 1;
     this.scene.fog.color.copy(LOW.fog).lerp(HIGH.fog, snowT);
-    this.scene.fog.density = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT)
+    this.scene.fog.near = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT)
       * THREE.MathUtils.lerp(clear, 1, Math.max(this.rainAmount, this.snowAmount));
     this.hemi.color.copy(LOW.hemiSky).lerp(HIGH.hemiSky, snowT);
     this.hemi.groundColor.copy(LOW.hemiGround).lerp(HIGH.hemiGround, snowT);
@@ -232,7 +232,7 @@ export class Weather {
     this.sky.uniforms.uHorizon.value.copy(this.scene.fog.color);
     this.sky.uniforms.uZenith.value.copy(LOW.zenith).lerp(HIGH.zenith, snowT);
     this.sky.uniforms.uTime.value = time;
-    this.mist.update(dt, camera, Mist.amountAt(camera.position, this.rainAmount, this.override === 'clear'));
+    this.scene.fog.far = time; // drifts the mist banks
 
     // Surfaces stay damp in the rainforest even between showers; they dry out
     // in clear weather and there's no liquid water up in the snow.

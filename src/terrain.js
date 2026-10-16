@@ -266,7 +266,7 @@ export function buildTerrain() {
         uniform float uWet;
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
-        float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         float gNoise(vec2 p) {
           vec2 i = floor(p);
           vec2 f = fract(p);
@@ -314,7 +314,7 @@ export function buildWater() {
         uniform float uTime;
         uniform float uWet;
         varying vec2 vWaterXZ;
-        float wHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
+        float wHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         vec2 rainRing(vec2 p, float t) {
           vec2 cell = floor(p);
           vec2 f = fract(p) - 0.5;

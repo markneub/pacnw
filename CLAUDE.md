@@ -47,7 +47,10 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   alpha-fades over the terrain. `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
 - Trail QA numbers (cross-slope on tread p50 ≈0, p95 ≈13%; grade p95 ≈26%) come from measuring
   `groundAt` across/along `trail.points` in node. Re-check them after changing the route or widths.
-- `src/touch.js`: touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
+- `src/touch.js`: one-thumb scheme. The first finger is the steer: its horizontal movement turns (swipe-style, ~130° per
+  screen width), and its vertical offset from the touch point is the throttle (up 80 px = full, run when
+  >0.92; down = slow reverse). It sets `player.levelPitch`, which eases pitch to level. An optional second
+  finger is free look. Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
   turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, DPR ≤1.25, half the
   particles). Override with `?quality=low|high`.
 - `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera, with fog/light
@@ -62,13 +65,19 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   features scaled by density and distance. Check with `?perf` (frame avg/worst, hitches >50 ms, load-step
   timings in the console).
 - `src/atmosphere.js`: `installHeightFog()` replaces three's fog chunks globally, so it must run before
-  any material compiles. Fog thickens below ~18 m + 45 m falloff. Sky dome + PMREM environment
-  (`scene.environmentIntensity` 0.55; foliage `envMapIntensity` 0.35 or it looks grey). `Mist` sprites
-  (12 desktop, 6 phone).
+  any material compiles. **`scene.fog` is a `THREE.Fog` used as a carrier: `near` = density, `far` = time**
+  (three refreshes those uniforms on every material). Fog thickens below ~18 m + 45 m falloff, and
+  world-anchored noise makes drifting mist banks. Sky dome + PMREM environment
+  (`scene.environmentIntensity` 0.55; foliage `envMapIntensity` 0.35 or it looks grey).
+  Don't bring back camera-facing mist sprites: on phones their hard edges looked like confetti.
+- Shader noise: use the sine-free hash (`fract(p.xyx * .1031)`, Hoskins). `fract(sin(x)*43758)` is
+  unreliable on mobile GPUs.
 - `src/bake.js`: prototype vertex AO (vertex colours × instance colours), `bakeCanopy` (2 m grid) feeds
   instance tints and `shadeGround` (terrain + corridor), and `horizonAO` from the terrain grid.
   `shared.uWet` (from `weather.js`) drives wet darkening/gloss (`wetChunks`), trail puddles and lake rain
   rings.
+- Loading screen: `progress(to, expectedMs)` in `main.js` animates the bar with a compositor transform,
+  so it keeps moving while a blocking step runs. Re-tune the expected times if loading steps change.
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Perf at spawn: ~3.1M tris, ~450 draw calls. Watch this when adding instanced content. Load in the container
   (SwiftShader): ~11 s, ~8 s of it the software-rendered warm-up. It's much faster on a real GPU.

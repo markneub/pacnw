@@ -104,7 +104,9 @@ export function addGroundCover(material) {
         float up = smoothstep(0.25, 0.75, normalize(vCoverNormal).y);
         float wob = sin(vCoverPos.x * 0.05) * 9.0 + cos(vCoverPos.z * 0.043) * 9.0;
         float snowy = smoothstep(uSnowline - 8.0, uSnowline + 6.0, vCoverPos.y + wob);
-        float speck = fract(sin(dot(floor(vCoverPos.xz * 4.0), vec2(12.9898, 78.233))) * 43758.5453);
+        vec3 sp3 = fract(vec3(floor(vCoverPos.xz * 4.0).xyx) * 0.1031);
+        sp3 += dot(sp3, sp3.yzx + 33.33);
+        float speck = fract((sp3.x + sp3.y) * sp3.z);
         vec3 moss = mix(vec3(0.045, 0.085, 0.02), vec3(0.08, 0.13, 0.03), speck);
         diffuseColor.rgb = mix(diffuseColor.rgb, moss, up * (1.0 - snowy) * 0.85);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), up * snowy);`,

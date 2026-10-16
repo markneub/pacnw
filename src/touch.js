@@ -1,15 +1,15 @@
 /**
- * Phone/tablet controls.
+ * Phone/tablet controls, designed for one thumb.
  *
- * - Left half of the screen: a floating thumbstick appears where you touch.
- *   Drag to walk; push it to the rim to run.
- * - Right half: swipe to look around.
- * - Button: jump. (Weather always follows altitude on phones.)
- *
- * Several fingers are tracked independently by pointerId, so you can walk and
- * look at the same time.
+ * Put your thumb down anywhere and drag:
+ * - sliding sideways turns your view (like a swipe);
+ * - how far up from where you touched sets your speed: a little walks,
+ *   near the top of the range runs; pulling down backs up slowly.
+ * While you steer one-handed the view gently levels itself.
+ * A second finger, if you want one, is a free look (including up/down).
+ * The jump button sits bottom-right.
  */
-const STICK_RADIUS = 56; // px of thumb travel for full deflection
+const THROTTLE_RANGE = 80; // px of upward travel for full speed
 
 /** Phones and tablets; touchscreen laptops (fine primary pointer) keep mouse + keyboard. */
 export function isTouchDevice() {
@@ -19,8 +19,9 @@ export function isTouchDevice() {
 export class TouchControls {
   constructor(surface, player) {
     this.player = player;
-    this.stickId = null;
-    this.stickOrigin = { x: 0, y: 0 };
+    this.steerId = null;
+    this.steerOriginY = 0;
+    this.steerLastX = 0;
     this.lookId = null;
     this.lookLast = { x: 0, y: 0 };
 
@@ -34,12 +35,11 @@ export class TouchControls {
     this.stickEl = this.root.querySelector('.stick');
     this.knobEl = this.root.querySelector('.knob');
 
-    const tap = (el, fn) => el.addEventListener('pointerdown', (e) => {
+    this.root.querySelector('.jump').addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      fn();
+      player.jump();
     });
-    tap(this.root.querySelector('.jump'), () => player.jump());
 
     surface.addEventListener('pointerdown', (e) => this.down(e));
     window.addEventListener('pointermove', (e) => this.move(e), { passive: false });
@@ -54,49 +54,60 @@ export class TouchControls {
     this.root.classList.toggle('active', visible);
   }
 
+  /** Radians of turn per pixel of horizontal slide (~130° per screen width). */
+  get lookRate() {
+    return 2.3 / Math.max(window.innerWidth, 320);
+  }
+
   down(e) {
     if (e.pointerType === 'mouse') return;
     e.preventDefault();
-    if (e.clientX < window.innerWidth / 2 && this.stickId === null) {
-      this.stickId = e.pointerId;
-      this.stickOrigin = { x: e.clientX, y: e.clientY };
-      this.stickEl.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
-      this.knobEl.style.transform = 'translate(0px, 0px)';
+    if (this.steerId === null) {
+      this.steerId = e.pointerId;
+      this.steerOriginY = e.clientY;
+      this.steerLastX = e.clientX;
+      this.placeStick(e.clientX, e.clientY, 0);
       this.stickEl.classList.add('on');
+      this.player.levelPitch = this.lookId === null;
     } else if (this.lookId === null) {
       this.lookId = e.pointerId;
       this.lookLast = { x: e.clientX, y: e.clientY };
+      this.player.levelPitch = false;
     }
   }
 
   move(e) {
-    if (e.pointerId === this.stickId) {
+    if (e.pointerId === this.steerId) {
       e.preventDefault();
-      let dx = e.clientX - this.stickOrigin.x;
-      let dy = e.clientY - this.stickOrigin.y;
-      const len = Math.hypot(dx, dy);
-      if (len > STICK_RADIUS) {
-        dx *= STICK_RADIUS / len;
-        dy *= STICK_RADIUS / len;
-      }
-      this.knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
-      this.player.stick.set(dx / STICK_RADIUS, -dy / STICK_RADIUS);
+      this.player.look((e.clientX - this.steerLastX) * this.lookRate, 0);
+      this.steerLastX = e.clientX;
+      const up = (this.steerOriginY - e.clientY) / THROTTLE_RANGE; // + forward, - back
+      const throttle = Math.max(-0.5, Math.min(1, up));
+      // the ring follows the thumb sideways; the knob shows the throttle
+      this.placeStick(e.clientX, this.steerOriginY, -throttle * THROTTLE_RANGE);
+      this.player.stick.set(0, Math.abs(throttle) < 0.1 ? 0 : throttle);
     } else if (e.pointerId === this.lookId) {
       e.preventDefault();
-      // a full-width swipe turns you about 130°
-      const k = 2.3 / Math.max(window.innerWidth, 320);
+      const k = this.lookRate;
       this.player.look((e.clientX - this.lookLast.x) * k, (e.clientY - this.lookLast.y) * k);
       this.lookLast = { x: e.clientX, y: e.clientY };
     }
   }
 
   up(e) {
-    if (e.pointerId === this.stickId) {
-      this.stickId = null;
+    if (e.pointerId === this.steerId) {
+      this.steerId = null;
       this.player.stick.set(0, 0);
+      this.player.levelPitch = false;
       this.stickEl.classList.remove('on');
     } else if (e.pointerId === this.lookId) {
       this.lookId = null;
+      this.player.levelPitch = this.steerId !== null;
     }
+  }
+
+  placeStick(x, y, knobY) {
+    this.stickEl.style.transform = `translate(${x}px, ${y}px)`;
+    this.knobEl.style.transform = `translate(0px, ${knobY}px)`;
   }
 }
