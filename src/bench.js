@@ -1,4 +1,5 @@
 import { groundDetail } from './grounddetail.js';
+import { surfaceDetail } from './surfacedetail.js';
 
 /**
  * ?bench: a one-tap benchmark for real devices. It stops the game loop, then
@@ -62,6 +63,12 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
     ['- ground', () => hide(byName('terrain'), byName('trail'))],
     ['- ground detail', () => {
       const r = groundDetail.uniforms.uGDRange.value;
+      const was = r.clone();
+      r.set(0, 0.001);
+      return () => r.copy(was);
+    }],
+    ['- bark/rock tex', () => {
+      const r = surfaceDetail.uSDRange.value;
       const was = r.clone();
       r.set(0, 0.001);
       return () => r.copy(was);

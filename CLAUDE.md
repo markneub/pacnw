@@ -23,7 +23,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   then `<scratch>/bvenv/bin/python blender/build_assets.py`.
 - Preview renders: Workbench/EEVEE fail (no libEGL). Use Cycles on the CPU with low samples.
 - Object names (`fir`, `fir_snow`, `hemlock`, `cedar`, `sapling`, `snag`, `rock_a/b/c`, `fern_a/b`,
-  `log`, `stump`, `signpost`, `cairn`, `bench`) and material names are looked up in `src/vegetation.js`. Keep them in sync.
+  `log`, `stump`, `signpost`, `cairn`, `bench`) and material names are looked up in `src/vegetation.js` (and `src/surfacedetail.js`). Keep them in sync.
 - Blender is Z-up; the exporter converts to Y-up. Each asset is one object at the origin, with one glTF primitive per material.
 
 ## Code map / conventions
@@ -104,7 +104,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   dirt), within `uGDRange` (20–45 m desktop, 15–32 m phone). The photo *modulates* the existing colour
   (albedo ÷ its average), so the palette and baked shading stay and the fade-out has no colour shift. Rock is
   triplanar; the rest are top-down. `textureGrad` with derivatives taken outside branches. Textures + `manifest.json`
-  live in `public/textures/ground/`, made by `tools/fetch_ground_textures.py` (CC0 Poly Haven: needs
+  live in `public/textures/ground/`, made by `tools/fetch_textures.py ground` (CC0 Poly Haven: needs
   api.polyhaven.com + dl.polyhaven.org allowed in the environment's network settings). Without a manifest the
   feature stays off. It compiles in via `patchGroundDetail` + `customProgramCacheKey = groundDetailCacheKey`,
   and textures must load before `warmUp()`. `?off=detail` disables it.
@@ -112,6 +112,20 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `strength` in the manifest scales the photo's contrast (snow 0.45, or its specks read as dirt). `snowCover()` in
   terrain.js is the single sharpened, patchy snow edge used by both `groundColor` and `groundLayers`. If they
   disagree, needle texture shows up on white snow. Cost: +0 draws, about 10 ms of load (the download overlaps the build).
+- **Close-up surface detail** (`src/surfacedetail.js`): the same idea for objects. Materials `Bark`, `CedarBark`,
+  `SnagBark` and `Rock` (near-tier trees, logs, stumps, rocks, cairns, bench; never far LOD trees) get one photo
+  albedo+normal layer (bark_brown_02, japanese_cedar_bark, bark_willow_02, lichen_rock in `public/textures/surface/`,
+  `tools/fetch_textures.py surface`). Models have no UVs, so it's triplanar in *instance space*, scaled to metres: the
+  texture sticks to swaying trees and keeps a constant texel size. Logs lie along X and swap X/Y so the furrows run along
+  them. It's chained onto the existing onBeforeCompile (`addSurfaceDetail` in `convertMaterial`) and runs after
+  `normal_fragment_maps`, so it comes after moss/snow cover. The ground-cover patch defines `GROUND_COVER` and exposes
+  `gcMoss`/`gcSnow`, which fade the photo's colour (the lichen photo looked like camouflage on moss and dirty on snow).
+  Same 20–45 m / 15–32 m fade. `textures.js` `loadTextureSet` is the shared loader.
+  For this, bark faces are **smooth-shaded** in Blender (`use_smooth` when the material name ends in "Bark",
+  except `prism`/`box` faces). Near trunks went 7 → 10 sides, logs 8 → 10, and `Bark` was lightened to
+  (0.36, 0.28, 0.21). Near-black trunks hid the texture. Three's `flatShading` is off for *Bark materials.
+  Budget: draws unchanged, tris +1%. Good close-up spots: fir `x=531.9&z=44.3&yaw=2.36`, snag `x=242.3&z=-78.3&yaw=0.79`,
+  rock `x=288.8&z=-100.8&yaw=-3.14&pitch=-0.3`, cairn `x=21.9&z=-179.9&yaw=-3.14&pitch=-0.4`.
 - Shader noise: use the sine-free hash (`fract(p.xyx * .1031)`, Hoskins). `fract(sin(x)*43758)` is
   unreliable on mobile GPUs.
 - `src/bake.js`: prototype vertex AO (vertex colours × instance colours), `bakeCanopy` (2 m grid) feeds
@@ -131,8 +145,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   Bench v2: the *same* full scene went from ~3 ms to ~9 ms partway through the run (the phone's GPU clock dropped:
   power saving or heat), so absolute ms vary ~3× with phone state. Paired "saves" stayed steady (± ≤0.5). At the slow clock:
   trees 4.1, ground 1.5, others ~0, empty scene ~1 ms. DPR from 1.25: 1.5 = +0.4–1.4 ms, 2 = +0.9–4.1, 3 = +2.8–11.2.
-  Plan for the slow state (~9 ms at the current settings), since that's what sustained play can drop to. So phone DPR went 1.25 → 1.5 (same as
-  desktop). 2 would leave only ~3 ms when throttled. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
+  Plan for the slow state (~9 ms at the current settings), since that's what sustained play can drop to. Phone DPR
+  went 1.25 → 1.5, then → 2 after the user played `?dpr=2` and it looked and ran fine (desktop stays 1.5). Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
   warm-up; much faster on a real GPU.
 
 ## Headless screenshots (how to see the scene)

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadTextureSet } from './textures.js';
 
 /**
  * Close-up ground detail: photographic albedo + normal textures blended onto
@@ -14,7 +15,7 @@ import * as THREE from 'three';
  * (triplanar) so it doesn't smear on cliffs; the others are projected from above.
  *
  * Textures live in public/textures/ground/ with a manifest.json written by
- * tools/fetch_ground_textures.py. If the manifest is missing, the feature stays
+ * tools/fetch_textures.py. If the manifest is missing, the feature stays
  * off and the ground renders exactly as before.
  */
 
@@ -36,39 +37,16 @@ export const groundDetailCacheKey = () => (groundDetail.enabled ? 'gd1' : 'gd0')
 
 /** Load the textures if they've been fetched; returns true when detail is available. */
 export async function loadGroundDetail(renderer, { lowPower }) {
-  const base = `${import.meta.env.BASE_URL}textures/ground/`;
-  let manifest;
-  try {
-    const res = await fetch(`${base}manifest.json`);
-    if (!res.ok) return false;
-    manifest = await res.json();
-  } catch {
-    return false;
-  }
-  const size = lowPower ? 512 : 1024;
-  const loader = new THREE.TextureLoader();
-  const aniso = Math.min(renderer.capabilities.getMaxAnisotropy(), lowPower ? 4 : 8);
-  const load = async (file, srgb) => {
-    const tex = await loader.loadAsync(base + file);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = aniso;
-    tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    return tex;
-  };
-
+  const layers = await loadTextureSet(renderer, 'ground', { lowPower });
+  if (!layers) return false;
   const u = groundDetail.uniforms;
-  await Promise.all(manifest.layers.map(async (layer, i) => {
-    const [alb, nrm] = await Promise.all([
-      load(`${layer.name}_${size}_albedo.jpg`, true),
-      load(`${layer.name}_${size}_normal.jpg`, false),
-    ]);
-    u.uGDAlb.value[i] = alb;
-    u.uGDNrm.value[i] = nrm;
+  layers.forEach((layer, i) => {
+    u.uGDAlb.value[i] = layer.alb;
+    u.uGDNrm.value[i] = layer.nrm;
     u.uGDAvg.value[i].setRGB(...layer.avg); // linear
     u.uGDTile.value.setComponent(i, 1 / layer.tile);
     u.uGDStrength.value.setComponent(i, layer.strength ?? 1);
-  }));
+  });
   if (lowPower) u.uGDRange.value.set(15, 32);
 
   groundDetail.enabled = true; // ground materials compile after this (warm-up)

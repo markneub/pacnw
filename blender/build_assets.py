@@ -64,6 +64,7 @@ class MeshBuilder:
         self.verts = []
         self.faces = []
         self.face_mats = []
+        self.face_flat = []  # faces that stay faceted even in a smooth material
         self.mats = []
 
     def mat_index(self, mat):
@@ -75,9 +76,10 @@ class MeshBuilder:
         self.verts.append(tuple(co))
         return len(self.verts) - 1
 
-    def face(self, idx, mat):
+    def face(self, idx, mat, flat=False):
         self.faces.append(tuple(idx))
         self.face_mats.append(self.mat_index(mat))
+        self.face_flat.append(flat)
 
     def build(self, name, bake_colors=None):
         """
@@ -100,9 +102,11 @@ class MeshBuilder:
         else:
             for m in self.mats:
                 mesh.materials.append(m)
-            for poly, mi in zip(mesh.polygons, self.face_mats):
+            for poly, mi, flat in zip(mesh.polygons, self.face_mats, self.face_flat):
                 poly.material_index = mi
-                poly.use_smooth = False
+                # bark is smooth-shaded so the close-up bark texture reads as a
+                # round trunk; everything else keeps the faceted low-poly look
+                poly.use_smooth = self.mats[mi].name.endswith("Bark") and not flat
         obj = bpy.data.objects.new(name, mesh)
         bpy.context.scene.collection.objects.link(obj)
         return obj
@@ -114,7 +118,7 @@ class MeshBuilder:
 
 def mats():
     return {
-        "bark": material("Bark", (0.27, 0.19, 0.14)),
+        "bark": material("Bark", (0.36, 0.28, 0.21)),  # greyish brown, like Douglas fir
         "cedar_bark": material("CedarBark", (0.42, 0.24, 0.16)),
         "snag": material("SnagBark", (0.48, 0.45, 0.41)),
         "needles": material("Needles", (0.13, 0.27, 0.15), 0.85),
@@ -226,7 +230,7 @@ def conifer(name, M, seed, height, crown_base, max_radius, tiers, points,
         points = 5
         tier_overlap *= 1.5
     trunk(b, trunk_mat, height * 0.9, r_trunk, r_trunk * 0.18, flare=flare,
-          lean=(leader_lean * 0.6, 0.0), sides=5 if lod else 7, rings=1 if lod else 4)
+          lean=(leader_lean * 0.6, 0.0), sides=5 if lod else 10, rings=1 if lod else 4)
 
     span = height - crown_base
     step = span / tiers
@@ -291,7 +295,7 @@ def snag(M, name, seed=5):
     rng = random.Random(seed)
     b = MeshBuilder()
     h = 15.0
-    trunk(b, M["snag"], h, 0.55, 0.22, flare=1.25, rings=5)
+    trunk(b, M["snag"], h, 0.55, 0.22, flare=1.25, sides=10, rings=5)
     for _ in range(9):
         z = rng.uniform(4.0, h - 1.0)
         a = rng.uniform(0, TAU)
@@ -383,7 +387,7 @@ def fern(M, name, seed, fronds=11):
     return b.build(name)
 
 
-def log(M, name, seed, length=9.0, radius=0.55, sides=8):
+def log(M, name, seed, length=9.0, radius=0.55, sides=10):
     """Fallen, slightly bent log lying along X with exposed wood at the ends."""
     rng = random.Random(seed)
     b = MeshBuilder()
@@ -466,12 +470,12 @@ def prism(b, mat, outline, y0, y1, origin=(0.0, 0.0, 0.0)):
     ox, oy, oz = origin
     front = [b.v((ox + x, oy + y0, oz + z)) for x, z in outline]
     back = [b.v((ox + x, oy + y1, oz + z)) for x, z in outline]
-    b.face(front, mat)
-    b.face(list(reversed(back)), mat)
+    b.face(front, mat, flat=True)
+    b.face(list(reversed(back)), mat, flat=True)
     n = len(outline)
     for i in range(n):
         j = (i + 1) % n
-        b.face((front[i], front[j], back[j], back[i]), mat)
+        b.face((front[i], front[j], back[j], back[i]), mat, flat=True)
 
 
 def box(b, mat, cx, cy, cz, sx, sy, sz):

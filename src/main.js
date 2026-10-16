@@ -11,6 +11,7 @@ import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround } from './bake.js';
 import { PerfOverlay } from './perf.js';
 import { loadGroundDetail } from './grounddetail.js';
+import { loadSurfaceDetail } from './surfacedetail.js';
 import { runBench } from './bench.js';
 
 installHeightFog(); // must run before any material compiles
@@ -40,7 +41,8 @@ const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
 
 const renderer = new THREE.WebGLRenderer({ antialias: !off.has('aa'), powerPreference: 'high-performance' });
 renderer.setPixelRatio(params.has('dpr') ? parseFloat(params.get('dpr'))
-  : Math.min(window.devicePixelRatio, 1.5)); // phones too: ?bench showed 1.25 → 1.5 costs ~0.4–1.4 ms
+  // phones at 2x: ?bench showed +0.9–4.1 ms over 1.25x, and the user played ?dpr=2 without dropped frames
+  : Math.min(window.devicePixelRatio, lowPower ? 2 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.45;
@@ -76,8 +78,9 @@ function progress(to, expectedMs) {
 }
 
 async function init() {
-  // close-up ground textures download while the world is being built
-  const groundDetailReady = off.has('detail') ? Promise.resolve(false) : loadGroundDetail(renderer, { lowPower });
+  // close-up ground and bark/rock textures download while the world is being built
+  const detailReady = off.has('detail') ? Promise.resolve([false, false])
+    : Promise.all([loadGroundDetail(renderer, { lowPower }), loadSurfaceDetail(renderer, { lowPower })]);
   progress(0.1, 500);
   await nextFrame();
   const terrain = buildTerrain();
@@ -128,8 +131,8 @@ async function init() {
   const cycleWeather = () => flash(`Weather: ${weather.cycleOverride()}`);
   if (touch) new TouchControls(renderer.domElement, player); // eslint-disable-line no-new
 
-  const detail = await groundDetailReady; // before warm-up so its shaders compile now
-  step(detail ? 'ground detail' : 'ground detail (none)');
+  const [ground, surface] = await detailReady; // before warm-up so their shaders compile now
+  step(`detail textures (ground ${ground ? 'on' : 'off'}, surface ${surface ? 'on' : 'off'})`);
 
   progress(0.98, 2500);
   await nextFrame();

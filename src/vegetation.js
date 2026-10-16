@@ -10,6 +10,7 @@ import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover, shared } from './materials.js';
 import { bakePrototypeAO, bakeCanopy } from './bake.js';
 import { NearPool } from './detail.js';
+import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
 
 const KIND = (name) => (name.startsWith('fern') ? 'ferns'
   : /^(rock|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
@@ -55,7 +56,8 @@ function convertMaterial(src, assetName, cache) {
   const kind = KIND(assetName);
   // trees come in two tiers: full models for the near pool, *_lod for far chunks
   const lod = kind !== 'trees' ? null : assetName.endsWith('_lod') ? 'far' : 'near';
-  const key = `${src.name}|${kind}|${lod}`;
+  const swapXY = assetName === 'log'; // lies along X: run the bark furrows along it
+  const key = `${src.name}|${kind}|${lod}|${swapXY}`;
   if (cache.has(key)) return cache.get(key);
 
   const mat = new THREE.MeshStandardMaterial({
@@ -63,7 +65,7 @@ function convertMaterial(src, assetName, cache) {
     color: src.color.clone(),
     roughness: src.roughness ?? 0.9,
     metalness: 0,
-    flatShading: true,
+    flatShading: !src.name.endsWith('Bark'), // trunks are smooth so bark reads as round
     side: kind === 'ferns' ? THREE.DoubleSide : THREE.FrontSide,
   });
   // needles shed water and scatter light: keep sky reflections off foliage
@@ -71,6 +73,9 @@ function convertMaterial(src, assetName, cache) {
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns') addWindSway(mat, 2.5, undefined, 'fade');
   else addGroundCover(mat);
+  // close-up bark / rock photos (not on far trees: they're never close)
+  const layer = surfaceLayerFor(src.name);
+  if (layer && lod !== 'far') addSurfaceDetail(mat, layer, { swapXY });
   cache.set(key, mat);
   return mat;
 }
@@ -398,5 +403,5 @@ export function buildVegetation(protos, trail) {
   }
   const disable = (kind) => setEnabled(kind, false);
 
-  return { group, updateVisibility, updateNear, disable, setEnabled, collide, counts, canopyAt, chunks, nearPools };
+  return { group, placements, updateVisibility, updateNear, disable, setEnabled, collide, counts, canopyAt, chunks, nearPools };
 }

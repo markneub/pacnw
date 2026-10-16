@@ -1,0 +1,53 @@
+{
+  "source": "Poly Haven (CC0)",
+  "layers": [
+    {
+      "name": "bark",
+      "asset": "bark_brown_02",
+      "tile": 1.6,
+      "strength": 1.0,
+      "avg": [
+        0.11936,
+        0.09748,
+        0.05752
+      ],
+      "url": "https://polyhaven.com/a/bark_brown_02"
+    },
+    {
+      "name": "cedar",
+      "asset": "japanese_cedar_bark",
+      "tile": 1.4,
+      "strength": 1.0,
+      "avg": [
+        0.06486,
+        0.03547,
+        0.0175
+      ],
+      "url": "https://polyhaven.com/a/japanese_cedar_bark"
+    },
+    {
+      "name": "snag",
+      "asset": "bark_willow_02",
+      "tile": 1.6,
+      "strength": 1.0,
+      "avg": [
+        0.23619,
+        0.18495,
+        0.14284
+      ],
+      "url": "https://polyhaven.com/a/bark_willow_02"
+    },
+    {
+      "name": "rock",
+      "asset": "lichen_rock",
+      "tile": 2.5,
+      "strength": 0.85,
+      "avg": [
+        0.06034,
+        0.04387,
+        0.02992
+      ],
+      "url": "https://polyhaven.com/a/lichen_rock"
+    }
+  ]
+}

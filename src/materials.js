@@ -147,7 +147,8 @@ export function addGroundCover(material) {
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        `#include <common>
+        `#define GROUND_COVER
+        #include <common>
         uniform float uSnowline;
         varying vec3 vCoverPos;
         varying vec3 vCoverNormal;`,
@@ -162,8 +163,10 @@ export function addGroundCover(material) {
         sp3 += dot(sp3, sp3.yzx + 33.33);
         float speck = fract((sp3.x + sp3.y) * sp3.z);
         vec3 moss = mix(vec3(0.045, 0.085, 0.02), vec3(0.08, 0.13, 0.03), speck);
-        diffuseColor.rgb = mix(diffuseColor.rgb, moss, up * (1.0 - snowy) * 0.85);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), up * snowy);`,
+        float gcMoss = up * (1.0 - snowy) * 0.85; // read by surfacedetail.js
+        float gcSnow = up * snowy;
+        diffuseColor.rgb = mix(diffuseColor.rgb, moss, gcMoss);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), gcSnow);`,
       );
   };
   material.customProgramCacheKey = () => 'groundcover';

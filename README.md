@@ -51,7 +51,9 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/materials.js` | Shader patches: wind sway for foliage, moss/snow cover on rocks and logs |
 | `src/atmosphere.js` | Height fog (pools in valleys), overcast sky dome, environment map for reflections, drifting mist |
 | `src/detail.js` | Near pools: full-detail trees and ferns around the walker, refilled as you move |
-| `src/grounddetail.js` | Close-up photographic ground detail (textures fetched by `tools/fetch_ground_textures.py`) |
+| `src/grounddetail.js` | Close-up photographic ground detail |
+| `src/surfacedetail.js` | Close-up photographic bark and rock on trees, logs, stumps and boulders |
+| `src/textures.js` | Loads a texture set fetched by `tools/fetch_textures.py` |
 | `src/bake.js` | Lighting baked at load: per-vertex AO on models, canopy shade map, terrain horizon AO |
 | `src/perf.js` | `?perf` overlay |
 | `src/bench.js` | `?bench` device benchmark |
@@ -80,12 +82,19 @@ Object and material names in the GLB are what the JS looks up. If you rename the
 `src/vegetation.js` too. You can also drop in other models (e.g. CC0 packs from Poly Haven or
 Quaternius): add them to the GLB and give them entries in the scatter tables.
 
-### Ground textures
+### Close-up textures
 
-The close-up ground detail uses four CC0 texture sets from [Poly Haven](https://polyhaven.com):
-[forest_leaves_04](https://polyhaven.com/a/forest_leaves_04) (forest floor),
-[aerial_rocks_02](https://polyhaven.com/a/aerial_rocks_02) (rock),
-[snow_02](https://polyhaven.com/a/snow_02) (snow) and
-[brown_mud_02](https://polyhaven.com/a/brown_mud_02) (trail dirt). They're committed in
-`public/textures/ground/` at 1024 px (desktop) and 512 px (phones). To re-fetch them, or to swap in
-others, edit `LAYERS` in `tools/fetch_ground_textures.py` and run it (`--search words` lists candidates).
+Near the camera, the ground and objects get CC0 photo textures from [Poly Haven](https://polyhaven.com):
+
+- Ground: [forest_leaves_04](https://polyhaven.com/a/forest_leaves_04) (forest floor),
+  [aerial_rocks_02](https://polyhaven.com/a/aerial_rocks_02) (rock),
+  [snow_02](https://polyhaven.com/a/snow_02) (snow) and
+  [brown_mud_02](https://polyhaven.com/a/brown_mud_02) (trail dirt).
+- Objects: [bark_brown_02](https://polyhaven.com/a/bark_brown_02) (fir/hemlock bark, logs, stumps),
+  [japanese_cedar_bark](https://polyhaven.com/a/japanese_cedar_bark) (cedar),
+  [bark_willow_02](https://polyhaven.com/a/bark_willow_02) (snags) and
+  [lichen_rock](https://polyhaven.com/a/lichen_rock) (boulders, cairns).
+
+They're committed in `public/textures/ground/` and `public/textures/surface/` at 1024 px (desktop)
+and 512 px (phones). To re-fetch them, or to swap in others, edit `SETS` in `tools/fetch_textures.py`
+and run it (`--search words` lists candidates).
