@@ -83,8 +83,8 @@ export class TouchControls {
       this.player.stick.set(dx / STICK_RADIUS, -dy / STICK_RADIUS);
     } else if (e.pointerId === this.lookId) {
       e.preventDefault();
-      // a full-width swipe turns you about 200°
-      const k = 3.5 / Math.max(window.innerWidth, 320);
+      // a full-width swipe turns you about 130°
+      const k = 2.3 / Math.max(window.innerWidth, 320);
       this.player.look((e.clientX - this.lookLast.x) * k, (e.clientY - this.lookLast.y) * k);
       this.lookLast = { x: e.clientX, y: e.clientY };
     }

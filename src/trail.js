@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
-import { heightAt, groundAt, snowAmount, slopeAt } from './terrain.js';
+import {
+  heightAt, rawGroundAt, groundAt, groundColor, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
+} from './terrain.js';
 
 // The trail runs from the trailhead at the spawn point, down to a viewpoint on
 // the lake's west shore, then climbs north through the forest to the one gentle
@@ -10,7 +12,18 @@ export const TRAIL_STOPS = [
   { name: 'lake', label: 'Lake viewpoint', x: 55, z: 385 },
   { name: 'ridge', label: 'Ridge viewpoint', x: 120, z: -510 },
 ];
-export const TRAIL_WIDTH = 1.7;
+export const TRAIL_WIDTH = 1.05; // half-width of the visible tread (it wanders ±15%)
+
+// Cross-section of the bench cut into the hillside: level out to BENCH_HALF,
+// then a cut bank (uphill) or fill slope (downhill) blending back into the
+// natural ground by BANK_OUTER. The corridor mesh covers CORRIDOR_HALF, and the
+// terrain mesh is hidden inside CUTOUT_HALF (the overlap hides the seam).
+const BENCH_HALF = TRAIL_WIDTH * 1.15 + 0.15;
+const BANK_OUTER = 4.2;
+const CUTOUT_HALF = 4.7;
+const CORRIDOR_HALF = 5.8;
+const CORRIDOR_STEP = 0.5;
+const BLEND_SIGMA = 0.7; // how sharply the nearest trail leg takes over (m)
 
 // Routing grid (only covers the area the trail can plausibly use).
 const CELL = 6;
@@ -273,47 +286,152 @@ export function buildTrail() {
     return { next, metres };
   }
 
-  return { points, stops, distanceTo, guide, mesh: buildTrailMesh(points) };
+  // --- bench cut ---------------------------------------------------------------
+  // Tread height along the centreline: natural ground, smoothed along the trail
+  // so the walking surface has no 5 m-grid kinks.
+  const raw = points.map((p) => rawGroundAt(p.x, p.y));
+  const tread = raw.map((_, i) => {
+    let sum = 0;
+    let n = 0;
+    for (let k = Math.max(0, i - 4); k <= Math.min(raw.length - 1, i + 4); k++) {
+      sum += raw[k];
+      n++;
+    }
+    return sum / n;
+  });
+
+  /**
+   * Ground height with the bench cut in. Each nearby centreline segment pulls
+   * the ground toward its tread height. The closest segment dominates (sharp
+   * Gaussian weights), so where switchback legs pass close each tread stays
+   * level and the ground between them becomes a short bank, still continuous.
+   */
+  function benchHeight(x, z, g) {
+    const list = segs.get(`${Math.floor(x / HASH)},${Math.floor(z / HASH)}`);
+    if (!list) return g;
+    let acc = 0;
+    let wsum = 0;
+    for (const i of list) {
+      const a = points[i];
+      const b = points[i + 1];
+      const abx = b.x - a.x;
+      const abz = b.y - a.y;
+      const t = THREE.MathUtils.clamp(((x - a.x) * abx + (z - a.y) * abz) / (abx * abx + abz * abz), 0, 1);
+      const d = Math.hypot(x - (a.x + abx * t), z - (a.y + abz * t));
+      if (d >= BANK_OUTER) continue;
+      const keep = THREE.MathUtils.smoothstep(d, BENCH_HALF, BANK_OUTER); // 0 on the tread, 1 outside
+      const w = Math.exp(-(d * d) / (BLEND_SIGMA * BLEND_SIGMA));
+      const hc = tread[i] + (tread[i + 1] - tread[i]) * t;
+      acc += w * (hc - g) * (1 - keep);
+      wsum += w;
+    }
+    return wsum > 0 ? g + acc / wsum : g;
+  }
+  setGroundModifier(benchHeight);
+
+  const mesh = buildCorridorMesh(points, distanceTo);
+  setTerrainCutout(...buildCutoutMask(points, distanceTo));
+
+  return { points, stops, distanceTo, guide, mesh };
 }
 
-/** A ribbon draped over the terrain, dirt in the forest and packed snow up high. */
-function buildTrailMesh(points) {
-  const ACROSS = 4; // quads across the tread
+/**
+ * Mask over the trail's bounding box (1 texel per metre): 1 where the terrain
+ * mesh should be hidden because the corridor mesh replaces it.
+ */
+function buildCutoutMask(points, distanceTo) {
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minZ = Math.min(minZ, p.y);
+    maxZ = Math.max(maxZ, p.y);
+  }
+  const pad = CORRIDOR_HALF + 2;
+  minX = Math.floor(minX - pad);
+  minZ = Math.floor(minZ - pad);
+  const w = Math.ceil(maxX + pad) - minX;
+  const h = Math.ceil(maxZ + pad) - minZ;
+  const data = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      // texel centres
+      if (distanceTo(minX + i + 0.5, minZ + j + 0.5) < CUTOUT_HALF) data[j * w + i] = 255;
+    }
+  }
+  const tex = new THREE.DataTexture(data, w, h, THREE.RedFormat);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return [tex, minX, minZ, w, h];
+}
+
+/**
+ * The trail corridor: a fine strip of ground that replaces the terrain mesh
+ * along the trail, carrying the level tread, the cut banks and fill slopes,
+ * and fading out at its edges where it meets the untouched terrain.
+ */
+function buildCorridorMesh(points, distanceTo) {
+  const across = Math.round((CORRIDOR_HALF * 2) / CORRIDOR_STEP);
   const positions = [];
   const colors = [];
-  const uvs = [];
+  const treadAttr = [];
   const indices = [];
   const dirt = new THREE.Color(0x6b5034);
   const dirtWet = new THREE.Color(0x4a3824);
   const packed = new THREE.Color(0x8d99a8); // trodden, slushy snow reads darker than fresh powder
+  const soil = new THREE.Color(0x5a4430);
   const col = new THREE.Color();
-  let along = 0;
+  const tmp = new THREE.Color();
+  const e = 1;
 
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
     const prev = points[Math.max(0, i - 1)];
     const next = points[Math.min(points.length - 1, i + 1)];
     const dir = next.clone().sub(prev).normalize();
-    const normal = new THREE.Vector2(-dir.y, dir.x);
-    if (i > 0) along += p.distanceTo(points[i - 1]);
+    const nx = -dir.y;
+    const nz = dir.x;
 
-    // the tread wanders slightly in width
-    const w = TRAIL_WIDTH * (0.85 + 0.3 * (0.5 + 0.5 * Math.sin(along * 0.07) * Math.sin(along * 0.023)));
-    const h0 = groundAt(p.x, p.y);
-    const snow = snowAmount(p.x, p.y, h0, 0);
-    for (let j = 0; j <= ACROSS; j++) {
-      const s = j / ACROSS - 0.5;
-      const x = p.x + normal.x * s * w * 2;
-      const z = p.y + normal.y * s * w * 2;
-      positions.push(x, groundAt(x, z) + 0.07, z);
-      col.copy(dirt).lerp(dirtWet, Math.abs(s) * 1.6).lerp(packed, snow);
-      colors.push(col.r, col.g, col.b);
-      uvs.push(along, s * 2); // v: -1 (left edge) … 1 (right edge)
+    for (let j = 0; j <= across; j++) {
+      const u = -CORRIDOR_HALF + j * CORRIDOR_STEP;
+      const x = p.x + nx * u;
+      const z = p.y + nz * u;
+      const g = rawGroundAt(x, z);
+      const y = groundAt(x, z);
+      positions.push(x, y + 0.02, z);
+
+      // colour: the ground as it would be, then exposed soil where the bank is
+      // cut or filled, then the tread itself (all from world position, so
+      // overlapping switchback strips agree)
+      const naturalSlope = 1 - 2 * e / Math.hypot(
+        rawGroundAt(x + e, z) - rawGroundAt(x - e, z), 2 * e, rawGroundAt(x, z + e) - rawGroundAt(x, z - e),
+      );
+      groundColor(x, g, z, naturalSlope, col);
+      const snow = snowAmount(x, z, g, 0);
+      const d = distanceTo(x, z);
+      const cut = Math.abs(y - g);
+      tmp.copy(soil).lerp(dirtWet, Math.min(1, cut / 3) * 0.5);
+      col.lerp(tmp, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - snow * 0.85));
+
+      const wobble = Math.sin(x * 0.31 + z * 0.17) * 0.18 + Math.sin(x * 0.07 - z * 0.11) * 0.2;
+      const t = 1 - THREE.MathUtils.smoothstep(d + wobble, TRAIL_WIDTH - 0.3, TRAIL_WIDTH + 0.25);
+      tmp.copy(dirt).lerp(dirtWet, Math.min(1, d / TRAIL_WIDTH) * 0.6).lerp(packed, snow);
+      col.lerp(tmp, t);
+
+      // fade the strip's outer edge into the terrain beneath
+      const alpha = 1 - THREE.MathUtils.smoothstep(Math.abs(u), CUTOUT_HALF + 0.3, CORRIDOR_HALF);
+      colors.push(col.r, col.g, col.b, alpha);
+      treadAttr.push(t);
     }
     if (i > 0) {
-      const r0 = (i - 1) * (ACROSS + 1);
-      const r1 = i * (ACROSS + 1);
-      for (let j = 0; j < ACROSS; j++) {
+      const r0 = (i - 1) * (across + 1);
+      const r1 = i * (across + 1);
+      for (let j = 0; j < across; j++) {
+        // wound so faces point up (+Y)
         indices.push(r0 + j, r0 + j + 1, r1 + j, r0 + j + 1, r1 + j + 1, r1 + j);
       }
     }
@@ -321,46 +439,45 @@ function buildTrailMesh(points) {
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
+  geo.setAttribute('aTread', new THREE.Float32BufferAttribute(treadAttr, 1));
   geo.setIndex(indices);
   geo.computeVertexNormals();
 
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 1,
+    roughness: 0.97,
+    metalness: 0,
     transparent: true,
-    depthWrite: false,
     polygonOffset: true,
-    polygonOffsetFactor: -2,
+    polygonOffsetFactor: -1,
     polygonOffsetUnits: -2,
   });
-  // Soft, ragged edges and a little gravel/mud texture, all in the shader.
+  // Same mottling as the terrain shader so the two match, plus grit on the tread.
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vTrailUv;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvTrailUv = uv;');
+      .replace('#include <common>', '#include <common>\nattribute float aTread;\nvarying float vTread;\nvarying vec3 vGroundPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTread = aTread;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-        varying vec2 vTrailUv;
-        float tHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
-        float tNoise(vec2 p) {
+        varying float vTread;
+        varying vec3 vGroundPos;
+        float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float gNoise(vec2 p) {
           vec2 i = floor(p);
           vec2 f = fract(p);
           f = f * f * (3.0 - 2.0 * f);
-          return mix(mix(tHash(i), tHash(i + vec2(1, 0)), f.x),
-                     mix(tHash(i + vec2(0, 1)), tHash(i + vec2(1, 1)), f.x), f.y);
+          return mix(mix(gHash(i), gHash(i + vec2(1, 0)), f.x),
+                     mix(gHash(i + vec2(0, 1)), gHash(i + vec2(1, 1)), f.x), f.y);
         }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-        float edgeNoise = tNoise(vec2(vTrailUv.x * 0.9, vTrailUv.y * 2.0)) * 0.35;
-        float edge = 1.0 - smoothstep(0.55, 1.0, abs(vTrailUv.y) + edgeNoise - 0.1);
-        float grit = tNoise(vTrailUv * vec2(6.0, 9.0)) * 0.6 + tNoise(vTrailUv * vec2(1.3, 2.0)) * 0.4;
-        diffuseColor.rgb *= 0.8 + grit * 0.4;
-        diffuseColor.a *= edge;`);
+        float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
+        diffuseColor.rgb *= 0.78 + gn * 0.44;
+        float grit = gNoise(vGroundPos.xz * 7.0) * 0.6 + gNoise(vGroundPos.xz * 2.2) * 0.4;
+        diffuseColor.rgb *= mix(1.0, 0.82 + grit * 0.36, vTread);`);
   };
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'trail';
-  mesh.renderOrder = 1;
   return mesh;
 }

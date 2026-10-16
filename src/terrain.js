@@ -107,11 +107,12 @@ function heightGrid() {
 }
 
 /**
- * Height of the rendered terrain surface at (x, z). Matches PlaneGeometry's
+ * Height of the terrain mesh surface at (x, z). Matches PlaneGeometry's
  * triangulation (diagonal from (ix, iz+1) to (ix+1, iz)), so things placed with
  * it sit exactly on the ground instead of floating or sinking between vertices.
+ * Ignores the trail's bench cut; use groundAt() for the walkable surface.
  */
-export function groundAt(x, z) {
+export function rawGroundAt(x, z) {
   const g = heightGrid();
   const gx = THREE.MathUtils.clamp((x + WORLD_SIZE / 2) / GRID_STEP, 0, TERRAIN_SEGMENTS - 1e-4);
   const gz = THREE.MathUtils.clamp((z + WORLD_SIZE / 2) / GRID_STEP, 0, TERRAIN_SEGMENTS - 1e-4);
@@ -125,6 +126,20 @@ export function groundAt(x, z) {
   const hd = g[iz * GRID_N + ix + 1];
   if (fx + fz <= 1) return ha + (hd - ha) * fx + (hb - ha) * fz;
   return hc + (hb - hc) * (1 - fx) + (hd - hc) * (1 - fz);
+}
+
+// The trail registers a modifier that cuts its level bench into the hillside.
+let groundModifier = null;
+
+/** Lets the trail reshape the ground: fn(x, z, rawHeight) -> height. */
+export function setGroundModifier(fn) {
+  groundModifier = fn;
+}
+
+/** Height of the walkable, rendered ground at (x, z), including the trail cut. */
+export function groundAt(x, z) {
+  const g = rawGroundAt(x, z);
+  return groundModifier ? groundModifier(x, z, g) : g;
 }
 
 /** Local snowline altitude; wanders ±18 m so the snow edge isn't a contour line. */
@@ -161,6 +176,52 @@ const COL = {
   alpine: C(0x6d7055),
 };
 
+const tmpColor = new THREE.Color();
+
+/**
+ * Ground colour (linear) for a point at altitude y with the given slope
+ * (0 flat .. 1 vertical): moss, litter, alpine meadow, mud, rock and snow.
+ */
+export function groundColor(x, y, z, slope, target = new THREE.Color()) {
+  const c = target;
+  const tmp = tmpColor;
+  const n1 = nDetail(x * 0.035, z * 0.035) * 0.5 + 0.5;
+  const n2 = nForest(x * 0.004, z * 0.004) * 0.5 + 0.5;
+
+  // forest floor: moss and needle litter
+  c.copy(COL.moss).lerp(COL.litter, smoothstep(0.35, 0.75, n1 * 0.6 + n2 * 0.4));
+  c.lerp(COL.mossLight, smoothstep(0.7, 0.95, n1) * 0.5);
+
+  // drier alpine meadow near the snowline
+  c.lerp(COL.alpine, smoothstep(SNOWLINE - 50, SNOWLINE - 5, y) * 0.7);
+
+  // muddy lake shore
+  c.lerp(COL.mud, 1 - smoothstep(WATER_LEVEL - 1, WATER_LEVEL + 2.5, y));
+
+  // rock on steep faces
+  tmp.copy(COL.rock).lerp(COL.rockDark, n1);
+  c.lerp(tmp, smoothstep(0.22, 0.42, slope));
+
+  // snow
+  const s = snowAmount(x, z, y, slope);
+  tmp.copy(COL.snow).lerp(COL.snowShade, n1 * 0.5 + slope);
+  c.lerp(tmp, s);
+  return c;
+}
+
+// The terrain hides itself wherever the trail corridor mesh takes over.
+const cutUniforms = {
+  uCutMask: { value: new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat) },
+  uCutRect: { value: new THREE.Vector4(0, 0, 1, 1) }, // minX, minZ, sizeX, sizeZ
+};
+cutUniforms.uCutMask.value.needsUpdate = true;
+
+/** mask: R8 texture covering rect (minX, minZ, sizeX, sizeZ); >0.5 = hidden. */
+export function setTerrainCutout(mask, minX, minZ, sizeX, sizeZ) {
+  cutUniforms.uCutMask.value = mask;
+  cutUniforms.uCutRect.value.set(minX, minZ, sizeX, sizeZ);
+}
+
 export function buildTerrain() {
   const geo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
   geo.rotateX(-Math.PI / 2);
@@ -176,35 +237,8 @@ export function buildTerrain() {
   const nrm = geo.attributes.normal;
   const colors = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
-  const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const slope = 1 - nrm.getY(i);
-
-    const n1 = nDetail(x * 0.035, z * 0.035) * 0.5 + 0.5;
-    const n2 = nForest(x * 0.004, z * 0.004) * 0.5 + 0.5;
-
-    // forest floor: moss and needle litter
-    c.copy(COL.moss).lerp(COL.litter, smoothstep(0.35, 0.75, n1 * 0.6 + n2 * 0.4));
-    c.lerp(COL.mossLight, smoothstep(0.7, 0.95, n1) * 0.5);
-
-    // drier alpine meadow near the snowline
-    c.lerp(COL.alpine, smoothstep(SNOWLINE - 50, SNOWLINE - 5, y) * 0.7);
-
-    // muddy lake shore
-    c.lerp(COL.mud, 1 - smoothstep(WATER_LEVEL - 1, WATER_LEVEL + 2.5, y));
-
-    // rock on steep faces
-    tmp.copy(COL.rock).lerp(COL.rockDark, n1);
-    c.lerp(tmp, smoothstep(0.22, 0.42, slope));
-
-    // snow
-    const s = snowAmount(x, z, y, slope);
-    tmp.copy(COL.snow).lerp(COL.snowShade, n1 * 0.5 + slope);
-    c.lerp(tmp, s);
-
+    groundColor(pos.getX(i), pos.getY(i), pos.getZ(i), 1 - nrm.getY(i), c);
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
     colors[i * 3 + 2] = c.b;
@@ -219,12 +253,15 @@ export function buildTerrain() {
   // Mottle the vertex colours with a little world-space value noise so the
   // ground doesn't look like flat-shaded polygons up close.
   mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, cutUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGroundPos;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         varying vec3 vGroundPos;
+        uniform sampler2D uCutMask;
+        uniform vec4 uCutRect;
         float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float gNoise(vec2 p) {
           vec2 i = floor(p);
@@ -234,6 +271,9 @@ export function buildTerrain() {
                      mix(gHash(i + vec2(0, 1)), gHash(i + vec2(1, 1)), f.x), f.y);
         }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 cutUv = (vGroundPos.xz - uCutRect.xy) / uCutRect.zw;
+        if (all(greaterThan(cutUv, vec2(0.0))) && all(lessThan(cutUv, vec2(1.0)))
+            && texture2D(uCutMask, cutUv).r > 0.5) discard;
         float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
         diffuseColor.rgb *= 0.78 + gn * 0.44;`);
   };

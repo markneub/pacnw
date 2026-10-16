@@ -39,6 +39,14 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   the only gentle snowy spot). The grade penalty makes it switchback. Chaikin smoothing, then resampled
   every 1.5 m. `distanceTo` keeps scatter off the tread; `guide()` feeds the HUD. Furniture is placed in
   `vegetation.js` `placeTrailFurniture`. Mesh winding must face up (+Y) or it gets back-face culled.
+- The trail is a **bench cut**: `benchHeight` (registered via `setGroundModifier`) levels the ground across
+  the tread and blends cut/fill banks back to natural ground by `BANK_OUTER`, with the nearest leg winning
+  (Gaussian weights) so close switchbacks keep level treads. The 5 m terrain grid can't hold that, so a
+  0.5 m-resolution corridor mesh (`buildCorridorMesh`) replaces it. The terrain fragment shader discards
+  inside `CUTOUT_HALF` using a 1 m mask texture (`setTerrainCutout`), and the corridor's outer edge
+  alpha-fades over the terrain. `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
+- Trail QA numbers (cross-slope on tread p50 ≈0, p95 ≈13%; grade p95 ≈26%) come from measuring
+  `groundAt` across/along `trail.points` in node. Re-check them after changing the route or widths.
 - `src/touch.js`: touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
   turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, DPR ≤1.25, half the
   particles). Override with `?quality=low|high`.
