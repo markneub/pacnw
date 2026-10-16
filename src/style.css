@@ -1,0 +1,109 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #7d8b8c;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #eef2ee;
+}
+
+canvas {
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  left: 16px;
+  bottom: 14px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+#toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(20, 30, 25, 0.55);
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+#toast.show {
+  opacity: 1;
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(30, 40, 36, 0.45);
+  backdrop-filter: blur(2px);
+  cursor: wait;
+}
+
+#overlay.ready {
+  cursor: pointer;
+}
+
+#overlay.hidden {
+  display: none;
+}
+
+.card {
+  max-width: 440px;
+  margin: 16px;
+  padding: 26px 30px;
+  border-radius: 14px;
+  background: rgba(18, 28, 24, 0.72);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+.card h1 {
+  margin: 0 0 4px;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.card .sub {
+  margin: 0 0 18px;
+  opacity: 0.75;
+}
+
+#status {
+  margin: 0 0 18px;
+  font-size: 18px;
+  color: #cfe3c4;
+}
+
+.card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 2;
+  opacity: 0.85;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+}

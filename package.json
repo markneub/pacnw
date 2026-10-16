@@ -1,0 +1,20 @@
+{
+  "name": "pacnw",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A walkable Pacific Northwest forest in three.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "assets": "blender -b -P blender/build_assets.py"
+  },
+  "dependencies": {
+    "simplex-noise": "^4.0.3",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "vite": "^7.3.7"
+  }
+}

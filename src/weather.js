@@ -1,0 +1,296 @@
+import * as THREE from 'three';
+import { snowlineAt } from './terrain.js';
+import { shared } from './materials.js';
+
+const smooth = THREE.MathUtils.smoothstep;
+
+// Precipitation lives in a box that wraps around the camera, animated entirely
+// on the GPU: each particle has a fixed random offset and the vertex shader
+// moves it by time and wraps it back into the box.
+
+const RAIN_BOX = new THREE.Vector3(70, 40, 70);
+const SNOW_BOX = new THREE.Vector3(60, 30, 60);
+
+function createRain(count = 14000) {
+  const offsets = new Float32Array(count * 2 * 3);
+  const ends = new Float32Array(count * 2);
+  for (let i = 0; i < count; i++) {
+    const x = Math.random();
+    const y = Math.random();
+    const z = Math.random();
+    for (let e = 0; e < 2; e++) {
+      offsets.set([x, y, z], (i * 2 + e) * 3);
+      ends[i * 2 + e] = e;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(offsets, 3));
+  geo.setAttribute('aEnd', new THREE.BufferAttribute(ends, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    fog: true,
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uTime: { value: 0 },
+        uCam: { value: new THREE.Vector3() },
+        uBox: { value: RAIN_BOX },
+        uIntensity: { value: 1 },
+        uWind: { value: new THREE.Vector2(2.5, 1.0) },
+      },
+    ]),
+    vertexShader: /* glsl */ `
+      #include <fog_pars_vertex>
+      attribute float aEnd;
+      uniform float uTime;
+      uniform vec3 uCam;
+      uniform vec3 uBox;
+      uniform vec2 uWind;
+      varying float vAlpha;
+      void main() {
+        float speed = 17.0 + fract(position.x * 91.7 + position.z * 13.1) * 6.0;
+        vec3 vel = vec3(uWind.x, -speed, uWind.y);
+        vec3 p = position * uBox + vel * uTime;
+        vec3 origin = uCam - uBox * 0.5;
+        p = mod(p - origin, uBox) + origin;
+        p -= vel * aEnd * 0.045;           // streak tail
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        float d = length(p - uCam);
+        vAlpha = (1.0 - smoothstep(18.0, 34.0, d)) * mix(1.0, 0.35, aEnd);
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      #include <fog_pars_fragment>
+      uniform float uIntensity;
+      varying float vAlpha;
+      void main() {
+        gl_FragColor = vec4(0.72, 0.78, 0.84, 0.42 * vAlpha * uIntensity);
+        #include <fog_fragment>
+      }
+    `,
+  });
+  const lines = new THREE.LineSegments(geo, mat);
+  lines.frustumCulled = false;
+  lines.renderOrder = 10;
+  return lines;
+}
+
+function createSnow(count = 14000) {
+  const offsets = new Float32Array(count * 3);
+  for (let i = 0; i < offsets.length; i++) offsets[i] = Math.random();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(offsets, 3));
+
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    fog: true,
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uTime: { value: 0 },
+        uCam: { value: new THREE.Vector3() },
+        uBox: { value: SNOW_BOX },
+        uIntensity: { value: 1 },
+        uWind: { value: new THREE.Vector2(1.5, 0.6) },
+        uPixelRatio: { value: 1 },
+      },
+    ]),
+    vertexShader: /* glsl */ `
+      #include <fog_pars_vertex>
+      uniform float uTime;
+      uniform vec3 uCam;
+      uniform vec3 uBox;
+      uniform vec2 uWind;
+      uniform float uPixelRatio;
+      varying float vAlpha;
+      void main() {
+        float seed = fract(position.x * 53.1 + position.y * 17.3 + position.z * 7.7);
+        float fall = 1.1 + seed * 0.9;
+        vec3 p = position * uBox + vec3(uWind.x, -fall, uWind.y) * uTime;
+        p.x += sin(uTime * (0.6 + seed) + seed * 40.0) * 0.8;
+        p.z += cos(uTime * (0.5 + seed * 0.7) + seed * 23.0) * 0.8;
+        vec3 origin = uCam - uBox * 0.5;
+        p = mod(p - origin, uBox) + origin;
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        gl_PointSize = (0.08 + seed * 0.1) * uPixelRatio * (500.0 / -mvPosition.z);
+        float d = length(p - uCam);
+        vAlpha = 1.0 - smoothstep(16.0, 29.0, d);
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      #include <fog_pars_fragment>
+      uniform float uIntensity;
+      varying float vAlpha;
+      void main() {
+        float r = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.15, r);
+        gl_FragColor = vec4(vec3(0.96, 0.97, 1.0), a * vAlpha * uIntensity * 0.95);
+        #include <fog_fragment>
+      }
+    `,
+  });
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  points.renderOrder = 11;
+  return points;
+}
+
+// Atmosphere presets: overcast temperate rainforest vs. high-country snow.
+const LOW = {
+  fog: new THREE.Color(0x7d8b8c),
+  density: 0.0105,
+  hemiSky: new THREE.Color(0xaab8bd),
+  hemiGround: new THREE.Color(0x2c3a22),
+  hemiIntensity: 2.1,
+  sunIntensity: 0.9,
+};
+const HIGH = {
+  fog: new THREE.Color(0xc4ccd4),
+  density: 0.0125,
+  hemiSky: new THREE.Color(0xdfe6ee),
+  hemiGround: new THREE.Color(0x8a96a3),
+  hemiIntensity: 1.9,
+  sunIntensity: 0.6,
+};
+
+export class Weather {
+  constructor(scene, renderer) {
+    this.scene = scene;
+    this.rain = createRain();
+    this.snow = createSnow();
+    this.snow.material.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+    scene.add(this.rain, this.snow);
+
+    scene.fog = new THREE.FogExp2(LOW.fog.clone(), LOW.density);
+    scene.background = scene.fog.color;
+
+    this.hemi = new THREE.HemisphereLight(LOW.hemiSky, LOW.hemiGround, LOW.hemiIntensity);
+    this.sun = new THREE.DirectionalLight(0xfff4e0, LOW.sunIntensity);
+    this.sun.position.set(-0.4, 1, 0.3).multiplyScalar(100);
+    scene.add(this.hemi, this.sun);
+
+    this.audio = null;
+    this.rainAmount = 1;
+    this.snowAmount = 0;
+    this.override = null; // 'rain' | 'snow' | 'clear' | null (automatic by altitude)
+  }
+
+  cycleOverride() {
+    const order = [null, 'rain', 'snow', 'clear'];
+    this.override = order[(order.indexOf(this.override) + 1) % order.length];
+    return this.override ?? 'auto';
+  }
+
+  update(dt, time, camera) {
+    const y = camera.position.y;
+    const line = snowlineAt(camera.position.x, camera.position.z);
+    const snowT = smooth(y, line - 30, line + 10);
+    let rain = 1 - smooth(y, line - 14, line);
+    let snow = smooth(y, line - 22, line - 6);
+    if (this.override === 'rain') { rain = 1; snow = 0; }
+    if (this.override === 'snow') { rain = 0; snow = 1; }
+    if (this.override === 'clear') { rain = 0; snow = 0; }
+
+    // ease toward targets so overrides fade in/out (snap on the first frame)
+    const k = this.started ? 1 - Math.exp(-dt * 1.5) : 1;
+    this.started = true;
+    this.rainAmount += (rain - this.rainAmount) * k;
+    this.snowAmount += (snow - this.snowAmount) * k;
+
+    for (const [obj, amount] of [[this.rain, this.rainAmount], [this.snow, this.snowAmount]]) {
+      const u = obj.material.uniforms;
+      u.uTime.value = time;
+      u.uCam.value.copy(camera.position);
+      u.uIntensity.value = amount;
+      obj.visible = amount > 0.01;
+    }
+
+    // Atmosphere follows altitude; clear weather thins the fog.
+    const clear = this.override === 'clear' ? 0.55 : 1;
+    this.scene.fog.color.copy(LOW.fog).lerp(HIGH.fog, snowT);
+    this.scene.fog.density = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT)
+      * THREE.MathUtils.lerp(clear, 1, Math.max(this.rainAmount, this.snowAmount));
+    this.hemi.color.copy(LOW.hemiSky).lerp(HIGH.hemiSky, snowT);
+    this.hemi.groundColor.copy(LOW.hemiGround).lerp(HIGH.hemiGround, snowT);
+    this.hemi.intensity = THREE.MathUtils.lerp(LOW.hemiIntensity, HIGH.hemiIntensity, snowT);
+    this.sun.intensity = THREE.MathUtils.lerp(LOW.sunIntensity, HIGH.sunIntensity, snowT)
+      * (this.override === 'clear' ? 2.2 : 1);
+
+    shared.uWind.value = 0.7 + this.snowAmount * 0.8 + Math.sin(time * 0.13) * 0.3;
+
+    if (this.audio) this.audio.update(this.rainAmount, this.snowAmount, time);
+  }
+
+  enableAudio() {
+    if (!this.audio) this.audio = new Ambience();
+    this.audio.resume();
+  }
+}
+
+/** Rain hiss + gusting wind synthesised from filtered noise (no audio files). */
+class Ambience {
+  constructor() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.ctx = ctx;
+    const len = ctx.sampleRate * 4;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < len; i++) {
+        const w = Math.random() * 2 - 1; // pinkish noise
+        b0 = 0.99765 * b0 + w * 0.099046;
+        b1 = 0.963 * b1 + w * 0.2965164;
+        b2 = 0.57 * b2 + w * 1.0526913;
+        d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.11;
+      }
+    }
+    const src = (rate = 1) => {
+      const s = ctx.createBufferSource();
+      s.buffer = buf;
+      s.loop = true;
+      s.playbackRate.value = rate;
+      s.start(0, Math.random() * 3);
+      return s;
+    };
+
+    // rain: bright hiss
+    const rainHp = ctx.createBiquadFilter();
+    rainHp.type = 'highpass';
+    rainHp.frequency.value = 500;
+    const rainLp = ctx.createBiquadFilter();
+    rainLp.type = 'lowpass';
+    rainLp.frequency.value = 7000;
+    this.rainGain = ctx.createGain();
+    this.rainGain.gain.value = 0;
+    src(1).connect(rainHp).connect(rainLp).connect(this.rainGain).connect(ctx.destination);
+
+    // wind: slow, resonant low band
+    this.windFilter = ctx.createBiquadFilter();
+    this.windFilter.type = 'bandpass';
+    this.windFilter.frequency.value = 300;
+    this.windFilter.Q.value = 1.4;
+    this.windGain = ctx.createGain();
+    this.windGain.gain.value = 0;
+    src(0.5).connect(this.windFilter).connect(this.windGain).connect(ctx.destination);
+  }
+
+  resume() {
+    if (this.ctx.state !== 'running') this.ctx.resume();
+  }
+
+  update(rain, snow, t) {
+    const now = this.ctx.currentTime;
+    const gust = 0.5 + 0.5 * Math.sin(t * 0.37) * Math.sin(t * 0.11 + 1.3);
+    this.rainGain.gain.setTargetAtTime(rain * 0.55, now, 0.3);
+    this.windGain.gain.setTargetAtTime(0.12 + (0.25 + snow * 0.9) * gust, now, 0.5);
+    this.windFilter.frequency.setTargetAtTime(220 + gust * 380 + snow * 150, now, 0.5);
+  }
+}
