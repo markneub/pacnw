@@ -35,7 +35,8 @@ Add `?perf` to show frame times (average and worst, which is the one to watch fo
 and triangles, and to log how long each loading step took. The second line shows CPU time per frame,
 plus GPU time where the browser can measure it (not Safari/iOS).
 
-`?bench` is the accurate way to measure a device. After you start, it times frames at three spots with
+`?bench` is the accurate way to measure a device (`?bench=trees,grass&views=spawn&heat=30` runs just those rows at one
+spot, after 30 s of heating the GPU up to its throttled state). After you start, it times frames at three spots with
 each part of the scene switched off in turn, and at other resolutions. It then shows a table with a Copy button.
 
 URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.

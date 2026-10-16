@@ -92,7 +92,11 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `?bench` (after tapping start) pauses play, warms the GPU up, and at spawn/forest/snowy slope times batches of
   back-to-back frames with one GPU wait. Each row is paired with alternating full-scene batches, because phones change clock
   speed mid-run. It reports each part off, an empty scene and other DPRs, in a copyable table. The user runs it on their phone
-  and pastes the result. `?bench=quick` is a one-view smoke test for SwiftShader. SwiftShader's *relative* costs don't carry
+  and pastes the result. **Parameterized (v3):** `?bench=trees,grass` runs only those rows (keys: trees, ferns, rocks,
+  ground, detail, tex, grass, grass50, water, sky, weather, empty, dpr) plus the full baseline. `&views=spawn,forest,snow`,
+  and `&heat=30` renders flat out first (in 200 ms slices), so the run measures the throttled state directly. The full
+  run takes ~2 min. Ask for just the rows a change touches. `quick` (combinable: `?bench=quick,trees`) is the SwiftShader
+  smoke test. SwiftShader's *relative* costs don't carry
   over to phones (it showed ferns/ground at ~18% each; the phone showed ~0), so use it for counts and regressions only.
   To find what costs the most on a device, use `?off=trees,ferns,rocks,terrain,trail,
   water,sky,weather,env,fog,aa` (any subset) and `?dpr=1`.

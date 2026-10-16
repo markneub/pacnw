@@ -17,17 +17,29 @@ import { surfaceDetail } from './surfacedetail.js';
  * costs more), and "±" is half the spread of those differences (noise).
  */
 const VIEWS = [
-  { name: 'spawn', x: null, z: null },
-  { name: 'forest', x: -30, z: 420, yaw: 0.3, pitch: 0 },
-  { name: 'snowy slope', x: -60, z: -250, yaw: 0.4, pitch: 0 },
+  { key: 'spawn', name: 'spawn', x: null, z: null },
+  { key: 'forest', name: 'forest', x: -30, z: 420, yaw: 0.3, pitch: 0 },
+  { key: 'snow', name: 'snowy slope', x: -60, z: -250, yaw: 0.4, pitch: 0 },
 ];
 
-export async function runBench({ renderer, scene, camera, player, veg, weather, grass, spawn, quick = false }) {
-  // quick: a smoke test for slow software renderers (one view, tiny batches)
+/**
+ * Options (from the URL, see main.js):
+ *  rows   which rows to run, e.g. ['trees', 'grass']; empty = all. Keys: trees,
+ *         ferns, rocks, ground, detail, tex, grass, grass50, water, sky,
+ *         weather, empty, dpr (all the resolution rows). "full" always runs.
+ *  views  e.g. ['spawn']; empty = all (spawn, forest, snow)
+ *  heat   seconds of flat-out rendering first. Phones slow their GPU after
+ *         ~20 s of full load; heat=30 measures that throttled state directly.
+ *  quick  smoke test for slow software renderers (one view, tiny batches)
+ */
+export async function runBench({
+  renderer, scene, camera, player, veg, weather, grass, spawn, quick = false, rows = [], views: viewKeys = [], heat = 0,
+}) {
+  const t0Run = performance.now();
   const N = quick ? 2 : 12; // frames per batch
   const PAIRS = quick ? 1 : 5; // alternating full/config batch pairs per row (median taken)
-  const WARM_MS = quick ? 0 : 1500;
-  const views = quick ? VIEWS.slice(0, 1) : VIEWS;
+  const WARM_MS = quick ? heat * 1000 : Math.max(1500, heat * 1000);
+  const views = quick ? VIEWS.slice(0, 1) : VIEWS.filter((v) => !viewKeys.length || viewKeys.includes(v.key));
   const gl = renderer.getContext();
   const pixel = new Uint8Array(4);
   const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
@@ -56,42 +68,44 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
     };
   };
   const dpr = renderer.getPixelRatio();
-  const configs = [
-    ['- trees', () => vegOff('trees')],
-    ['- ferns', () => vegOff('ferns')],
-    ['- rocks/logs', () => vegOff('rocks')],
-    ['- ground', () => hide(byName('terrain'), byName('trail'))],
-    ['- ground detail', () => {
+  let configs = [
+    ['trees', '- trees', () => vegOff('trees')],
+    ['ferns', '- ferns', () => vegOff('ferns')],
+    ['rocks', '- rocks/logs', () => vegOff('rocks')],
+    ['ground', '- ground', () => hide(byName('terrain'), byName('trail'))],
+    ['detail', '- ground detail', () => {
       const r = groundDetail.uniforms.uGDRange.value;
       const was = r.clone();
       r.set(0, 0.001);
       return () => r.copy(was);
     }],
-    ['- bark/rock tex', () => {
+    ['tex', '- bark/rock tex', () => {
       const r = surfaceDetail.uSDRange.value;
       const was = r.clone();
       r.set(0, 0.001);
       return () => r.copy(was);
     }],
-    ['- grass', () => (byName('grass') ? hide(byName('grass')) : () => {})],
-    ['grass 50%', () => {
+    ['grass', '- grass', () => (byName('grass') ? hide(byName('grass')) : () => {})],
+    ['grass50', 'grass 50%', () => {
       if (!grass) return () => {};
       grass.setShare(0.5);
       return () => grass.setShare(1);
     }],
-    ['- water', () => hide(byName('lake'))],
-    ['- sky', () => hide(byName('sky'))],
-    ['- rain/snow', () => hide(weather.rain, weather.snow)],
-    ['empty scene', () => hide(...scene.children)],
+    ['water', '- water', () => hide(byName('lake'))],
+    ['sky', '- sky', () => hide(byName('sky'))],
+    ['weather', '- rain/snow', () => hide(weather.rain, weather.snow)],
+    ['empty', 'empty scene', () => hide(...scene.children)],
   ];
   // other resolutions, up to the screen's own
   for (const d of [1, 1.5, 2, 2.5, 3]) {
     if (Math.abs(d - dpr) < 0.01 || d > window.devicePixelRatio + 0.01) continue;
-    configs.push([`dpr ${d}`, () => {
+    configs.push(['dpr', `dpr ${d}`, () => {
       renderer.setPixelRatio(d);
       return () => renderer.setPixelRatio(dpr);
     }]);
   }
+
+  if (rows.length) configs = configs.filter(([key]) => rows.includes(key));
 
   const median = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
   /** one batch: [ms per frame, cpu ms per frame] */
@@ -132,19 +146,26 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
   const w = renderer.domElement.width;
   const h = renderer.domElement.height;
   const lines = [
-    `Cascadia Woods bench v2 · ${w}×${h} px (dpr ${dpr.toFixed(2)}, screen ${window.devicePixelRatio})`,
+    `Cascadia Woods bench v3 · ${w}×${h} px (dpr ${dpr.toFixed(2)}, screen ${window.devicePixelRatio})`,
     navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 90),
     'ms per frame. saves = paired full − row (negative = costs more), ± = noise.',
+    `rows: ${rows.length ? rows.join(',') : 'all'} · views: ${views.map((v) => v.key).join(',')}${heat ? ` · heat ${heat} s` : ''}`,
   ];
   const fmt = (v) => ` ${v.toFixed(1).padStart(5)}`;
   const total = views.length * (configs.length + 1);
   let done = 0;
   const progress = () => show(`Benchmarking… ${Math.round((done / total) * 100)}%\n${lines.join('\n')}`);
 
-  // bring the GPU up to speed before timing anything
+  // bring the GPU up to speed (or, with heat, to its throttled state) before timing anything
   progress();
   await nextFrame();
-  for (const t0 = performance.now(); performance.now() - t0 < WARM_MS;) { render(); sync(); }
+  // in short slices, so the page stays responsive and shows a countdown
+  for (const t0 = performance.now(); performance.now() - t0 < WARM_MS;) {
+    for (const t1 = performance.now(); performance.now() - t1 < 200;) { render(); sync(); }
+    const left = Math.ceil((WARM_MS - (performance.now() - t0)) / 1000);
+    if (heat) show(`Heating up the GPU… ${Math.max(0, left)} s\n${lines.join('\n')}`);
+    await nextFrame();
+  }
 
   for (const view of views) {
     player.place(view.x ?? spawn.x, view.z ?? spawn.z, view.yaw ?? spawn.yaw, view.pitch ?? spawn.pitch);
@@ -170,7 +191,7 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
     lines.push(`${'full'.padEnd(16)}${fmt(median(base))}${fmt(median(baseCpu))}`);
     done++;
 
-    for (const [name, apply] of configs) {
+    for (const [, name, apply] of configs) {
       progress();
       await nextFrame();
       const m = measurePaired(apply);
@@ -179,6 +200,7 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
     }
   }
 
+  lines.push('', `took ${Math.round((performance.now() - t0Run) / 1000)} s`);
   const result = lines.join('\n');
   console.info(result);
   show(result);

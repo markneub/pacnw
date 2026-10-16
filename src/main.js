@@ -160,7 +160,13 @@ async function init() {
   // ?bench: once started, pause play and run the benchmark (see bench.js)
   const startBench = () => setTimeout(async () => {
     renderer.setAnimationLoop(null);
-    await runBench({ renderer, scene, camera, player, veg, weather, grass, spawn: SPAWN, quick: params.get('bench') === 'quick' });
+    // ?bench (everything) · ?bench=trees,grass (just those rows) · &views=spawn · &heat=30 · quick (SwiftShader smoke test)
+    const list = (k) => (params.get(k) ?? '').split(',').filter((v) => v && v !== 'all' && v !== 'quick');
+    await runBench({
+      renderer, scene, camera, player, veg, weather, grass, spawn: SPAWN,
+      quick: (params.get('bench') ?? '').split(',').includes('quick'), rows: list('bench'), views: list('views'),
+      heat: parseFloat(params.get('heat') ?? '0') || 0,
+    });
   }, 1000);
   overlay.addEventListener('click', () => {
     weather.enableAudio();
