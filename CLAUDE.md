@@ -80,13 +80,15 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   spatial hashes use numeric `cellKey`). `warmUp()` in `main.js` renders the whole scene once off-screen
   and reads a pixel back so shader linking and buffer uploads finish during loading. Phones get the same
   features scaled by density and distance. Check with `?perf` (frame avg/worst, hitches >50 ms, load-step
-  timings in the console). Under vsync the frame interval is pinned at 16.7 ms, so line 2 measures the work:
-  CPU ms plus GPU ms from `EXT_disjoint_timer_query_webgl2` where available. Safari/iOS has no timer queries, so
-  each frame ends with a 1 px `readPixels` and shows "work" = CPU+GPU (sync, reads slightly high). `?perf=nosync` turns that off.
-  `?bench` (after tapping start) pauses play and, at spawn/forest/snowy slope, times frames with each part switched
-  off (`src/bench.js`). "frame" = N back-to-back renders + one GPU wait (true cost, no vsync); "cpu" = JS in
-  `render()`; "sync" = wait per frame (what `?perf` does on iOS). It shows a copyable table. The user can run it on
-  their phone and paste the result. `?bench=quick` is a one-view smoke test for SwiftShader. To find what costs the most on a device, use `?off=trees,ferns,rocks,terrain,trail,
+  timings in the console). Under vsync the frame interval is pinned at 16.7 ms, so line 2 shows CPU ms, plus GPU ms from
+  `EXT_disjoint_timer_query_webgl2` where available. Safari/iOS has none. **On iOS a per-frame `readPixels` wait reads 2–4×
+  the true cost**, so `?perf=sync` is opt-in and the real numbers come from `?bench`.
+  `?bench` (after tapping start) pauses play, warms the GPU up, and at spawn/forest/snowy slope times batches of
+  back-to-back frames with one GPU wait. Each row is paired with alternating full-scene batches, because phones change clock
+  speed mid-run. It reports each part off, an empty scene and other DPRs, in a copyable table. The user runs it on their phone
+  and pastes the result. `?bench=quick` is a one-view smoke test for SwiftShader. SwiftShader's *relative* costs don't carry
+  over to phones (it showed ferns/ground at ~18% each; the phone showed ~0), so use it for counts and regressions only.
+  To find what costs the most on a device, use `?off=trees,ferns,rocks,terrain,trail,
   water,sky,weather,env,fog,aa` (any subset) and `?dpr=1`.
 - **Measure before and after any perf change.** Count draw calls and triangles at fixed views (spawn, lake,
   forest `x=-30&z=420`, ridge `x=-60&z=-250`) with `?quality=high` and `?quality=low` via
@@ -124,8 +126,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216
   (the user's phone ran ~18 ms/frame avg, worst mid-20s, no hitches). After tiers: desktop 1.57M/286,
-  phone 0.65M/140. With ground detail, the user's phone (iOS, `?perf` sync "work") measures 12–13 ms at
-  spawn, forest and snowy slope, the same with `off=detail`. Ground textures are ~free; ~3 ms of headroom left. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
+  phone 0.65M/140. Phone `?bench` v1 (iOS 18, 502×812 @1.25): full frame 2.5–3.0 ms, empty scene 0.3–0.5 ms,
+  trees ~1 ms, ground ~0.3 ms, everything else (ground detail included) within noise. Lots of headroom. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
   warm-up; much faster on a real GPU.
 
 ## Headless screenshots (how to see the scene)

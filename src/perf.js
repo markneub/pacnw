@@ -7,11 +7,11 @@
  *  - GPU: the GPU's time for the frame, from timer queries
  *    (EXT_disjoint_timer_query_webgl2) where the browser offers them. They're
  *    asynchronous, so they don't disturb the frame.
- *  - Where there are no timer queries (Safari / iOS), each frame ends with a
- *    1-pixel readback that waits for the GPU to finish. The time from frame
- *    start to that point is the total frame cost (CPU + GPU, labelled "sync").
- *    That stops the CPU and GPU overlapping, so it reads slightly high, but it
- *    is the real cost of a frame. ?perf=nosync turns it off.
+ *  - Safari / iOS have no timer queries, so GPU time isn't shown there; use
+ *    ?bench, which measures real frame cost. ?perf=sync instead ends each
+ *    frame with a 1-pixel readback and shows the time until the GPU is done,
+ *    but on iOS that wait reads 2-4x the true cost (measured with ?bench), so
+ *    treat it as an upper bound.
  *
  * Budget: 16.7 ms at 60 Hz. Leave a few ms for the browser's own compositing.
  */
@@ -70,7 +70,7 @@ export class PerfOverlay {
       this.free = Array.from({ length: 6 }, () => gl.createQuery());
       this.pending = []; // in issue order
     }
-    this.sync = !this.ext && mode !== 'nosync';
+    this.sync = !this.ext && mode === 'sync';
     this.pixel = new Uint8Array(4);
   }
 
@@ -137,13 +137,13 @@ export class PerfOverlay {
     this.cpu.stats(n, s);
     const cpu = `${s.avg.toFixed(1)} ms (worst ${s.worst.toFixed(1)})`;
     if (this.sync) {
-      text += `work ${cpu} · cpu+gpu, sync`;
+      text += `work ${cpu} · cpu+gpu, sync (reads high)`;
     } else if (this.ext) {
       text += `cpu ${cpu}`;
       this.gpu.stats(n, s);
       text += s.n ? ` · gpu ${s.avg.toFixed(1)} ms (worst ${s.worst.toFixed(1)})` : ' · gpu …';
     } else {
-      text += `cpu ${cpu} · gpu n/a`;
+      text += `cpu ${cpu} · gpu n/a here (use ?bench)`;
     }
     const { calls, triangles } = this.renderer.info.render;
     this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris`;

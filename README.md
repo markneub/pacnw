@@ -32,11 +32,11 @@ Add `?off=trees,ferns,...` to switch parts of the scene off (see CLAUDE.md for t
 costs the most on a device.
 
 Add `?perf` to show frame times (average and worst, which is the one to watch for stutter), draw calls
-and triangles, and to log how long each loading step took. The second line is the actual work per frame,
-which stays visible even when vsync caps the frame rate: CPU and GPU milliseconds, or, on Safari/iOS (no GPU
-timers), the combined CPU+GPU cost measured by waiting for the GPU each frame (`?perf=nosync` turns that off).
-`?bench` runs a benchmark after you start: it times frames at three spots with each part of the scene
-switched off in turn, and shows a table with a Copy button.
+and triangles, and to log how long each loading step took. The second line shows CPU time per frame,
+plus GPU time where the browser can measure it (not Safari/iOS).
+
+`?bench` is the accurate way to measure a device. After you start, it times frames at three spots with
+each part of the scene switched off in turn, and at other resolutions. It then shows a table with a Copy button.
 
 URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 

@@ -3,14 +3,17 @@ import { groundDetail } from './grounddetail.js';
 /**
  * ?bench: a one-tap benchmark for real devices. It stops the game loop, then
  * at a few fixed views renders the scene with parts switched off one at a time
- * and shows a table you can copy.
+ * (and at other resolutions) and shows a table you can copy.
  *
- * Timing: "frame" renders N frames back to back and waits for the GPU once at
+ * Timing: a batch renders N frames back to back and waits for the GPU once at
  * the end, so CPU and GPU overlap the way they do in play, with no vsync and
- * almost no measuring overhead: it's the real cost of a frame. "cpu" is the
- * JS time inside renderer.render (three.js issuing draw calls). "sync" waits
- * for the GPU after every frame, like the ?perf overlay on iOS, so the gap
- * between sync and frame is the cost of measuring that way.
+ * almost no measuring overhead: "frame" is the real cost of a frame. "cpu" is
+ * the JS time inside renderer.render (three.js issuing draw calls).
+ *
+ * Phones change clock speed with load, which can shift every number mid-run.
+ * So the GPU is warmed up first, and each row is measured paired with the full
+ * scene, alternating batches. "saves" is that paired difference (negative =
+ * costs more), and "±" is half the spread of those differences (noise).
  */
 const VIEWS = [
   { name: 'spawn', x: null, z: null },
@@ -20,14 +23,16 @@ const VIEWS = [
 
 export async function runBench({ renderer, scene, camera, player, veg, weather, spawn, quick = false }) {
   // quick: a smoke test for slow software renderers (one view, tiny batches)
-  const N = quick ? 2 : 15; // frames per batch
-  const REPEATS = quick ? 1 : 3; // batches per config (median taken)
+  const N = quick ? 2 : 12; // frames per batch
+  const PAIRS = quick ? 1 : 5; // alternating full/config batch pairs per row (median taken)
+  const WARM_MS = quick ? 0 : 1500;
   const views = quick ? VIEWS.slice(0, 1) : VIEWS;
   const gl = renderer.getContext();
   const pixel = new Uint8Array(4);
   const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
   const render = () => renderer.render(scene, camera);
   const byName = (n) => scene.getObjectByName(n);
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
   const panel = document.createElement('div');
   panel.id = 'bench';
@@ -51,7 +56,6 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
   };
   const dpr = renderer.getPixelRatio();
   const configs = [
-    ['full', () => () => {}],
     ['- trees', () => vegOff('trees')],
     ['- ferns', () => vegOff('ferns')],
     ['- rocks/logs', () => vegOff('rocks')],
@@ -67,73 +71,96 @@ export async function runBench({ renderer, scene, camera, player, veg, weather, 
     ['- rain/snow', () => hide(weather.rain, weather.snow)],
     ['empty scene', () => hide(...scene.children)],
   ];
-  if (dpr > 1) {
-    configs.push(['dpr 1', () => {
-      renderer.setPixelRatio(1);
+  // other resolutions, up to the screen's own
+  for (const d of [1, 1.5, 2, 2.5, 3]) {
+    if (Math.abs(d - dpr) < 0.01 || d > window.devicePixelRatio + 0.01) continue;
+    configs.push([`dpr ${d}`, () => {
+      renderer.setPixelRatio(d);
       return () => renderer.setPixelRatio(dpr);
     }]);
   }
 
   const median = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
-  function measure() {
-    for (let i = 0; i < 3; i++) { render(); sync(); } // settle (and compile anything new)
+  /** one batch: [ms per frame, cpu ms per frame] */
+  function batch() {
+    let inRender = 0;
+    sync();
+    const t0 = performance.now();
+    for (let i = 0; i < N; i++) {
+      const a = performance.now();
+      render();
+      inRender += performance.now() - a;
+    }
+    sync();
+    return [(performance.now() - t0) / N, inRender / N];
+  }
+  const settle = () => { for (let i = 0; i < 3; i++) { render(); sync(); } };
+
+  /** paired: alternate full / config batches so clock changes hit both alike */
+  function measurePaired(apply) {
     const frame = [];
     const cpu = [];
-    const synced = [];
-    for (let r = 0; r < REPEATS; r++) {
-      let inRender = 0;
-      sync();
-      const t0 = performance.now();
-      for (let i = 0; i < N; i++) {
-        const a = performance.now();
-        render();
-        inRender += performance.now() - a;
-      }
-      sync();
-      frame.push((performance.now() - t0) / N);
-      cpu.push(inRender / N);
-
-      let s = 0;
-      for (let i = 0; i < N; i++) {
-        const a = performance.now();
-        render();
-        sync();
-        s += performance.now() - a;
-      }
-      synced.push(s / N);
+    const diff = [];
+    for (let p = 0; p < PAIRS; p++) {
+      settle();
+      const [f] = batch();
+      const undo = apply();
+      settle(); // compiles anything new, reallocates on resolution changes
+      const [c, cc] = batch();
+      undo();
+      frame.push(c);
+      cpu.push(cc);
+      diff.push(f - c);
     }
-    return { frame: median(frame), cpu: median(cpu), sync: median(synced) };
+    const spread = (Math.max(...diff) - Math.min(...diff)) / 2;
+    return { frame: median(frame), cpu: median(cpu), saves: median(diff), spread };
   }
 
   const w = renderer.domElement.width;
   const h = renderer.domElement.height;
   const lines = [
-    `Cascadia Woods bench · ${w}×${h} px (dpr ${dpr.toFixed(2)})`,
+    `Cascadia Woods bench v2 · ${w}×${h} px (dpr ${dpr.toFixed(2)}, screen ${window.devicePixelRatio})`,
     navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 90),
-    'ms per frame. "saves" = full minus this row.',
+    'ms per frame. saves = paired full − row (negative = costs more), ± = noise.',
   ];
   const fmt = (v) => ` ${v.toFixed(1).padStart(5)}`;
-  const total = views.length * configs.length;
+  const total = views.length * (configs.length + 1);
   let done = 0;
+  const progress = () => show(`Benchmarking… ${Math.round((done / total) * 100)}%\n${lines.join('\n')}`);
+
+  // bring the GPU up to speed before timing anything
+  progress();
+  await nextFrame();
+  for (const t0 = performance.now(); performance.now() - t0 < WARM_MS;) { render(); sync(); }
 
   for (const view of views) {
     player.place(view.x ?? spawn.x, view.z ?? spawn.z, view.yaw ?? spawn.yaw, view.pitch ?? spawn.pitch);
     veg.updateNear(camera.position, true);
     veg.updateVisibility(camera.position);
     weather.update(10, 0, camera); // snap weather and fog to this spot
-    const { calls, triangles } = (render(), renderer.info.render);
+    render();
+    const { calls, triangles } = renderer.info.render;
     lines.push('', `${view.name} (${calls} draws, ${(triangles / 1e6).toFixed(2)}M tris)`,
-      `${'config'.padEnd(16)} frame   cpu   sync   saves`);
-    let full = 0;
+      `${'config'.padEnd(16)} frame   cpu  saves     ±`);
+
+    progress();
+    await nextFrame();
+    settle();
+    const base = [];
+    const baseCpu = [];
+    for (let p = 0; p < PAIRS * 2; p++) {
+      const [f, c] = batch();
+      base.push(f);
+      baseCpu.push(c);
+    }
+    lines.push(`${'full'.padEnd(16)}${fmt(median(base))}${fmt(median(baseCpu))}`);
+    done++;
+
     for (const [name, apply] of configs) {
-      show(`Benchmarking… ${Math.round((done / total) * 100)}%\n${lines.join('\n')}`);
-      await new Promise((r) => requestAnimationFrame(() => r()));
-      const undo = apply();
-      const m = measure();
-      undo();
-      if (name === 'full') full = m.frame;
-      const saves = name === 'full' ? '' : fmt(full - m.frame);
-      lines.push(`${name.padEnd(16)}${fmt(m.frame)}${fmt(m.cpu)}${fmt(m.sync)}${saves}`);
+      progress();
+      await nextFrame();
+      const m = measurePaired(apply);
+      lines.push(`${name.padEnd(16)}${fmt(m.frame)}${fmt(m.cpu)}${fmt(m.saves)}${fmt(m.spread)}`);
       done++;
     }
   }
