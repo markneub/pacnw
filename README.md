@@ -57,6 +57,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/bake.js` | Lighting baked at load: per-vertex AO on models, canopy shade map, terrain horizon AO |
 | `src/perf.js` | `?perf` overlay |
 | `src/bench.js` | `?bench` device benchmark |
+| `src/autores.js` | Lowers render resolution if frames keep missing 60 fps |
 | `src/weather.js` | GPU rain streaks and snowflakes in a box around the camera, fog and light that shift with altitude, procedural rain/wind audio |
 | `src/player.js` | First-person walker that follows the terrain (keyboard/mouse, plus an analog `stick` and `look()` for touch) |
 | `src/touch.js` | One-thumb phone controls (no on-screen UI) |

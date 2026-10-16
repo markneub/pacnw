@@ -13,6 +13,7 @@ import { PerfOverlay } from './perf.js';
 import { loadGroundDetail } from './grounddetail.js';
 import { loadSurfaceDetail } from './surfacedetail.js';
 import { runBench } from './bench.js';
+import { AutoResolution } from './autores.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -185,11 +186,15 @@ async function init() {
   veg.updateVisibility(camera.position);
 
   const perf = params.has('perf') ? new PerfOverlay(renderer, params.get('perf')) : null;
+  // steps resolution down if frames keep missing 60 fps (phones that heat up)
+  const autoRes = params.has('dpr') || params.get('autores') === '0' || params.has('still') ? null
+    : new AutoResolution(renderer, { floor: Math.min(renderer.getPixelRatio(), lowPower ? 1.25 : 1) });
   let hudTimer = 0;
 
   let frames = 0;
   renderer.setAnimationLoop(() => {
     perf?.begin();
+    autoRes?.tick();
     // ?still=N renders N frames then stops (for headless screenshots)
     const still = params.has('still') && ++frames >= (parseInt(params.get('still'), 10) || 3);
     const dt = Math.min(clock.getDelta(), 0.1);

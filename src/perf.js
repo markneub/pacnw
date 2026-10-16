@@ -146,6 +146,6 @@ export class PerfOverlay {
       text += `cpu ${cpu} · gpu n/a here (use ?bench)`;
     }
     const { calls, triangles } = this.renderer.info.render;
-    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris`;
+    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris · dpr ${this.renderer.getPixelRatio()}`;
   }
 }
