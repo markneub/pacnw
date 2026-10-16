@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED } from './config.js';
 import { shared, wetChunks } from './materials.js';
+import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -180,6 +181,21 @@ const COL = {
 const tmpColor = new THREE.Color();
 
 /**
+ * How much of each ground surface a point is, for close-up detail textures:
+ * [forest floor, rock, snow, mud/dirt], summing to 1. Mirrors groundColor().
+ */
+export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
+  const snow = snowAmount(x, z, y, slope);
+  const rock = smoothstep(0.22, 0.42, slope) * (1 - snow);
+  const mud = (1 - smoothstep(WATER_LEVEL - 1, WATER_LEVEL + 2.5, y)) * (1 - rock) * (1 - snow);
+  out[0] = Math.max(0, 1 - snow - rock - mud);
+  out[1] = rock;
+  out[2] = snow;
+  out[3] = mud;
+  return out;
+}
+
+/**
  * Ground colour (linear) for a point at altitude y with the given slope
  * (0 flat .. 1 vertical): moss, litter, alpine meadow, mud, rock and snow.
  */
@@ -239,6 +255,8 @@ function buildTile(tx, tz) {
   const positions = new Float32Array(n * n * 3);
   const normals = new Float32Array(n * n * 3);
   const colors = new Float32Array(n * n * 3);
+  const layers = new Float32Array(n * n * 4);
+  const lw = [0, 0, 0, 0];
   const h = (ix, iz) => g[Math.min(GRID_N - 1, Math.max(0, iz)) * GRID_N + Math.min(GRID_N - 1, Math.max(0, ix))];
   const c = new THREE.Color();
   const nv = new THREE.Vector3();
@@ -258,6 +276,7 @@ function buildTile(tx, tz) {
       normals[k + 1] = nv.y;
       normals[k + 2] = nv.z;
       groundColor(x, y, z, 1 - nv.y, c);
+      layers.set(groundLayers(x, y, z, 1 - nv.y, lw), (j * n + i) * 4);
       colors[k] = c.r;
       colors[k + 1] = c.g;
       colors[k + 2] = c.b;
@@ -277,6 +296,7 @@ function buildTile(tx, tz) {
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('aLayers', new THREE.BufferAttribute(layers, 4));
   geo.setIndex(index);
   geo.computeBoundingSphere();
   return geo;
@@ -321,7 +341,9 @@ export function buildTerrain() {
         ${wet.color}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         ${wet.roughness}`);
+    patchGroundDetail(shader);
   };
+  mat.customProgramCacheKey = groundDetailCacheKey;
 
   const group = new THREE.Group();
   group.name = 'terrain';

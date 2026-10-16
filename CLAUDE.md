@@ -91,6 +91,15 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   world-anchored noise makes drifting mist banks. Sky dome + PMREM environment
   (`scene.environmentIntensity` 0.55; foliage `envMapIntensity` 0.35 or it looks grey).
   Don't bring back camera-facing mist sprites: on phones their hard edges looked like confetti.
+- **Close-up ground detail** (`src/grounddetail.js`): photographic albedo + normal maps for 4 layers (forest
+  floor, rock, snow, mud/dirt), weighted by per-vertex `aLayers` (terrain `groundLayers()`, trail tread/banks →
+  dirt), within `uGDRange` (20–45 m desktop, 15–32 m phone). The photo *modulates* the existing colour
+  (albedo ÷ its average), so the palette and baked shading stay and the fade-out has no colour shift. Rock is
+  triplanar; the rest are top-down. `textureGrad` with derivatives taken outside branches. Textures + `manifest.json`
+  live in `public/textures/ground/`, made by `tools/fetch_ground_textures.py` (CC0 Poly Haven: needs
+  api.polyhaven.com + dl.polyhaven.org allowed in the environment's network settings). Without a manifest the
+  feature stays off. It compiles in via `patchGroundDetail` + `customProgramCacheKey = groundDetailCacheKey`,
+  and textures must load before `warmUp()`. `?off=detail` disables it.
 - Shader noise: use the sine-free hash (`fract(p.xyx * .1031)`, Hoskins). `fract(sin(x)*43758)` is
   unreliable on mobile GPUs.
 - `src/bake.js`: prototype vertex AO (vertex colours × instance colours), `bakeCanopy` (2 m grid) feeds

@@ -47,6 +47,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/materials.js` | Shader patches: wind sway for foliage, moss/snow cover on rocks and logs |
 | `src/atmosphere.js` | Height fog (pools in valleys), overcast sky dome, environment map for reflections, drifting mist |
 | `src/detail.js` | Near pools: full-detail trees and ferns around the walker, refilled as you move |
+| `src/grounddetail.js` | Close-up photographic ground detail (textures fetched by `tools/fetch_ground_textures.py`) |
 | `src/bake.js` | Lighting baked at load: per-vertex AO on models, canopy shade map, terrain horizon AO |
 | `src/perf.js` | `?perf` overlay |
 | `src/weather.js` | GPU rain streaks and snowflakes in a box around the camera, fog and light that shift with altitude, procedural rain/wind audio |

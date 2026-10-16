@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
 import {
-  heightAt, rawGroundAt, groundAt, groundColor, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
+  heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
 } from './terrain.js';
 import { shared, wetChunks } from './materials.js';
+import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 
 // The trail runs from the trailhead at the spawn point, down to a viewpoint on
 // the lake's west shore, then climbs north through the forest to the one gentle
@@ -383,6 +384,8 @@ function buildCorridorMesh(points, distanceTo) {
   const positions = [];
   const colors = [];
   const treadAttr = [];
+  const layers = [];
+  const lw = [0, 0, 0, 0];
   const indices = [];
   const dirt = new THREE.Color(0x6b5034);
   const dirtWet = new THREE.Color(0x4a3824);
@@ -415,6 +418,7 @@ function buildCorridorMesh(points, distanceTo) {
         rawGroundAt(x + e, z) - rawGroundAt(x - e, z), 2 * e, rawGroundAt(x, z + e) - rawGroundAt(x, z - e),
       );
       groundColor(x, g, z, naturalSlope, col);
+      groundLayers(x, g, z, naturalSlope, lw);
       const snow = snowAmount(x, z, g, 0);
       const d = distanceTo(x, z);
       const cut = Math.abs(y - g);
@@ -425,6 +429,10 @@ function buildCorridorMesh(points, distanceTo) {
       const t = 1 - THREE.MathUtils.smoothstep(d + wobble, TRAIL_WIDTH - 0.3, TRAIL_WIDTH + 0.25);
       tmp.copy(dirt).lerp(dirtWet, Math.min(1, d / TRAIL_WIDTH) * 0.6).lerp(packed, snow);
       col.lerp(tmp, t);
+
+      // detail layers: exposed soil on the banks and the tread itself read as dirt
+      const dirtW = Math.max(t, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75) * (1 - snow * 0.85);
+      layers.push(lw[0] * (1 - dirtW), lw[1] * (1 - dirtW), lw[2] * (1 - dirtW), lw[3] * (1 - dirtW) + dirtW);
 
       // fade the strip's outer edge into the terrain beneath
       const alpha = 1 - THREE.MathUtils.smoothstep(Math.abs(u), CUTOUT_HALF + 0.3, CORRIDOR_HALF);
@@ -445,6 +453,7 @@ function buildCorridorMesh(points, distanceTo) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
   geo.setAttribute('aTread', new THREE.Float32BufferAttribute(treadAttr, 1));
+  geo.setAttribute('aLayers', new THREE.Float32BufferAttribute(layers, 4));
   geo.setIndex(indices);
   geo.computeVertexNormals();
 
@@ -491,7 +500,9 @@ function buildCorridorMesh(points, distanceTo) {
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         ${wet.roughness}
         roughnessFactor = mix(roughnessFactor, 0.04, puddle);`);
+    patchGroundDetail(shader);
   };
+  mat.customProgramCacheKey = groundDetailCacheKey;
 
   // Split into ~150 m segments so off-screen stretches are frustum-culled.
   // Normals come from the full strip, so segment joins don't show.
@@ -505,7 +516,7 @@ function buildCorridorMesh(points, distanceTo) {
     const v0 = r0 * rowLen;
     const v1 = (r1 + 1) * rowLen;
     const part = new THREE.BufferGeometry();
-    for (const name of ['position', 'normal', 'color', 'aTread']) {
+    for (const name of ['position', 'normal', 'color', 'aTread', 'aLayers']) {
       const attr = geo.attributes[name];
       part.setAttribute(name, new THREE.BufferAttribute(attr.array.slice(v0 * attr.itemSize, v1 * attr.itemSize), attr.itemSize));
     }

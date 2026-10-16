@@ -10,6 +10,7 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround } from './bake.js';
 import { PerfOverlay } from './perf.js';
+import { loadGroundDetail } from './grounddetail.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -32,7 +33,7 @@ shared.uLodRadius.value = VIEW_DIST.treeDetail;
 shared.uFernRadius.value = VIEW_DIST.ferns;
 
 // ?off=a,b,... switches parts off to find what costs the most on a device:
-// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa.
+// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail.
 // ?dpr=1 forces the render resolution scale.
 const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
 
@@ -74,6 +75,8 @@ function progress(to, expectedMs) {
 }
 
 async function init() {
+  // close-up ground textures download while the world is being built
+  const groundDetailReady = off.has('detail') ? Promise.resolve(false) : loadGroundDetail(renderer, { lowPower });
   progress(0.1, 500);
   await nextFrame();
   const terrain = buildTerrain();
@@ -123,6 +126,9 @@ async function init() {
 
   const cycleWeather = () => flash(`Weather: ${weather.cycleOverride()}`);
   if (touch) new TouchControls(renderer.domElement, player); // eslint-disable-line no-new
+
+  const detail = await groundDetailReady; // before warm-up so its shaders compile now
+  step(detail ? 'ground detail' : 'ground detail (none)');
 
   progress(0.98, 2500);
   await nextFrame();
