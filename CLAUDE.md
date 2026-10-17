@@ -66,7 +66,14 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   **Roots** (`roots()`, `n_roots` in `branchy_conifer`: fir 6, hemlock 5, cedar 7 along its flutes; own rng `seed + 313`; none
   on snowy trees or saplings): thick, flattened 6-sided tubes that swell out of the trunk 0.45–0.75 × r_base above the ground
   (model z 0.3, since trees are planted 0.3 m deep), run out to 1.8–2.8 × r_base and end bluntly underground. Bark material,
-  so the bark photo and trunk moss apply. A first try (thin, high, tapering to points) read as blades. +0.02M tris on phone.
+  so the bark photo and trunk moss apply. A first try (thin, high, tapering to points) read as blades. The tube ring turns
+  clockwise about the root's direction, so faces are wound (lo[i], hi[i], hi[j], lo[j]); the trunk's order showed the inside (black fins). +0.02M tris on phone.
+  **Vine maple** (`vine_maple`, a tree kind: near pool + impostor row via `vine_maple_lod` (a sparser copy, `leafy=0.45`),
+  CROWN 3.2, COLLIDE 0.3): 7 slender `MapleBark` stems leaning out and arching over (~5–7 m), twigs every 4–7% of the stem
+  from 30% up, each with a near-horizontal `MapleCards` spray (1.1–1.6 m, `maple_spray.png`: round shallow-lobed palmate
+  leaves) and often a second, turned layer below: flat layers that catch the light (backlight applies). Tint (0.62, 0.7, 0.5).
+  Scattered after the salal (9 m cell, forest-edge band of the forest noise × grove noise, below 85 m): ~3k trees.
+  +2 draws, +0.01M phone tris.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
@@ -112,6 +119,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera (plus sun-break **motes**: ~900 soft
   additive points within 7 m, lit by forward scattering × canopy sun visibility; `?off=motes`, bench row `motes`), with fog/light
   lerped by altitude relative to the local snowline, and WebAudio noise ambience.
+- **Be opinionated (the user's call):** no user-facing options or toggles for how the game feels (head bob, sway, etc.).
+  Pick the behaviour and ship it. (`?off=`/`?bench` switches are dev tools, not options.)
 - **Realism direction (agreed): stylized low-poly now ("A"). The long-term goal is near-photoreal *up
   close*, with cheap representations further out, working incrementally with careful, measured
   engineering decisions.** Keep new work asset-agnostic: lighting is baked from geometry (`bake.js`),

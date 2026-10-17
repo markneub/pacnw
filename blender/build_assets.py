@@ -173,6 +173,8 @@ def mats():
         "fir_frost_cards": card_material("FirFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
         "hemlock_frost_cards": card_material("HemlockFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
         "moss_cards": card_material("MossCards", os.path.join(ROOT, "public", "textures", "foliage", "moss_strands.png")),
+        "maple_cards": card_material("MapleCards", os.path.join(ROOT, "public", "textures", "foliage", "maple_spray.png")),
+        "maple_bark": material("MapleBark", (0.37, 0.36, 0.26)),  # smooth, greenish grey-brown
         "salal_cards": card_material("SalalCards", os.path.join(ROOT, "public", "textures", "foliage", "salal_spray.png")),
         "fern_cards": card_material("FernCards", os.path.join(ROOT, "public", "textures", "foliage", "fern_frond.png")),
         "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
@@ -258,7 +260,8 @@ def roots(b, mat, r_base, count, seed, ground=0.3, reach=(1.8, 2.8), flutes=0):
             lo, hi = loops[s_], loops[s_ + 1]
             for i in range(sides):
                 j = (i + 1) % sides
-                b.face((lo[i], lo[j], hi[j], hi[i]), mat)
+                # the ring turns clockwise about the root's direction, so wind the other way (outward-facing)
+                b.face((lo[i], hi[i], hi[j], lo[j]), mat)
 
 
 def tier(b, rng, mat, apex, z_bottom, radius, points, droop, inner=0.72, twist=0.0,
@@ -685,6 +688,65 @@ def salal(M, name, seed, shoots=16):
     return b.build(name)
 
 
+def vine_maple(M, name, seed=5, leafy=1.0):
+    """
+    Vine maple (Acer circinatum): an understory tree of several slender stems
+    that leave one base, lean out and arch over, with twigs holding leaf
+    sprays in flat, near-horizontal layers (maple_spray.png) to catch the light
+    under the conifers. ~5-7 m. `leafy` < 1 thins the sprays (the _lod model).
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    bark, leaves = M["maple_bark"], M["maple_cards"]
+    n_stems = 7
+    for k in range(n_stems):
+        a = TAU * k / n_stems + rng.uniform(-0.35, 0.35)
+        out = Vector((math.cos(a), math.sin(a), 0.0))
+        L = rng.uniform(4.5, 7.0)
+        lean = math.radians(rng.uniform(15, 40))
+        arch = rng.uniform(0.5, 0.9)  # how far over it bends
+        r0 = rng.uniform(0.045, 0.07)
+        base = out * rng.uniform(0.05, 0.25) + Vector((0.0, 0.0, 0.25))
+
+        def at(t):
+            # leans out, then arches over: the angle from vertical grows along the stem
+            ang = lean + arch * t ** 1.5
+            horiz = L * (math.sin(lean) * t + arch * 0.45 * t ** 2.5)
+            return base + out * horiz + Vector((0.0, 0.0, L * (math.cos(lean) * t - arch * 0.25 * t ** 3)))
+
+        pts = [at(i / 6) for i in range(7)]
+        for i in range(6):
+            _stick(b, bark, pts[i], pts[i + 1] + (pts[i + 1] - pts[i]) * 0.08, r0 * (1.0 - 0.7 * i / 6), sides=5)
+        # twigs + leaf layers from 35% up the stem
+        t = 0.3
+        while t < 1.0:
+            p = at(t)
+            side = Vector((-out.y, out.x, 0.0)) * rng.choice((-1, 1))
+            dir_ = (side * rng.uniform(0.6, 1.0) + out * rng.uniform(0.2, 0.7)).normalized()
+            tl = rng.uniform(0.5, 1.1)
+            tip = p + dir_ * tl + Vector((0.0, 0.0, rng.uniform(-0.1, 0.15)))
+            _stick(b, bark, p, tip, 0.018, sides=4)
+            if rng.random() < leafy:
+                cl = rng.uniform(1.1, 1.6)
+                c = p.lerp(tip, 0.6) + Vector((0.0, 0.0, 0.05))
+                fwd = Vector((dir_.x, dir_.y, rng.uniform(-0.12, 0.12))).normalized()
+                sd = Vector((-fwd.y, fwd.x, rng.uniform(-0.15, 0.15))).normalized()
+                _card(b, leaves, c, fwd, sd, cl, cl, 0.08 * cl, (0.0, 0.0), flip_u=rng.random() < 0.5)
+                if rng.random() < 0.6 * leafy:  # a second layer a little lower and turned
+                    sd2 = Vector((-sd.y, sd.x, 0.0)).normalized()
+                    _card(b, leaves, c + Vector((0.0, 0.0, -0.25)) + dir_ * 0.25, sd2.cross(Vector((0, 0, 1))).normalized(),
+                          sd2, cl * 0.85, cl * 0.85, 0.06 * cl, (0.0, 0.0))
+            t += rng.uniform(0.04, 0.07)
+        # a spray at the stem's tip, drooping
+        tipc = at(1.0)
+        if rng.random() < leafy + 0.2:
+            fwd = (at(1.0) - at(0.9)).normalized()
+            fwd = Vector((fwd.x, fwd.y, max(-0.4, min(0.2, fwd.z)))).normalized()
+            sd = Vector((-fwd.y, fwd.x, 0.0)).normalized()
+            _card(b, leaves, tipc, fwd, sd, 1.0, 1.0, 0.12, (0.0, 0.0))
+    return b.build(name)
+
+
 def log(M, name, seed, length=9.0, radius=0.55, sides=10):
     """Fallen, slightly bent log lying along X with exposed wood at the ends."""
     rng = random.Random(seed)
@@ -862,6 +924,7 @@ def main():
     branchy_sapling(M, "sapling")
     branchy_sapling(M, "sapling_snow", snow=True)
     snag(M, "snag")
+    vine_maple(M, "vine_maple")
 
     # far-distance versions (one material, colours in vertex colours)
     # matches the branchy fir's silhouette (only used by ?farTrees=lod; impostors bake the near model)
@@ -885,6 +948,7 @@ def main():
     sapling(M, "sapling_lod", snow=False, lod=True)
     sapling(M, "sapling_snow_lod", snow=True, lod=True)
     snag_lod(M, "snag_lod")
+    vine_maple(M, "vine_maple_lod", leafy=0.45)  # only for ?farTrees=lod (impostors bake the near model)
 
     fern(M, "fern_a", 21)
     fern(M, "fern_b", 22, fronds=24)

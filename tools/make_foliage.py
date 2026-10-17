@@ -392,6 +392,58 @@ def salal_spray(seed=29):
     return finish(img, (512, 256))
 
 
+def maple_spray(seed=37):
+    """
+    A vine maple spray seen from above, 1:1 (u along the twig, base at u = 0):
+    opposite pairs of round palmate leaves (7-9 pointed, toothed lobes, pale
+    veins from the leaf base) on short petioles, filling most of the card,
+    fresh bright green with some yellower leaves.
+    """
+    rng = random.Random(seed)
+    W = SIZE * SS
+    img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    y_mid = W / 2
+    twig = [(0.03 * W + 0.8 * W * k / 8, y_mid + math.sin(k * 1.3) * W * 0.015) for k in range(9)]
+    for k in range(8):
+        d.line([twig[k], twig[k + 1]], fill=(118, 92, 60, 255), width=int((4.0 - 2.0 * k / 8) * SS))
+
+    def leaf(cx, cy, R, rot, col):
+        lobes = rng.choice((7, 9))
+        pts = []
+        steps = lobes * 8
+        for k in range(steps + 1):
+            a = rot + TAU * k / steps
+            f = (k % 8) / 8.0  # position within a lobe
+            lobe = 0.8 + 0.2 * (1.0 - abs(f - 0.5) * 2.0) ** 2.2  # nearly round: shallow lobes with pointed tips
+            tooth = 0.04 * (1 if k % 2 else -1) * (1.0 - abs(f - 0.5) * 2.0)
+            r = R * (lobe + tooth)
+            pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+        d.polygon(pts, fill=col + (255,))
+        vein = lerp(col, (200, 215, 140), 0.35)
+        for k in range(lobes):
+            a = rot + TAU * (k + 0.5) / lobes
+            d.line([(cx, cy), (cx + math.cos(a) * R * 0.85, cy + math.sin(a) * R * 0.85)], fill=vein + (255,), width=max(1, SS))
+
+    greens = [(86, 140, 44), (104, 152, 48), (122, 162, 52), (140, 172, 60)]
+    for k in range(1, 9):
+        tx, ty = twig[k]
+        for side in (-1, 1):
+            if rng.random() < 0.15:
+                continue
+            R = W * rng.uniform(0.11, 0.16) * (0.75 if k == 8 else 1.0)
+            ang = math.radians(rng.uniform(50, 80))
+            px = tx + math.cos(ang) * R * 1.25
+            py = ty + side * math.sin(ang) * R * 1.25
+            py = min(W - R * 1.02, max(R * 1.02, py))
+            px = min(W - R * 1.02, px)
+            d.line([(tx, ty), (px, py)], fill=(130, 110, 60, 255), width=int(1.5 * SS))
+            col = rng.choice(greens)
+            col = tuple(max(0, min(255, c + rng.randint(-10, 10))) for c in col)
+            leaf(px, py, R, rng.uniform(0, TAU), col)
+    return finish(img)
+
+
 SPRAYS = {
     # Douglas fir: longer needles, a few stiff side shoots
     "fir_spray": dict(seed=7, old=(34, 64, 36), new=(92, 128, 52)),
@@ -405,6 +457,7 @@ SPRAYS = {
     "fern_frond": fern_frond,
     "moss_strands": moss_strands,
     "salal_spray": salal_spray,
+    "maple_spray": maple_spray,
 }
 
 

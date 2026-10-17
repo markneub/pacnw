@@ -45,7 +45,7 @@ const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
 // Trunk radius (m, at scale 1) used for walking collisions.
 const COLLIDE = {
   fir: 0.75, fir_snow: 0.75, hemlock: 0.6, hemlock_snow: 0.6, cedar: 1.1,
-  sapling: 0.25, sapling_snow: 0.25, snag: 0.65,
+  sapling: 0.25, sapling_snow: 0.25, snag: 0.65, vine_maple: 0.3,
   stump: 1.0, // boulders: from their footprint (buildVegetation)
   signpost: 0.25, cairn: 0.6, bench: 0.9,
 };
@@ -151,6 +151,7 @@ const CARD_TINT = {
   FernCards: [0.8, 0.85, 0.74],
   MossCards: [0.55, 0.58, 0.5],
   SalalCards: [0.72, 0.76, 0.68],
+  MapleCards: [0.62, 0.7, 0.5],
 };
 
 // Scanned-rock materials waiting for their textures (applyRockTextures).
@@ -390,6 +391,26 @@ function scatter(trail) {
       if (slopeAt(x, z) > 0.4) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.6) continue;
       add('salal', { x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.7, tint: rng() });
+    }
+  }
+
+  // Vine maple: arching understory trees in loose groves, mostly at forest edges and in
+  // open forest at low elevations (after the salal, so nothing above moves)
+  const mapleCell = 9;
+  for (let gz = -half; gz < half; gz += mapleCell) {
+    for (let gx = -half; gx < half; gx += mapleCell) {
+      const x = gx + rng() * mapleCell;
+      const z = gz + rng() * mapleCell;
+      const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
+      const edge = THREE.MathUtils.smoothstep(f, 0.3, 0.45) * (1 - THREE.MathUtils.smoothstep(f, 0.65, 0.85));
+      const grove = THREE.MathUtils.smoothstep(nForest(x * 0.02 - 60, z * 0.02 + 33) * 0.5 + 0.5, 0.45, 0.7);
+      if (rng() > edge * grove * 0.8) continue;
+      const h = heightAt(x, z);
+      if (h < WATER_LEVEL + 2 || h > 85) continue;
+      if (slopeAt(x, z) > 0.4) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 1.5) continue;
+      if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 6) continue;
+      add('vine_maple', { x, y: groundAt(x, z) - 0.25, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.45, tint: rng() });
     }
   }
 
