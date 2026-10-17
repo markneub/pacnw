@@ -222,7 +222,7 @@ function createMotes(count = 900) {
 // Atmosphere presets: overcast temperate rainforest vs. high-country snow.
 const LOW = {
   fog: new THREE.Color(0x7d8b8c),
-  density: 0.0085, // valley pooling in the height fog adds ~35% low down
+  density: 0.0106, // (was 0.0085: trunks now layer into the mist with depth) valley pooling in the height fog adds ~35% low down
   zenith: new THREE.Color(0xa9b5b9),
   hemiSky: new THREE.Color(0xaab8bd),
   hemiGround: new THREE.Color(0x2c3a22),

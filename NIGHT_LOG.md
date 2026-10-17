@@ -79,3 +79,7 @@ It now reflects an analytic scene: a dark, fogged far-shore treeline with jagged
 then sky that follows the current haze colour (warm in a sun break). It uses Schlick Fresnel on the wave-perturbed
 normal, so the reflection ripples. A few ALU ops on the lake's pixels only. Best view: `?x=110&z=470&yaw=-0.67`
 (add `&weather=sun`).
+
+### 9. Mistier overcast forest
+Overcast valley fog density 0.0085 → 0.0106 (+25%), so trunks layer into the mist with depth, as in the misty
+old-growth reference. Sun breaks still thin it to 62%. A one-line change in `weather.js` (`LOW.density`) if it's too much.
