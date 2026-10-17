@@ -74,6 +74,14 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   leaves) and often a second, turned layer below: flat layers that catch the light (backlight applies). Tint (0.62, 0.7, 0.5).
   Scattered after the salal (9 m cell, forest-edge band of the forest noise × grove noise, below 85 m): ~3k trees.
   +2 draws, +0.01M phone tris.
+  **Nurse logs** (`log_nurse`, log kind via the `^log` name: 125 m chunks, ground-cover moss, bark photo along X): a fallen
+  giant 18 m long, r 1.1 → 0.75, axis 0.72 r above ground, sagging; jagged splintered `Wood` end; an upturned root wad
+  (a ragged, fairly flat `RootSoil` plate 2.5 r across with 16 torn roots; smooth-shaded "Soil", bark photo via
+  `MATERIAL_LAYER`). Faces wind (lo[i], lo[j], hi[j], hi[i]) for rings turning +Y→+Z (first try was inside out). JS mirrors
+  the shape in `NURSE`/`nurseAt()`: placed in old growth (`oldGrowth` × 0.6 on a 34 m cell, slope < 0.22) along the contour,
+  seated at the lowest of 5 ground samples, kept off the trail along its length; 12 tries at saplings (scale 0.2–0.38 =
+  seedling hemlocks) and ferns along its top; a row of colliders along the trunk + one for the root plate (`it.axis`).
+  ~256 logs. Phone spawn +11 draws (3 materials per chunk), +0.01M tris.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).

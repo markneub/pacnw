@@ -131,7 +131,7 @@ class MeshBuilder:
                 poly.material_index = mi
                 # bark is smooth-shaded so the close-up bark texture reads as a
                 # round trunk; everything else keeps the faceted low-poly look
-                poly.use_smooth = (self.mats[mi].name.endswith("Bark") or is_cards(self.mats[mi])) and not flat
+                poly.use_smooth = (self.mats[mi].name.endswith(("Bark", "Soil")) or is_cards(self.mats[mi])) and not flat
         if any(self.face_uvs):
             uv = mesh.uv_layers.new(name="UVMap")
             for poly, uvs in zip(mesh.polygons, self.face_uvs):
@@ -164,6 +164,7 @@ def mats():
         "rock": material("Rock", (0.45, 0.45, 0.43), 0.95),
         "fern": material("Fern", (0.2, 0.38, 0.12), 0.8),
         "wood": material("Wood", (0.62, 0.47, 0.3)),
+        "soil": material("RootSoil", (0.4, 0.31, 0.22)),
         "sign_post": material("SignPost", (0.33, 0.23, 0.15)),
         "lod": material("LodVertexColor", (1.0, 1.0, 1.0), 0.85),
         "fir_cards": card_material("FirCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
@@ -747,6 +748,82 @@ def vine_maple(M, name, seed=5, leafy=1.0):
     return b.build(name)
 
 
+def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
+    """
+    A fallen old-growth trunk, lying along X and settled into the ground
+    (origin at ground level under its axis; ~20% of its depth below ground).
+    The root end (-X) is the upturned root wad of a windthrown tree: a ragged
+    vertical plate of soil with roots sticking out of it. The far end is a
+    jagged break. Moss comes from the ground-cover shader (up-facing = mossy).
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    bark = M["bark"]
+    sides, rings = 12, 12
+    sink = 0.72  # axis height above ground, in radii
+    loops = []
+    for k in range(rings + 1):
+        t = k / rings
+        x = -length / 2 + length * t
+        r = r0 * (1.0 - 0.32 * t) * (1.0 + rng.uniform(-0.04, 0.04))
+        bend = math.sin(t * math.pi) * 0.35
+        zc = r * sink - 0.15 * math.sin(t * math.pi)  # sags a little in the middle
+        loop = []
+        for i in range(sides):
+            a = TAU * i / sides
+            ov = 1.0 + 0.06 * math.cos(2 * a)  # slightly oval
+            loop.append(b.v((x, math.cos(a) * r * ov + bend, math.sin(a) * r / ov + zc)))
+        loops.append((loop, x, r, bend, zc))
+    for k in range(rings):
+        lo, hi = loops[k][0], loops[k + 1][0]
+        for i in range(sides):
+            j = (i + 1) % sides
+            b.face((lo[i], lo[j], hi[j], hi[i]), bark)
+    # broken end: a jagged cone of splinters
+    loop, x, r, bend, zc = loops[-1]
+    for i in range(sides):
+        j = (i + 1) % sides
+        tip = b.v((x + rng.uniform(0.2, 1.4) * (1.0 if i % 3 else 0.4), bend + math.cos(TAU * (i + 0.5) / sides) * r * 0.45,
+                   zc + math.sin(TAU * (i + 0.5) / sides) * r * 0.45))
+        b.face((loop[j], loop[i], tip), M["wood"])
+    # root wad at the root end: a ragged vertical plate of soil, both faces
+    loop, x, r, bend, zc = loops[0]
+    R = r0 * 2.5
+    n = 26
+    cx, cz = x - 0.15, R * 0.6  # the plate's centre, standing up out of the ground
+    ring = []
+    for i in range(n):
+        a = TAU * i / n
+        rr = R * rng.uniform(0.62, 1.05) * (0.85 if math.sin(a) < -0.3 else 1.0)  # torn off flatter at the bottom
+        ring.append((math.cos(a) * rr, math.sin(a) * rr))
+    # a fairly flat, ragged plate: front and back faces only slightly domed
+    front = [b.v((cx - 0.05 + rng.uniform(-0.1, 0.1), bend + y, cz + zz)) for y, zz in ring]
+    back = [b.v((cx - 0.45 + rng.uniform(-0.1, 0.1), bend + y * 0.95, cz + zz * 0.95)) for y, zz in ring]
+    fc = b.v((cx + 0.05, bend, cz))
+    bc = b.v((cx - 0.55, bend, cz))
+    for i in range(n):
+        j = (i + 1) % n
+        b.face((fc, front[i], front[j]), M["soil"])  # faces +X (toward the trunk)
+        b.face((bc, back[j], back[i]), M["soil"])  # faces -X
+        b.face((front[i], back[i], back[j], front[j]), M["soil"])  # the rim, outward
+    # close the trunk end against the plate
+    for i in range(sides):
+        j = (i + 1) % sides
+        b.face((fc, loop[i], loop[j]), M["wood"])
+    # roots: torn ends sticking out of the plate's back face and its rim
+    for i in range(16):
+        a = TAU * i / 16 + rng.uniform(-0.15, 0.15)
+        rim = rng.random() < 0.6
+        rr = R * (rng.uniform(0.75, 0.95) if rim else rng.uniform(0.15, 0.6))
+        base = Vector((cx - 0.3, bend + math.cos(a) * rr, cz + math.sin(a) * rr))
+        out = Vector((rng.uniform(-1.0, -0.3), math.cos(a) * (1.0 if rim else 0.4), math.sin(a) * (1.0 if rim else 0.4))).normalized()
+        L = rng.uniform(0.5, 1.3)
+        mid = base + out * (L * 0.5) + Vector((0.0, 0.0, -0.1 * L))
+        _stick(b, bark, base, mid, rng.uniform(0.07, 0.13), sides=5)
+        _stick(b, bark, mid - out * 0.05, mid + (out + Vector((0.0, 0.0, -0.3))).normalized() * (L * 0.5), rng.uniform(0.04, 0.07), sides=4)
+    return b.build(name)
+
+
 def log(M, name, seed, length=9.0, radius=0.55, sides=10):
     """Fallen, slightly bent log lying along X with exposed wood at the ends."""
     rng = random.Random(seed)
@@ -954,6 +1031,7 @@ def main():
     fern(M, "fern_b", 22, fronds=24)
     salal(M, "salal", 31)
     log(M, "log", 31)
+    nurse_log(M, "log_nurse")
     stump(M, "stump", 41)
 
     signpost(M, "signpost")

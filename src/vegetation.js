@@ -23,6 +23,14 @@ function hash2(x, z) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+/** Nurse log (blender/build_assets.py nurse_log): length, base radius, axis height above ground (radii), lying along local X. */
+const NURSE = { length: 18, r0: 1.1, sink: 0.72, plate: 1.1 * 2.5 };
+/** Radius and top height (above its origin) of the nurse log at u = 0 (root end) .. 1 (broken end), at scale 1. */
+const nurseAt = (u) => {
+  const r = NURSE.r0 * (1 - 0.32 * u);
+  return { r, top: r * NURSE.sink - 0.15 * Math.sin(u * Math.PI) + r };
+};
+
 /** Scanned boulders (blender/build_rocks.py). The same random draw picks one, so the scatter is unchanged. */
 const BOULDERS = ['boulder_a', 'boulder_b', 'boulder_c', 'boulder_d', 'boulder_e', 'boulder_f'];
 
@@ -159,7 +167,7 @@ const scanMaterials = [];
 
 function convertMaterial(src, assetName, lod, cache) {
   const kind = KIND(assetName);
-  const swapXY = assetName === 'log'; // lies along X: run the bark furrows along it
+  const swapXY = assetName.startsWith('log'); // lies along X: run the bark furrows along it
   const scan = src.name.startsWith('ScanRock');
   const cards = src.name.endsWith('Cards');
   const key = `${src.name}|${kind}|${lod}|${swapXY}`;
@@ -173,7 +181,7 @@ function convertMaterial(src, assetName, lod, cache) {
     metalness: 0,
     // bark is smooth so trunks read as round; scans have real smooth surfaces;
     // foliage cards carry their own (outward-pointing) normals
-    flatShading: !src.name.endsWith('Bark') && !scan && !cards,
+    flatShading: !src.name.endsWith('Bark') && !src.name.endsWith('Soil') && !scan && !cards,
     side: kind === 'ferns' || cards ? THREE.DoubleSide : THREE.FrontSide,
   });
   if (cards) {
@@ -414,6 +422,56 @@ function scatter(trail) {
     }
   }
 
+  // Nurse logs: fallen giants in the old growth, lying along the contour, with an upturned root
+  // wad at one end, and ferns and seedling hemlocks growing on top (after the maples: nothing above moves)
+  const logCell = 34;
+  for (let gz = -half; gz < half; gz += logCell) {
+    for (let gx = -half; gx < half; gx += logCell) {
+      const x = gx + rng() * logCell;
+      const z = gz + rng() * logCell;
+      const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
+      const h = heightAt(x, z);
+      const oldGrowth = THREE.MathUtils.smoothstep(f, 0.42, 0.7) * (1 - THREE.MathUtils.smoothstep(h, 50, 95));
+      const flip = rng() < 0.5;
+      const jitter = (rng() - 0.5) * 0.4;
+      const scale = 0.85 + rng() * 0.3;
+      if (rng() > oldGrowth * 0.6) continue;
+      if (h < WATER_LEVEL + 2 || slopeAt(x, z) > 0.22) continue;
+      // along the contour (logs settle across the slope)
+      const gxH = heightAt(x + 2, z) - heightAt(x - 2, z);
+      const gzH = heightAt(x, z + 2) - heightAt(x, z - 2);
+      let ang = Math.atan2(gxH, -gzH) + jitter; // direction (-gz, gx): across the gradient
+      if (flip) ang += Math.PI;
+      const dx = Math.cos(ang);
+      const dz = Math.sin(ang);
+      const half_ = (NURSE.length / 2) * scale;
+      let ok = true;
+      let y = Infinity;
+      for (let k = -2; k <= 2; k++) {
+        const px = x + dx * half_ * k * 0.5;
+        const pz = z + dz * half_ * k * 0.5;
+        if (trail.distanceTo(px, pz) < TRAIL_WIDTH + 2.5 || Math.hypot(px - SPAWN.x, pz - SPAWN.z) < 12) ok = false;
+        y = Math.min(y, groundAt(px, pz));
+      }
+      if (!ok) continue;
+      // three's rotation about Y maps local +X to (cos r, -sin r)
+      const rotY = Math.atan2(-dz, dx);
+      add('log_nurse', { x, y: y - 0.1, z, rotY, scale, tint: rng(), axis: [dx, dz] });
+      // what grows on it
+      for (let k = 0; k < 12; k++) {
+        const u = 0.12 + 0.78 * rng();
+        const along = (u - 0.5) * NURSE.length * scale;
+        const { top } = nurseAt(u);
+        const px = x + dx * along;
+        const pz = z + dz * along;
+        const py = y - 0.1 + top * scale - 0.05;
+        const what = rng();
+        if (what < 0.35) add('sapling', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.2 + rng() * 0.18, tint: rng() });
+        else if (what < 0.8) add(rng() < 0.5 ? 'fern_a' : 'fern_b', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.5 + rng() * 0.35, tint: rng() });
+      }
+    }
+  }
+
   placeTrailFurniture(trail, add);
   return out;
 }
@@ -498,10 +556,21 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
       it.idx = i;
 
       const r = collideR;
-      if (r) {
-        const ck = cellKey(Math.floor(it.x / COLL_CELL), Math.floor(it.z / COLL_CELL));
+      const addCollider = (cx, cz, cr) => {
+        const ck = cellKey(Math.floor(cx / COLL_CELL), Math.floor(cz / COLL_CELL));
         if (!colliders.has(ck)) colliders.set(ck, []);
-        colliders.get(ck).push({ x: it.x, z: it.z, r: r * it.scale });
+        colliders.get(ck).push({ x: cx, z: cz, r: cr });
+      };
+      if (r) addCollider(it.x, it.z, r * it.scale);
+      if (name === 'log_nurse') {
+        // a row of circles along the trunk, and the root plate at the -X end
+        const [dx, dz] = it.axis;
+        for (let u = 0.04; u <= 0.97; u += 0.07) {
+          const along = (u - 0.5) * NURSE.length * it.scale;
+          addCollider(it.x + dx * along, it.z + dz * along, nurseAt(u).r * it.scale * 0.95);
+        }
+        const plate = (-0.5 * NURSE.length - 0.4) * it.scale;
+        addCollider(it.x + dx * plate, it.z + dz * plate, NURSE.plate * 0.55 * it.scale);
       }
     });
     const farColors = farParts.map((part) => instanceColors(part.material.name, tints, shades, n));
