@@ -63,30 +63,16 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   **Trunk moss** (`addTrunkMoss` in materials.js, near-tier `Bark`/`CedarBark` trees only, `?off=moss`): a patchy sleeve
   ~1–4 m up the trunk (higher on the SSW "rain side"), a little on branch tops, faded toward the snowline; defines
   `GROUND_COVER`/`gcMoss` so the bark photo fades under it. A first try at 2–6 m and brighter green painted whole trunks.
-  **Roots** (`roots()`, `n_roots` in `branchy_conifer`: fir 6, hemlock 5, cedar 7 along its flutes; own rng `seed + 313`; none
-  on snowy trees or saplings): thick, flattened 6-sided tubes that swell out of the trunk 0.45–0.75 × r_base above the ground
-  (model z 0.3, since trees are planted 0.3 m deep), run out to 1.8–2.8 × r_base and end bluntly underground. Bark material,
-  so the bark photo and trunk moss apply. A first try (thin, high, tapering to points) read as blades. The tube ring turns
-  clockwise about the root's direction, so faces are wound (lo[i], hi[i], hi[j], lo[j]); the trunk's order showed the inside (black fins). +0.02M tris on phone.
-  **Vine maple** (`vine_maple`, a tree kind: near pool + impostor row via `vine_maple_lod` (a sparser copy, `leafy=0.45`),
-  CROWN 3.2, COLLIDE 0.3): 7 slender `MapleBark` stems leaning out and arching over (~5–7 m), twigs every 4–7% of the stem
-  from 30% up, each with a near-horizontal `MapleCards` spray (1.1–1.6 m, `maple_spray.png`: round shallow-lobed palmate
-  leaves) and often a second, turned layer below: flat layers that catch the light (backlight applies). Tint (0.62, 0.7, 0.5).
-  Scattered after the salal (9 m cell, forest-edge band of the forest noise × grove noise, below 85 m): ~3k trees.
-  +2 draws, +0.01M phone tris.
-  **Nurse logs** (`log_nurse`, log kind via the `^log` name: 125 m chunks, ground-cover moss, bark photo along X): a fallen
-  giant 18 m long, r 1.1 → 0.75, axis 0.72 r above ground, sagging; jagged splintered `Wood` end; an upturned root wad
-  (a ragged, fairly flat `RootSoil` plate 2.5 r across with 16 torn roots; smooth-shaded "Soil", bark photo via
-  `MATERIAL_LAYER`). Faces wind (lo[i], lo[j], hi[j], hi[i]) for rings turning +Y→+Z (first try was inside out). JS mirrors
-  the shape in `NURSE`/`nurseAt()`: placed in old growth (`oldGrowth` × 0.6 on a 34 m cell, slope < 0.22) along the contour,
-  seated at the lowest of 5 ground samples, kept off the trail along its length; 12 tries at saplings (scale 0.2–0.38 =
-  seedling hemlocks) and ferns along its top; a row of colliders along the trunk + one for the root plate (`it.axis`).
-  ~256 logs. Phone spawn +11 draws (3 materials per chunk), +0.01M tris.
-  **Loose stones** (`pebbles_a..e`, kind 'ferns' via `KIND`: near pool + fade, but `pebble` in `convertMaterial` gives them
-  ground cover (moss 0.6, `snow: 0`: the shader's global snowline frosted them white below the local one) instead of sway, and
-  FrontSide): clusters of 3–8 jittered, squashed icosahedra (20 tris each), a third sunk, Rock material (lichen photo up close).
-  Last scatter pass (2.5 m cell): p = 0.22 + 0.75 × trail-edge band + 0.6 × stony slope + 0.4 × high ground, × (1 − 0.5 duff
-  away from the trail); off the tread, water and snow. ~76k clusters. Phone spawn +5 draws, +0.01M tris.
+  **Roots + trunk bases (AAA-style, scaled for phones):** `roots()` runs first (own rng `seed + 313`; fir 6, hemlock 5,
+  cedar 7 along its flutes; none on snowy trees or saplings) and returns its angles; `trunk(..., base_rings=True, lobes=)`
+  then packs rings at 0/0.12/0.3/0.6/1.0/1.6/2.4 m, flares smoothly (exponential, e-fold 0.8 r_base) instead of flaring
+  only the bottom ring, and bulges each lobe toward a root (cos⁶, ×0.35, fading with height), so roots grow out of
+  buttresses. Near trunks have 18 sides (20 fluted). Each root is a **fin**: 9 sides × 7 segments, cross-section
+  1.35 r tall × 0.75 r wide at the trunk, flattening to wide and low, its top falling concavely from 0.8–1.2 r_base up the
+  trunk, tapering to 0.35 r0, reach 1.5–2.4 r_base, the tip diving underground. Faces wind (lo[i], hi[i], hi[j], lo[j])
+  (the ring turns clockwise about the root's direction). First tries read as blades, then inside-out black fins, then
+  splayed tubes ("spider legs"). `addTrunkMoss` also does **ground blending**: the bottom ~0.5 m above the ground
+  (`vTmAbove`) fades to damp duff/moss with a ragged edge and the bark photo fades with it. Phone spawn 0.76 → 0.82M tris.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).

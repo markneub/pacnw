@@ -200,7 +200,8 @@ export function addTrunkMoss(material) {
       .replace('#include <common>', `#include <common>
         varying vec3 vTmPos;
         varying vec3 vTmNormal;
-        varying float vTmHeight;`)
+        varying float vTmHeight;
+        varying float vTmAbove;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
         {
           mat4 tmModel = modelMatrix;
@@ -210,6 +211,7 @@ export function addTrunkMoss(material) {
           vTmPos = (tmModel * vec4(transformed, 1.0)).xyz;
           vTmNormal = normalize(mat3(tmModel) * objectNormal);
           vTmHeight = vTmPos.y - tmModel[3].y; // metres above the trunk's base
+          vTmAbove = vTmHeight - 0.3 * length(tmModel[0].xyz); // above the ground (trees are planted 0.3 m deep)
         }`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#define GROUND_COVER
@@ -218,6 +220,7 @@ export function addTrunkMoss(material) {
         varying vec3 vTmPos;
         varying vec3 vTmNormal;
         varying float vTmHeight;
+        varying float vTmAbove;
         float tmHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         float tmNoise(vec2 p) {
           vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -240,6 +243,13 @@ export function addTrunkMoss(material) {
           gcMoss = clamp(max(sleeve * smoothstep(0.35, 0.6, patchy + 0.1 * wetSide), tops * smoothstep(0.4, 0.7, patchy)), 0.0, 1.0) * (1.0 - dry) * 0.75;
           vec3 mossCol = mix(vec3(0.03, 0.055, 0.018), vec3(0.075, 0.105, 0.03), tmNoise(vTmPos.xz * 3.0 + vTmHeight * 2.0));
           diffuseColor.rgb = mix(diffuseColor.rgb, mossCol, gcMoss);
+          // ground blend (as AAA terrain blending): the bottom of the trunk and its roots take on
+          // the damp forest floor's colour, with a ragged edge, so they grow out of the ground
+          // instead of standing on it
+          float soil = 1.0 - smoothstep(0.0, 0.5, vTmAbove + (patchy - 0.5) * 0.35);
+          vec3 duff = mix(vec3(0.07, 0.052, 0.035), vec3(0.045, 0.06, 0.028), tmNoise(vTmPos.xz * 2.3 + 11.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, duff, soil * 0.85);
+          gcMoss = max(gcMoss, soil * 0.85); // the bark photo fades under it too
         }`);
   };
   material.customProgramCacheKey = () => `${prevKey ? prevKey.call(material) : ''}|trunkmoss`;
