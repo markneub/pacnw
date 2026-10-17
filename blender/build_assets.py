@@ -53,6 +53,28 @@ def material(name, rgb, roughness=0.9):
     return mat
 
 
+def is_cards(mat):
+    """Alpha-tested foliage cards (smooth, with custom normals and UVs)."""
+    return mat.name.endswith("Cards")
+
+
+def card_material(name, image_path):
+    """Foliage card material: base colour + alpha from an RGBA image (embedded in the GLB)."""
+    if name in _materials:
+        return _materials[name]
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    bsdf = nt.nodes.get("Principled BSDF")
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(image_path)
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    nt.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+    bsdf.inputs["Roughness"].default_value = 0.85
+    _materials[name] = mat
+    return mat
+
+
 def srgb_to_linear(c):
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
@@ -65,6 +87,8 @@ class MeshBuilder:
         self.faces = []
         self.face_mats = []
         self.face_flat = []  # faces that stay faceted even in a smooth material
+        self.face_uvs = []  # per face: a UV per corner, or None
+        self.custom_normals = {}  # vertex index -> shading normal (foliage cards)
         self.mats = []
 
     def mat_index(self, mat):
@@ -76,10 +100,11 @@ class MeshBuilder:
         self.verts.append(tuple(co))
         return len(self.verts) - 1
 
-    def face(self, idx, mat, flat=False):
+    def face(self, idx, mat, flat=False, uvs=None):
         self.faces.append(tuple(idx))
         self.face_mats.append(self.mat_index(mat))
         self.face_flat.append(flat)
+        self.face_uvs.append(uvs)
 
     def build(self, name, bake_colors=None):
         """
@@ -106,7 +131,17 @@ class MeshBuilder:
                 poly.material_index = mi
                 # bark is smooth-shaded so the close-up bark texture reads as a
                 # round trunk; everything else keeps the faceted low-poly look
-                poly.use_smooth = self.mats[mi].name.endswith("Bark") and not flat
+                poly.use_smooth = (self.mats[mi].name.endswith("Bark") or is_cards(self.mats[mi])) and not flat
+        if any(self.face_uvs):
+            uv = mesh.uv_layers.new(name="UVMap")
+            for poly, uvs in zip(mesh.polygons, self.face_uvs):
+                if uvs:
+                    for li, co in zip(poly.loop_indices, uvs):
+                        uv.data[li].uv = co
+        if self.custom_normals:
+            mesh.update()
+            normals = [self.custom_normals.get(i, tuple(v.normal)) for i, v in enumerate(mesh.vertices)]
+            mesh.normals_split_custom_set_from_vertices(normals)
         obj = bpy.data.objects.new(name, mesh)
         bpy.context.scene.collection.objects.link(obj)
         return obj
@@ -131,6 +166,7 @@ def mats():
         "wood": material("Wood", (0.62, 0.47, 0.3)),
         "sign_post": material("SignPost", (0.33, 0.23, 0.15)),
         "lod": material("LodVertexColor", (1.0, 1.0, 1.0), 0.85),
+        "fir_cards": card_material("FirCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
     }
 
 
@@ -254,6 +290,92 @@ def conifer(name, M, seed, height, crown_base, max_radius, tiers, points,
              # LOD tiers are taller, so the same reach would bury them in snow
              snow_reach=(0.72 + 0.16 * (1.0 - t)) * (0.62 if lod else 1.0))
     return b.build(name, bake_colors=M["lod"] if lod else None)
+
+
+def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=False):
+    """One foliage card (2 tris): u along `fwd`, v along `side`; the tip end droops.
+    Shading normals point away from the trunk and up, so the crown shades as a volume."""
+    corners = []
+    for du, dv in ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)):
+        p = centre + fwd * (du * length) + side * (dv * width)
+        p.z -= droop * max(0.0, du + 0.5) ** 2
+        corners.append(p)
+    idx = [b.v(p) for p in corners]
+    for i, p in zip(idx, corners):
+        out = Vector((p.x - trunk_xy[0], p.y - trunk_xy[1], 0.0))
+        r = max(out.length, 0.3)
+        n = (out / r + Vector((0.0, 0.0, 0.65))).normalized()
+        b.custom_normals[i] = tuple(n)
+    us = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+    if flip_u:
+        us = [(1.0 - u, v) for u, v in us]
+    b.face(idx, mat, uvs=us)
+
+
+def branchy_fir(M, name, seed=1, height=30.0, crown_base=10.5, max_radius=3.6, r_trunk=0.62):
+    """
+    Douglas fir up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
+    then whorls of branches clothed in needle-spray cards, forming a narrow,
+    ragged crown with gaps you can see through.
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    trunk_h = height * 0.97
+    taper = 0.12
+    trunk(b, M["bark"], trunk_h, r_trunk, r_trunk * taper, flare=1.35, sides=10, rings=6)
+    r_at = lambda z: r_trunk * (1.0 - (1.0 - taper) * z / trunk_h)
+    for _ in range(16):  # dead stubs on the bare lower trunk
+        z = rng.uniform(2.5, crown_base + 1.0)
+        a = rng.uniform(0, TAU)
+        L = rng.uniform(0.3, 1.3)
+        base = Vector((math.cos(a) * r_at(z) * 0.85, math.sin(a) * r_at(z) * 0.85, z))
+        tip = base + Vector((math.cos(a) * L, math.sin(a) * L, -L * rng.uniform(0.1, 0.5)))
+        _stick(b, M["snag"], base, tip, rng.uniform(0.03, 0.06))
+
+    cards = M["fir_cards"]
+    up = Vector((0.0, 0.0, 1.0))
+    z = crown_base
+    while z < height - 0.8:
+        t = (z - crown_base) / (height - crown_base)
+        # narrow crown: fills out over the first fifth, then tapers to the leader
+        prof = min(1.0, t / 0.2) ** 0.5 * (1.0 - t) ** 0.9 / 0.82
+        nb = rng.choice((4, 5, 5, 6))
+        a0 = rng.uniform(0, TAU)
+        for i in range(nb):
+            if rng.random() < 0.12:
+                continue  # gaps make the crown ragged and see-through
+            a = a0 + TAU * i / nb + rng.uniform(-0.4, 0.4)
+            L = max(0.45, max_radius * prof * rng.uniform(0.6, 1.25))
+            horiz = Vector((math.cos(a), math.sin(a), 0.0))
+            side0 = Vector((-math.sin(a), math.cos(a), 0.0))
+            elev = 0.35 * t - 0.12 + rng.uniform(-0.08, 0.08)  # lower branches droop, upper sweep up
+            sag = rng.uniform(0.12, 0.28)
+            base = horiz * (r_at(z) * 0.8) + Vector((0.0, 0.0, z))
+
+            def at(s):
+                return base + horiz * (L * s) + up * (L * (elev * s - sag * s * s))
+
+            _stick(b, M["bark"], base, at(0.85), 0.03 + 0.025 * L)
+            n_cards = max(2, round(L / 0.6))
+            for k in range(n_cards):
+                s = 0.22 + 0.78 * (k + 0.5) / n_cards
+                c = at(s)
+                fwd = (at(min(1.0, s + 0.05)) - at(max(0.0, s - 0.05))).normalized()
+                roll = rng.uniform(-0.6, 0.6)
+                side = side0 * math.cos(roll) + fwd.cross(side0).normalized() * math.sin(roll)
+                cl = min(1.6, 0.8 + L * 0.3) * rng.uniform(0.85, 1.1)
+                _card(b, cards, c, fwd, side, cl, cl * 0.9, 0.12 * cl, (0.0, 0.0), flip_u=rng.random() < 0.5)
+                if rng.random() < 0.7:  # a crossed card for volume seen from the side
+                    side2 = side0 * math.cos(roll + 1.4) + fwd.cross(side0).normalized() * math.sin(roll + 1.4)
+                    _card(b, cards, c, fwd, side2, cl * 0.8, cl * 0.6, 0.08 * cl, (0.0, 0.0))
+        z += rng.uniform(0.38, 0.6) * (1.0 - 0.35 * t)
+    # leader: a few upright sprays at the top
+    for k in range(3):
+        a = k * TAU / 3 + rng.uniform(0, 0.5)
+        horiz = Vector((math.cos(a), math.sin(a), 0.0))
+        c = Vector((horiz.x * 0.15, horiz.y * 0.15, height - 0.9))
+        _card(b, cards, c, up, horiz.cross(up), 1.4, 0.7, 0.0, (0.0, 0.0))
+    return b.build(name)
 
 
 def douglas_fir(M, name, snow, seed=1, lod=False):
@@ -529,7 +651,7 @@ def main():
     reset_scene()
     M = mats()
 
-    douglas_fir(M, "fir", snow=False)
+    branchy_fir(M, "fir")
     douglas_fir(M, "fir_snow", snow=True)
     hemlock(M, "hemlock", snow=False)
     hemlock(M, "hemlock_snow", snow=True)
@@ -539,7 +661,10 @@ def main():
     snag(M, "snag")
 
     # far-distance versions (one material, colours in vertex colours)
-    douglas_fir(M, "fir_lod", snow=False, lod=True)
+    # matches the branchy fir's silhouette (only used by ?farTrees=lod; impostors bake the near model)
+    conifer("fir_lod", M, 1, height=30.0, crown_base=10.5, max_radius=3.0, tiers=6, points=5,
+            foliage=[M["needles"], M["needles_dark"]], trunk_mat=M["bark"], droop=0.3,
+            r_trunk=0.62, lod=True)
     douglas_fir(M, "fir_snow_lod", snow=True, lod=True)
     hemlock(M, "hemlock_lod", snow=False, lod=True)
     hemlock(M, "hemlock_snow_lod", snow=True, lod=True)
@@ -566,7 +691,7 @@ def main():
         export_apply=True,
         export_yup=True,
         export_normals=True,
-        export_texcoords=False,
+        export_texcoords=True,
         export_materials="EXPORT",
         export_vertex_color="ACTIVE",
     )

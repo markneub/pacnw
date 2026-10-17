@@ -76,6 +76,32 @@ export async function loadPrototypes(urls) {
   return protos;
 }
 
+/**
+ * Alpha-tested foliage cards: both faces shaded with the card's own normal
+ * (three flips it on back faces, which would make the underside of every
+ * spray dark), and alpha boosted with the mip level so sprays don't thin out
+ * and vanish with distance (averaged alpha drops below the test threshold).
+ */
+function patchCards(mat) {
+  const prev = mat.onBeforeCompile;
+  const prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (shader, renderer) => {
+    prev?.call(mat, shader, renderer);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <alphatest_fragment>', `
+        #ifdef USE_MAP
+        {
+          vec2 cardTexel = vMapUv * vec2(textureSize(map, 0));
+          float cardMip = max(0.0, 0.5 * log2(max(dot(dFdx(cardTexel), dFdx(cardTexel)), dot(dFdy(cardTexel), dFdy(cardTexel)))));
+          diffuseColor.a *= 1.0 + cardMip * 0.3;
+        }
+        #endif
+        #include <alphatest_fragment>`)
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');
+  };
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards`;
+}
+
 // Scanned-rock materials waiting for their textures (applyRockTextures).
 const scanMaterials = [];
 
@@ -83,6 +109,7 @@ function convertMaterial(src, assetName, lod, cache) {
   const kind = KIND(assetName);
   const swapXY = assetName === 'log'; // lies along X: run the bark furrows along it
   const scan = src.name.startsWith('ScanRock');
+  const cards = src.name.endsWith('Cards');
   const key = `${src.name}|${kind}|${lod}|${swapXY}`;
   if (cache.has(key)) return cache.get(key);
 
@@ -92,15 +119,24 @@ function convertMaterial(src, assetName, lod, cache) {
     color: scan ? new THREE.Color(0.3, 0.3, 0.29) : src.color.clone(),
     roughness: src.roughness ?? 0.9,
     metalness: 0,
-    // bark is smooth so trunks read as round; scans have real smooth surfaces
-    flatShading: !src.name.endsWith('Bark') && !scan,
-    side: kind === 'ferns' ? THREE.DoubleSide : THREE.FrontSide,
+    // bark is smooth so trunks read as round; scans have real smooth surfaces;
+    // foliage cards carry their own (outward-pointing) normals
+    flatShading: !src.name.endsWith('Bark') && !scan && !cards,
+    side: kind === 'ferns' || cards ? THREE.DoubleSide : THREE.FrontSide,
   });
+  if (cards) {
+    mat.map = src.map; // the needle spray (RGBA, embedded in the GLB)
+    mat.alphaTest = 0.5;
+    // the spray texture is painted bright; deepen it to Douglas fir green so it
+    // sits with the other conifers (the impostor bake reads this colour too)
+    mat.color.setRGB(0.55, 0.6, 0.52);
+  }
   // needles shed water and scatter light: keep sky reflections off foliage
-  if (/Needles|Foliage|Fern/.test(src.name)) mat.envMapIntensity = 0.35;
+  if (/Needles|Foliage|Fern|Cards/.test(src.name)) mat.envMapIntensity = 0.35;
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns') addWindSway(mat, 2.5, undefined, 'fade');
   else addGroundCover(mat, { lod, moss: scan ? 0.35 : 1 }); // scans have their own moss
+  if (cards) patchCards(mat);
   // close-up bark / rock photos (not on far tiers: they're never close).
   // On scans the tiling lichen is only a fine grain over their own photo.
   const layer = surfaceLayerFor(src.name);
@@ -319,7 +355,7 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
 
   // Instance colour for one part: foliage/rock parts get the per-instance
   // tint, everything gets the baked canopy shade.
-  const TINTABLE = /Needles|Foliage|Fern|Rock|LodVertexColor/;
+  const TINTABLE = /Needles|Foliage|Fern|Rock|LodVertexColor|Cards/;
   const instanceColors = (partName, tints, shades, n) => {
     const out = new Float32Array(n * 3);
     const tinted = TINTABLE.test(partName);

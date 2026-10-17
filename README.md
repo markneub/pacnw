@@ -60,6 +60,8 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/perf.js` | `?perf` overlay |
 | `src/bench.js` | `?bench` device benchmark |
 | `src/autores.js` | Lowers render resolution if frames keep missing 60 fps |
+| `src/impostors.js` | Far trees as baked billboards (8 views per tree type, lit with baked normals) |
+| `tools/make_foliage.py` | Paints the needle-spray texture for the branch cards |
 | `src/grass.js` | Grass blades around the camera (instanced tufts, GPU-placed, wind) |
 | `src/weather.js` | GPU rain streaks and snowflakes in a box around the camera, fog and light that shift with altitude, procedural rain/wind audio |
 | `src/player.js` | First-person walker that follows the terrain (keyboard/mouse, plus an analog `stick` and `look()` for touch) |

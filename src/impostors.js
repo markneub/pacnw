@@ -19,30 +19,53 @@ import { patchLod } from './materials.js';
 
 const VIEWS = 8;
 
-/** Unlit bake shaders: colour (gamma-2 encoded into 8 bits) and view-space flat normal. */
-function bakeMaterial(kind, color) {
+/**
+ * Unlit bake shaders: colour (gamma-2 encoded into 8 bits) and view-space
+ * normal. Faceted parts use their flat face normal (as three's flatShading
+ * does); foliage cards (with a map) use their own vertex normals and are cut
+ * out by the map's alpha, like in the game.
+ */
+function bakeMaterial(kind, src) {
+  const cards = !!src.map;
   return new THREE.ShaderMaterial({
     vertexColors: true,
-    uniforms: { uColor: { value: color.clone() } },
+    side: cards ? THREE.DoubleSide : THREE.FrontSide,
+    defines: cards ? { CARDS: '' } : {},
+    uniforms: { uColor: { value: src.color.clone() }, uMap: { value: src.map ?? null } },
     vertexShader: /* glsl */ `
       uniform vec3 uColor;
       varying vec3 vCol;
       varying vec3 vViewPos;
+      varying vec3 vN;
+      varying vec2 vUv;
       void main() {
         vCol = uColor * color.rgb; // material colour x baked prototype AO
+        vN = normalMatrix * normal;
+        #ifdef CARDS
+          vUv = uv;
+        #endif
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         vViewPos = -mv.xyz;
         gl_Position = projectionMatrix * mv;
       }`,
-    fragmentShader: kind === 'albedo' ? /* glsl */ `
+    fragmentShader: /* glsl */ `
+      uniform sampler2D uMap;
       varying vec3 vCol;
-      void main() { gl_FragColor = vec4(sqrt(vCol), 1.0); }`
-      : /* glsl */ `
       varying vec3 vViewPos;
+      varying vec3 vN;
+      varying vec2 vUv;
       void main() {
-        // the same flat normal three uses for flatShading, in the bake camera's space
-        vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
-        gl_FragColor = vec4(n * 0.5 + 0.5, 1.0);
+        vec3 col = vCol;
+        #ifdef CARDS
+          vec4 t = texture2D(uMap, vUv);
+          if (t.a < 0.5) discard;
+          col *= t.rgb; // sRGB texture: the GPU decodes to linear on read
+          vec3 n = normalize(vN);
+        #else
+          // the same flat normal three uses for flatShading, in the bake camera's space
+          vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
+        #endif
+        gl_FragColor = ${kind === 'albedo' ? 'vec4(sqrt(col), 1.0)' : 'vec4(n * 0.5 + 0.5, 1.0)'};
       }`,
   });
 }
@@ -129,7 +152,7 @@ export function bakeImpostors(renderer, protoParts, { frameW = 128 } = {}) {
 
     ['albedo', 'normal'].forEach((kind, t) => {
       scene.clear();
-      for (const { geometry, material } of parts) scene.add(new THREE.Mesh(geometry, bakeMaterial(kind, material.color)));
+      for (const { geometry, material } of parts) scene.add(new THREE.Mesh(geometry, bakeMaterial(kind, material)));
       cam.left = -reach;
       cam.right = reach;
       cam.top = yMax;

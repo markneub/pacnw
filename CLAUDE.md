@@ -18,6 +18,19 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 ## Assets (Blender)
 
 - Trees/ferns/logs/furniture are procedural in `blender/build_assets.py` → `public/models/forest.glb` (committed).
+  **Tree overhaul (step 2, in progress):** `fir` is now `branchy_fir`. The trunk is 30 m and bare (dead SnagBark stubs) up to
+  10.5 m, then whorls every 0.38–0.6 m of 4–6 branches (12% skipped for gaps). Each branch is a bark `_stick` plus needle
+  **cards** along it (2 tris each, ~70% get a crossed second card), in a narrow ragged crown (max radius 3.6 m). Cards use
+  the `FirCards` material: RGBA `public/textures/foliage/fir_spray.png` from `tools/make_foliage.py` (PIL, colour bled into
+  transparent texels), embedded in the GLB. They have UVs and custom normals (outward from the trunk + up). `MeshBuilder` gained
+  `uvs=` per face and `custom_normals`, and the export has texcoords on. Materials whose name ends in "Cards" are smooth-shaded.
+  In JS (`convertMaterial` → `patchCards`): map + alphaTest 0.5, DoubleSide, colour (0.55, 0.6, 0.52), the back-face normal
+  flip undone, and alpha × (1 + 0.3·mip level) so sprays don't vanish with distance. The impostor bake samples the map and
+  uses vertex normals for cards. `fir_lod` is a matching narrow cone (only for `?farTrees=lod`). `fir_snow`, hemlock, cedar
+  and sapling are still the old cone trees. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M tris,
+  draws unchanged. CROWN fir 3.3. Reference photos: `inspo/README.md`. Gotcha: when adding a material patch in
+  `convertMaterial`, don't splice an `if` into the wind-sway/ground-cover if/else chain. It turned every tree into
+  moss-speckled rock.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
 - No Blender binary in the container. Use the PyPI module:
   `python3 -m venv <scratch>/bvenv && <scratch>/bvenv/bin/pip install bpy` (bpy 5.x works with Python 3.13),
