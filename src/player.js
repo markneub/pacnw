@@ -23,7 +23,8 @@ export class Player {
     this.locked = false;
     this.stick = new THREE.Vector2(); // analog input: x = strafe, y = forward, length 0..1
     this.moveDir = new THREE.Vector3(); // reused each frame (no per-frame garbage)
-    this.levelPitch = false; // one-thumb touch steering: ease the view back to level
+    this.levelPitch = false; // one-thumb touch steering: ease the view to follow the ground ahead
+    this.slopePitch = 0; // smoothed pitch of the ground ahead (radians)
 
     camera.rotation.order = 'YXZ';
 
@@ -66,7 +67,19 @@ export class Player {
     let fwdIn = fwd;
     let strafeIn = strafe;
     let throttle = 1;
-    if (this.levelPitch) this.pitch *= Math.exp(-dt * 1.2);
+    if (this.levelPitch) {
+      // look along the ground ahead rather than at the horizon: up a hill you
+      // see the slope you're climbing, not the dirt in front of your face
+      const fx = -Math.sin(this.yaw);
+      const fz = -Math.cos(this.yaw);
+      // average gradient over the next 10 m (one sample would catch every bump and gully)
+      const h0 = groundAt(this.pos.x, this.pos.z);
+      let grade = 0;
+      for (let d = 2; d <= 10; d += 2) grade += (groundAt(this.pos.x + fx * d, this.pos.z + fz * d) - h0) / d;
+      const target = THREE.MathUtils.clamp(Math.atan(grade / 5) * 0.8, -0.55, 0.55);
+      this.slopePitch += (target - this.slopePitch) * (1 - Math.exp(-dt * 3));
+      this.pitch += (this.slopePitch - this.pitch) * (1 - Math.exp(-dt * 1.2));
+    }
 
     const stickLen = Math.min(1, this.stick.length());
     if (stickLen > 0.12) {

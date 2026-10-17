@@ -63,7 +63,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `groundAt` across/along `trail.points` in node. Re-check them after changing the route or widths.
 - `src/touch.js`: one-thumb scheme. The first finger is the steer: its horizontal movement turns (swipe-style, ~130° per
   screen width), and its vertical offset from the touch point is the throttle (up 80 px = full, run when
-  >0.92; down = slow reverse). It sets `player.levelPitch`, which eases pitch to level. An optional second
+  >0.92; down = slow reverse). It sets `player.levelPitch`, which eases pitch toward the ground ahead (0.8 × the angle of the mean gradient to points 2, 4, … 10 m ahead along the heading, clamped ±0.55 rad, smoothed), so climbing or descending you look along the slope, not into it. An optional second
   finger is free look. No on-screen touch UI and no jumping (both removed at the user's request). Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
   turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, half the
   particles). Override with `?quality=low|high`.
