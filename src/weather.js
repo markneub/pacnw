@@ -230,7 +230,7 @@ const LOW = {
   sunIntensity: 0.8,
 };
 const OVERCAST_DIR = new THREE.Vector3(-0.4, 1, 0.3).normalize(); // the diffuse "sun" behind the cloud deck
-const SUN_FOG = new THREE.Color(0xb9c2b8); // sunlit haze: a touch warmer and brighter
+const SUN_FOG = new THREE.Color(0xa7b8c6); // sunlit haze: the pale blue-grey of a blue sky's aerial perspective
 const SUN_HEMI = new THREE.Color(0xb4c8de); // blue sky between the clouds
 const HIGH = {
   fog: new THREE.Color(0xc4ccd4),

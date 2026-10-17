@@ -209,6 +209,14 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   world-anchored noise makes drifting mist banks. Sky dome + PMREM environment
   (`scene.environmentIntensity` 0.55; foliage `envMapIntensity` 0.35 or it looks grey).
   Don't bring back camera-facing mist sprites: on phones their hard edges looked like confetti.
+  **Sky** (`skyFragment`): overcast = horizon→zenith blend × a deck of fbm masses in stretched rolls (0.82–1.1) × a faster,
+  darker scud layer, faded toward the horizon. Sun break = deep blue (zenith (0.035, 0.1, 0.27), pale toward the horizon:
+  values are pre-ACES, and lighter blues washed out), a few cumulus (own fbm on a softer `d.xz / (d.y + 0.18)` projection
+  so they foreshorten instead of smearing near the horizon; coverage smoothstep(0.63, 0.7); sun-side shading by probing the
+  noise toward the sun; lit side 0.62 so it isn't blown), and a distinct ~1° sun disk (`smoothstep(0.99995, 0.99998, cosθ)`
+  × 14, dimmed 60% behind cloud) with a tight halo (pow 6000/300/8). Sunny fog `SUN_FOG` is blue-grey 0xa7b8c6 to match;
+  the fog chunk's forward sun glow was halved (it clipped the brighter haze to cream-white). The god-ray bright pass is
+  limited to right around the sun (exp(−5d²), lum 0.75–0.98) so bright clouds don't smear into glare.
 - **Close-up ground detail** (`src/grounddetail.js`): photographic albedo + normal maps for 4 layers (forest
   floor, rock, snow, mud/dirt), weighted by per-vertex `aLayers` (terrain `groundLayers()`, trail tread/banks →
   dirt), within `uGDRange` (20–45 m desktop, 15–32 m phone). The photo *modulates* the existing colour

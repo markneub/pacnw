@@ -95,8 +95,8 @@ export class Post {
           + texture2D(tScene, vUv + uTexel * vec2(-1.0, 1.0)).rgb + texture2D(tScene, vUv + uTexel * vec2(1.0, 1.0)).rgb);
         float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
         vec2 d = (vUv - uSunUv) * vec2(uAspect, 1.0);
-        float nearSun = exp(-dot(d, d) * 1.0);
-        float rays = smoothstep(0.62, 0.95, lum) * nearSun;
+        float nearSun = exp(-dot(d, d) * 5.0); // glare from the sun and the sky right around it, not every bright cloud
+        float rays = smoothstep(0.75, 0.98, lum) * nearSun;
         gl_FragColor = vec4(c * rays, 1.0);
       }`, { tScene: { value: null }, uSunUv: { value: this.sunUv }, uAspect: { value: 1 }, uTexel: { value: new THREE.Vector2() } });
 

@@ -75,7 +75,7 @@ export function installHeightFog() {
       // where the mist is thick, so banks catch the light
       vec3 fogView = normalize(vFogWorld - cameraPosition);
       float fogMie = max(dot(fogView, ${v3(SUN_DIR)}), 0.0);
-      vec3 fogCol = fogColor + ${v3(SUN_COLOR)} * fogSun * (0.55 * pow(fogMie, 6.0) + 0.25 * pow(fogMie, 2.0)) * (0.6 + 0.6 * bank);
+      vec3 fogCol = fogColor + ${v3(SUN_COLOR)} * fogSun * (0.28 * pow(fogMie, 6.0) + 0.12 * pow(fogMie, 2.0)) * (0.6 + 0.6 * bank);
       gl_FragColor.rgb = mix(gl_FragColor.rgb, fogCol, fogFactor);
     #endif`;
 }
@@ -104,24 +104,49 @@ const skyFragment = /* glsl */ `
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(sHash(i), sHash(i + vec2(1, 0)), f.x), mix(sHash(i + vec2(0, 1)), sHash(i + vec2(1, 1)), f.x), f.y);
   }
+  float fbm(vec2 p) { return sNoise(p) * 0.5 + sNoise(p * 2.03 + 1.7) * 0.28 + sNoise(p * 4.1 + 3.1) * 0.14 + sNoise(p * 8.3 + 7.7) * 0.08; }
   void main() {
     vec3 d = normalize(vDir);
     float up = clamp(d.y, 0.0, 1.0);
-    // overcast skies are brightest overhead and fade into the fog at the horizon
+    float sunCos = dot(d, SUN_DIR);
+
+    // --- overcast: a mottled deck of heavier and lighter masses in slow rolls,
+    // with a lower, darker layer of ragged scud drifting faster beneath it
+    vec2 deck = d.xz / max(d.y, 0.06);
+    vec2 dp = deck * vec2(0.9, 1.6) + vec2(uTime * 0.010, uTime * 0.003); // stretched: rolls
+    float mass = fbm(dp * 0.8);
     vec3 col = mix(uHorizon, uZenith, smoothstep(0.02, 0.55, up));
-    // slow-moving cloud mottling, projected onto a flat cloud deck
-    vec2 deck = d.xz / max(d.y, 0.08) * 1.4 + vec2(uTime * 0.012, uTime * 0.004);
-    float c = sNoise(deck) * 0.55 + sNoise(deck * 2.3) * 0.3 + sNoise(deck * 5.1) * 0.15;
-    col *= 0.93 + 0.12 * c * smoothstep(0.0, 0.3, up);
-    // sun break: the deck tears into cloud with blue between, and the sun glows
-    float sunCos = max(dot(d, SUN_DIR), 0.0);
-    float clouds = smoothstep(0.42, 0.68, c);
-    vec3 blue = mix(vec3(0.42, 0.58, 0.78), vec3(0.62, 0.72, 0.82), 1.0 - up);
-    vec3 cloud = mix(vec3(0.86, 0.87, 0.88), vec3(1.0, 0.92, 0.8), pow(sunCos, 4.0));
-    vec3 broken = mix(blue, cloud, clouds);
-    broken = mix(broken, uHorizon * 1.15, 1.0 - smoothstep(0.0, 0.25, up)); // still hazy low down
-    col = mix(col, broken, uSun);
-    col += SUN_COLOR * uSun * (pow(sunCos, 900.0) * 6.0 + pow(sunCos, 40.0) * 0.6 + pow(sunCos, 6.0) * 0.18);
+    float shadeDeck = mix(0.82, 1.1, smoothstep(0.3, 0.75, mass));
+    float scud = smoothstep(0.55, 0.8, fbm(deck * 1.7 + vec2(uTime * 0.035, uTime * 0.012)));
+    float lowDeck = smoothstep(0.0, 0.35, up); // fades into the fog toward the horizon
+    col *= mix(1.0, shadeDeck * (1.0 - 0.18 * scud), lowDeck);
+
+    // --- sun break: blue sky with a few fair-weather cumulus and the sun itself
+    vec3 zen = vec3(0.035, 0.1, 0.27);
+    vec3 hor = vec3(0.2, 0.28, 0.38);
+    vec3 blue = mix(hor, zen, pow(smoothstep(0.0, 0.85, up), 0.6));
+    // cumulus: their own, larger noise; only the tops of it become cloud, so there are few
+    // a softer projection than the deck's (clouds near the horizon foreshorten instead of smearing)
+    vec2 cp = d.xz / (d.y + 0.18) * 0.9 + vec2(uTime * 0.006, uTime * 0.002);
+    float cd = fbm(cp);
+    float cloud = smoothstep(0.63, 0.7, cd) * smoothstep(0.04, 0.2, up);
+    // shading: denser toward the sun = that side is in the cloud's own shadow
+    vec2 toSun = normalize(SUN_DIR.xz) * 0.06;
+    float self = clamp((fbm(cp + toSun) - cd) * 6.0, -1.0, 1.0);
+    vec3 lit = vec3(1.0, 0.96, 0.9) * 0.62; // white after exposure, not blown
+    vec3 base = vec3(0.42, 0.46, 0.52);
+    vec3 cumulus = mix(lit, base, clamp(0.35 + 0.65 * self, 0.0, 1.0) * smoothstep(0.63, 0.92, cd));
+    // thin edges near the sun light up (silver lining)
+    cumulus += vec3(1.0, 0.85, 0.6) * pow(max(sunCos, 0.0), 60.0) * (1.0 - smoothstep(0.63, 0.69, cd)) * 0.6;
+    vec3 sunny = mix(blue, cumulus, cloud);
+    // haze low down, meeting the fog
+    sunny = mix(sunny, uHorizon * 1.05, 1.0 - smoothstep(0.0, 0.16, up));
+    // the sun: a distinct ~1 degree disk, a tight halo, and a softer glow (dimmed behind cloud)
+    float disk = smoothstep(0.99995, 0.99998, sunCos);
+    float s = max(sunCos, 0.0);
+    vec3 sunLight = SUN_COLOR * (disk * 14.0 * (1.0 - 0.6 * cloud) + pow(s, 6000.0) * 0.6 + pow(s, 300.0) * 0.12 + pow(s, 8.0) * 0.06);
+    col = mix(col, sunny, uSun);
+    col += sunLight * uSun;
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
