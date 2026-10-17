@@ -334,6 +334,14 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   40 fps steps down. Load in the container (SwiftShader) is ~11 s, ~8 s of it the software-rendered
   warm-up; much faster on a real GPU.
 
+## Backlog (agreed with the user)
+
+- More rock variation: more boulder shapes/sizes (outcrops, half-buried slabs, talus on steep slopes) and loose pebbles /
+  small stones on the ground (cheap instanced near-pool clutter, denser on the trail edges, creek-free slopes and below cliffs).
+- Wet look in rain (glossier trunks/rocks, drips, puddles reflecting the sky). Sharper god-ray shafts (1 m canopy map).
+- Sound: footsteps by surface, birdsong in sun breaks, drips after rain. Subtle head bob (no option: opinionated).
+- Tree mid-LOD between full detail and impostors if the frame budget gets tight.
+
 ## Headless screenshots (how to see the scene)
 
 - Chromium is at `/opt/pw-browsers`, and Playwright is installed globally at `/opt/node-tools/node_modules/playwright`.
