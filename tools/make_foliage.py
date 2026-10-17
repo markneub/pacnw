@@ -344,6 +344,54 @@ def moss_strands(seed=23):
     return finish(img, (512, 256))
 
 
+def salal_spray(seed=29):
+    """
+    A salal shoot, 2:1 (u along the shoot, base at u = 0): a zig-zag reddish
+    stem with alternate, leathery ovate leaves (pointed tips, a pale midrib,
+    finely toothed edges), darker and older near the base, a lighter fresh
+    pair at the tip.
+    """
+    rng = random.Random(seed)
+    W, H = 512 * SS, 256 * SS
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    stem = []
+    n = 9
+    for i in range(n + 1):
+        f = i / n
+        stem.append((0.02 * W + 0.8 * W * f, H * 0.5 + (H * 0.03 if i % 2 else -H * 0.03) * (0.3 + f)))
+    for i in range(n):
+        d.line([stem[i], stem[i + 1]], fill=(110, 70, 48, 255), width=int((3.2 - 1.8 * i / n) * SS))
+    old, young = (34, 62, 30), (88, 122, 46)
+    for i in range(1, n + 1):
+        f = i / n
+        bx, by = stem[i] if i < n else stem[n]
+        side = 1 if i % 2 else -1
+        L = H * (0.36 + 0.1 * math.sin(f * math.pi)) * rng.uniform(0.85, 1.05) * (0.75 if i == n else 1.0)
+        ang = math.radians(rng.uniform(40, 62)) if i < n else 0.0
+        dx, dy = math.cos(ang), side * math.sin(ang)
+        px, py = -dy, dx
+        col = lerp(old, young, f ** 2)
+        col = tuple(max(0, min(255, c + rng.randint(-8, 8))) for c in col)
+        wid = L * rng.uniform(0.55, 0.65)
+        pts_a, pts_b = [], []
+        steps = 16
+        for k in range(steps + 1):
+            g = k / steps
+            half = wid * 0.5 * math.sin(math.pi * min(1.0, g * 0.95 + 0.05)) ** 0.7 * (1 - g) ** 0.35
+            tooth = wid * 0.025 * (1 if k % 2 else -1) if 0 < k < steps else 0.0
+            cx, cy = bx + dx * L * g, by + dy * L * g
+            pts_a.append((cx + px * (half + tooth), cy + py * (half + tooth)))
+            pts_b.append((cx - px * (half - tooth), cy - py * (half - tooth)))
+        d.polygon(pts_a + pts_b[::-1], fill=col + (255,))
+        # a lighter, glossy band on one side of the midrib, and the midrib itself
+        hi = lerp(col, (150, 175, 120), 0.25)
+        d.polygon([(bx + dx * L * g + px * wid * 0.18 * math.sin(math.pi * g), by + dy * L * g + py * wid * 0.18 * math.sin(math.pi * g)) for g in [k / 10 for k in range(11)]]
+                  + [(bx + dx * L * g, by + dy * L * g) for g in [1 - k / 10 for k in range(11)]], fill=hi + (255,))
+        d.line([(bx, by), (bx + dx * L * 0.92, by + dy * L * 0.92)], fill=lerp(col, (170, 180, 120), 0.45) + (255,), width=max(2, SS))
+    return finish(img, (512, 256))
+
+
 SPRAYS = {
     # Douglas fir: longer needles, a few stiff side shoots
     "fir_spray": dict(seed=7, old=(34, 64, 36), new=(92, 128, 52)),
@@ -356,6 +404,7 @@ SPRAYS = {
     "snow_clumps": snow_clumps,
     "fern_frond": fern_frond,
     "moss_strands": moss_strands,
+    "salal_spray": salal_spray,
 }
 
 

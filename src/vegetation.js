@@ -13,7 +13,7 @@ import { NearPool } from './detail.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
 import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.js';
 
-const KIND = (name) => (name.startsWith('fern') ? 'ferns'
+const KIND = (name) => (/^(fern|salal)/.test(name) ? 'ferns'
   : /^(boulder|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
 
 /** Deterministic 0..1 hash of a position (for choices that mustn't consume scatter rng). */
@@ -150,6 +150,7 @@ const CARD_TINT = {
   SnowCards: [0.95, 0.97, 1.0],
   FernCards: [0.8, 0.85, 0.74],
   MossCards: [0.55, 0.58, 0.5],
+  SalalCards: [0.72, 0.76, 0.68],
 };
 
 // Scanned-rock materials waiting for their textures (applyRockTextures).
@@ -370,6 +371,23 @@ function scatter(trail) {
       add(rng() < 0.5 ? 'fern_a' : 'fern_b', {
         x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.9 + rng() * 0.9, tint: rng(),
       });
+    }
+  }
+
+  // Salal: dense patches of low leathery shrubs (after the ferns, so nothing above moves)
+  const salalCell = 2.0;
+  for (let gz = -half; gz < half; gz += salalCell) {
+    for (let gx = -half; gx < half; gx += salalCell) {
+      const x = gx + rng() * salalCell;
+      const z = gz + rng() * salalCell;
+      const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
+      const patch = THREE.MathUtils.smoothstep(nForest(x * 0.028 + 90, z * 0.028 + 11) * 0.5 + 0.5, 0.52, 0.72);
+      if (rng() > f * patch * 1.1) continue;
+      const h = heightAt(x, z);
+      if (h < WATER_LEVEL + 1.5 || h > SNOWLINE - 40) continue;
+      if (slopeAt(x, z) > 0.4) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.6) continue;
+      add('salal', { x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.7, tint: rng() });
     }
   }
 

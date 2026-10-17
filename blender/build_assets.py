@@ -173,6 +173,7 @@ def mats():
         "fir_frost_cards": card_material("FirFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
         "hemlock_frost_cards": card_material("HemlockFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
         "moss_cards": card_material("MossCards", os.path.join(ROOT, "public", "textures", "foliage", "moss_strands.png")),
+        "salal_cards": card_material("SalalCards", os.path.join(ROOT, "public", "textures", "foliage", "salal_spray.png")),
         "fern_cards": card_material("FernCards", os.path.join(ROOT, "public", "textures", "foliage", "fern_frond.png")),
         "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
     }
@@ -591,6 +592,47 @@ def fern(M, name, seed, fronds=30):
     return b.build(name)
 
 
+def salal(M, name, seed, shoots=16):
+    """
+    Salal: a low, dense shrub of arching leafy shoots (salal_spray.png on 2:1
+    cards, u from the base to the tip), more upright in the middle. Shading
+    normals point out of the clump and up, as for ferns.
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    mat = M["salal_cards"]
+    segs = 3
+    for f in range(shoots):
+        a = TAU * f / shoots + rng.uniform(-0.3, 0.3)
+        inner = rng.random()
+        length = rng.uniform(0.55, 0.9)
+        elev0 = math.radians(30 + 45 * inner)
+        bend = math.radians(rng.uniform(25, 50))
+        width = length / 2.0
+        d = Vector((math.cos(a), math.sin(a), 0.0))
+        side = Vector((-math.sin(a), math.cos(a), 0.0))
+        roll = rng.uniform(-0.5, 0.5)
+        side_t = (side * math.cos(roll) + Vector((0, 0, math.sin(roll)))).normalized()
+        p = Vector((d.x * rng.uniform(0.0, 0.25), d.y * rng.uniform(0.0, 0.25), 0.0))
+        rows = []
+        for s_ in range(segs + 1):
+            t = s_ / segs
+            if s_ > 0:
+                elev = elev0 - bend * t
+                p = p + (d * math.cos(elev) + Vector((0, 0, math.sin(elev)))) * (length / segs)
+            l_ = b.v(p + side_t * (width * 0.5))
+            r_ = b.v(p - side_t * (width * 0.5))
+            for i in (l_, r_):
+                co = Vector(b.verts[i])
+                out = Vector((co.x, co.y, 0.0))
+                b.custom_normals[i] = tuple((out / max(out.length, 0.15) + Vector((0, 0, 1.1))).normalized())
+            rows.append((l_, r_, t))
+        for s_ in range(segs):
+            (l0, r0, t0), (l1, r1, t1) = rows[s_], rows[s_ + 1]
+            b.face((r0, r1, l1, l0), mat, uvs=[(t0, 0.0), (t1, 0.0), (t1, 1.0), (t0, 1.0)])
+    return b.build(name)
+
+
 def log(M, name, seed, length=9.0, radius=0.55, sides=10):
     """Fallen, slightly bent log lying along X with exposed wood at the ends."""
     rng = random.Random(seed)
@@ -794,6 +836,7 @@ def main():
 
     fern(M, "fern_a", 21)
     fern(M, "fern_b", 22, fronds=24)
+    salal(M, "salal", 31)
     log(M, "log", 31)
     stump(M, "stump", 41)
 
