@@ -35,7 +35,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   J-shaped branches (elev down, *negative* sag curves the tips up), `hang=0.55` hangs sprays vertically like curtains,
   `card_every=0.6, cross=0.35` (was 0.45/0.7: the phone bench showed trees 3.4 ms / frame 7.3 ms at cedar-rich spawn), `flutes=7` buttress ridges on the lower 12% of the trunk (`trunk(flutes=, flute_h=)`), and
   CedarBark. `cedar_spray()` paints flat scale-leaf fans (overlapping lobes, not needles). Tint (0.5, 0.56, 0.46). ~3.9k tris.
-  `?bench=trees,near40` measures what a 40 m phone detail radius (vs 60) would save. New `branchy_conifer` options consume no extra rng unless used, so fir/hemlock stay identical. All cards
+  `?bench=trees,near40` measured: 40 m vs 60 m saves 1.0 ms at spawn (full 7.5 ms, trees 2.9), 0.0 in the forest, so phones went to 40 m. New `branchy_conifer` options consume no extra rng unless used, so fir/hemlock stay identical. All cards
   are now darkened up to 40% where the visible side faces away from the card normal (crown undersides seen from below
   were sky-lit and pale). `fir_snow`, `hemlock_snow` and sapling are still the old cone trees. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M (fir) → 0.60M (hemlock) → 0.75M (cedar) → 0.70M (lighter cedar) tris,
   draws unchanged. CROWN fir 3.3. Phone bench with branchy fir + hemlock (full clock): trees "saves" spawn 0.7 → 2.0 ms,
@@ -92,7 +92,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   that also work on textured materials.
 - **Distance tiers (the architecture for that goal):**
   - Trees: a full-detail **near pool** (`detail.js` `NearPool`, radius `VIEW_DIST.treeDetail`: 85 m
-    desktop, 60 m phone) plus **far LOD chunks** (`*_lod` models, ~1/3 the tris, one vertex-coloured
+    desktop, 40 m phone (was 60; `?near=60` to compare)) plus **far LOD chunks** (`*_lod` models, ~1/3 the tris, one vertex-coloured
     material). `patchLod` in `materials.js` decides tiers per instance from `shared.uLodRadius`. Within
     ±`uLodBand` (12 m) both tiers draw and a complementary screen-space dither (interleaved gradient noise,
     `discard`) gives each pixel to exactly one, so trees dissolve between levels instead of snapping.
