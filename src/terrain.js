@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED } from './config.js';
-import { shared, wetChunks } from './materials.js';
+import { shared, wetChunks, patchSunlight, sunKey } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 
 export function mulberry32(seed) {
@@ -331,6 +331,7 @@ export function buildTerrain() {
   const wet = wetChunks(0.9);
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, cutUniforms);
+    patchSunlight(shader);
     shader.uniforms.uWet = shared.uWet;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGroundPos;')
@@ -360,7 +361,7 @@ export function buildTerrain() {
         ${wet.roughness}`);
     patchGroundDetail(shader);
   };
-  mat.customProgramCacheKey = groundDetailCacheKey;
+  mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
 
   const group = new THREE.Group();
   group.name = 'terrain';

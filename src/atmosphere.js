@@ -10,12 +10,19 @@ import * as THREE from 'three';
 // view-space position, so it works for instanced meshes, points and lines alike.
 
 const FOG_POOL_BASE = '18.0'; // m; fully "pooled" below this
+
+/** Direction *toward* the sun: low in the west-northwest, so shafts slant across the view. */
+export const SUN_DIR = new THREE.Vector3(-0.78, 0.34, -0.52).normalize();
+export const SUN_COLOR = new THREE.Color(1.0, 0.8, 0.56);
+const v3 = (v) => `vec3(${(v.x ?? v.r).toFixed(4)}, ${(v.y ?? v.g).toFixed(4)}, ${(v.z ?? v.b).toFixed(4)})`;
 const FOG_POOL_FALLOFF = '45.0'; // m; e-folding height above the base
 
 /**
  * The scene uses a plain THREE.Fog purely as a carrier for two numbers, since
  * three refreshes fogNear/fogFar on every material that has fog:
- *   fog.near = density (exp² style), fog.far = time in seconds (drifts the banks).
+ *   fog.near = round(sun * 255) + density (density < 1, exp² style; the integer
+ *              part is how much the sun is out, 0..255, for the forward-scattering glow)
+ *   fog.far  = time in seconds (drifts the banks).
  * Use setFog()/the Weather class rather than reading them as distances.
  */
 export function installHeightFog() {
@@ -61,9 +68,15 @@ export function installHeightFog() {
       // drifting mist banks: slow world-anchored noise, two octaves
       vec2 fogP = vFogWorld.xz * 0.018 + vec2(fogFar * 0.011, fogFar * 0.004);
       float bank = fogNoise(fogP) * 0.65 + fogNoise(fogP * 2.7 + 13.1) * 0.35;
-      float fogD = fogNear * (0.8 + 0.8 * fogPool) * (0.6 + 0.8 * bank);
+      float fogSun = floor(fogNear) / 255.0;
+      float fogD = fract(fogNear) * (0.8 + 0.8 * fogPool) * (0.6 + 0.8 * bank);
       float fogFactor = 1.0 - exp(-fogD * fogD * vFogDepth * vFogDepth);
-      gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+      // sunlit haze: mist glows warm toward the sun (forward scattering), more
+      // where the mist is thick, so banks catch the light
+      vec3 fogView = normalize(vFogWorld - cameraPosition);
+      float fogMie = max(dot(fogView, ${v3(SUN_DIR)}), 0.0);
+      vec3 fogCol = fogColor + ${v3(SUN_COLOR)} * fogSun * (0.55 * pow(fogMie, 6.0) + 0.25 * pow(fogMie, 2.0)) * (0.6 + 0.6 * bank);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, fogCol, fogFactor);
     #endif`;
 }
 
@@ -82,6 +95,7 @@ const skyFragment = /* glsl */ `
   uniform vec3 uHorizon;
   uniform vec3 uZenith;
   uniform float uTime;
+  uniform float uSun; // 0 overcast .. 1 sun break
   varying vec3 vDir;
   float sHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
   float sNoise(vec2 p) {
@@ -99,6 +113,15 @@ const skyFragment = /* glsl */ `
     vec2 deck = d.xz / max(d.y, 0.08) * 1.4 + vec2(uTime * 0.012, uTime * 0.004);
     float c = sNoise(deck) * 0.55 + sNoise(deck * 2.3) * 0.3 + sNoise(deck * 5.1) * 0.15;
     col *= 0.93 + 0.12 * c * smoothstep(0.0, 0.3, up);
+    // sun break: the deck tears into cloud with blue between, and the sun glows
+    float sunCos = max(dot(d, SUN_DIR), 0.0);
+    float clouds = smoothstep(0.42, 0.68, c);
+    vec3 blue = mix(vec3(0.42, 0.58, 0.78), vec3(0.62, 0.72, 0.82), 1.0 - up);
+    vec3 cloud = mix(vec3(0.86, 0.87, 0.88), vec3(1.0, 0.92, 0.8), pow(sunCos, 4.0));
+    vec3 broken = mix(blue, cloud, clouds);
+    broken = mix(broken, uHorizon * 1.15, 1.0 - smoothstep(0.0, 0.25, up)); // still hazy low down
+    col = mix(col, broken, uSun);
+    col += SUN_COLOR * uSun * (pow(sunCos, 900.0) * 6.0 + pow(sunCos, 40.0) * 0.6 + pow(sunCos, 6.0) * 0.18);
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -109,11 +132,13 @@ export function createSky() {
     uHorizon: { value: new THREE.Color() },
     uZenith: { value: new THREE.Color() },
     uTime: { value: 0 },
+    uSun: { value: 0 },
   };
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 16),
     new THREE.ShaderMaterial({
       uniforms,
+      defines: { SUN_DIR: v3(SUN_DIR), SUN_COLOR: v3(SUN_COLOR) },
       vertexShader: skyVertex,
       fragmentShader: skyFragment,
       side: THREE.BackSide,

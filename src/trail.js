@@ -3,7 +3,7 @@ import { WATER_LEVEL } from './config.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
 } from './terrain.js';
-import { shared, wetChunks } from './materials.js';
+import { shared, wetChunks, patchSunlight, sunKey } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 
 // The trail runs from the trailhead at the spawn point, down to a viewpoint on
@@ -469,6 +469,7 @@ function buildCorridorMesh(points, distanceTo) {
   // Same mottling as the terrain shader so the two match, plus grit on the tread.
   const wet = wetChunks(0.9);
   mat.onBeforeCompile = (shader) => {
+    patchSunlight(shader);
     shader.uniforms.uWet = shared.uWet;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aTread;\nvarying float vTread;\nvarying vec3 vGroundPos;')
@@ -502,7 +503,7 @@ function buildCorridorMesh(points, distanceTo) {
         roughnessFactor = mix(roughnessFactor, 0.04, puddle);`);
     patchGroundDetail(shader);
   };
-  mat.customProgramCacheKey = groundDetailCacheKey;
+  mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
 
   // Split into ~150 m segments so off-screen stretches are frustum-culled.
   // Normals come from the full strip, so segment joins don't show.

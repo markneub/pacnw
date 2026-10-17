@@ -11,6 +11,7 @@ import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround } from './bake.js';
 import { PerfOverlay } from './perf.js';
 import { loadGroundDetail } from './grounddetail.js';
+import { patchSunlight } from './materials.js';
 import { loadSurfaceDetail } from './surfacedetail.js';
 import { loadTextureSet } from './textures.js';
 import { runBench } from './bench.js';
@@ -39,9 +40,10 @@ shared.uLodRadius.value = VIEW_DIST.treeDetail;
 shared.uFernRadius.value = VIEW_DIST.ferns;
 
 // ?off=a,b,... switches parts off to find what costs the most on a device:
-// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass.
+// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass, sun, dapple.
 // ?dpr=1 forces the render resolution scale.
 const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
+patchSunlight.enabled = !off.has('dapple'); // sunlight through the canopy
 
 const renderer = new THREE.WebGLRenderer({ antialias: !off.has('aa'), powerPreference: 'high-performance' });
 renderer.setPixelRatio(params.has('dpr') ? parseFloat(params.get('dpr'))
@@ -142,6 +144,9 @@ async function init() {
   const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
   player.place(num('x', SPAWN.x), num('z', SPAWN.z), num('yaw', SPAWN.yaw), num('pitch', SPAWN.pitch));
   if (['rain', 'snow', 'clear'].includes(params.get('weather'))) weather.override = params.get('weather');
+  if (params.get('weather') === 'sun') weather.override = 'clear';
+  // no sun breaks (always overcast) for ?off=sun and for screenshots, so views stay comparable
+  if (off.has('sun') || params.has('still')) weather.sunCycle = false;
   veg.updateNear(camera, true); // fill the near ring before warm-up uploads it
 
   for (const kind of ['trees', 'ferns', 'rocks']) if (off.has(kind)) veg.disable(kind);

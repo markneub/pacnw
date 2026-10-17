@@ -3,7 +3,7 @@ import { WORLD_SIZE, WATER_LEVEL } from './config.js';
 import {
   terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt,
 } from './terrain.js';
-import { shared } from './materials.js';
+import { shared, patchSunlight, sunKey } from './materials.js';
 
 /**
  * Grass blades around the camera: one draw call, no per-frame CPU work.
@@ -324,6 +324,7 @@ function grassMaterial(baked, ring) {
   mat.envMapIntensity = 0.35; // like the needles: no sky sheen on foliage
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms, cutUniforms, { uTime: shared.uTime, uWind: shared.uWind });
+    patchSunlight(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec2 aOffset;
@@ -403,9 +404,12 @@ function grassMaterial(baked, ring) {
       .replace('#include <common>', '#include <common>\nvarying vec3 vGrassCol;')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vGrassCol;')
       // both faces lit alike (three would flip the normal on back faces)
-      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        reflectedLight.directSpecular *= 0.15; // blades are matte (see patchCards)
+        reflectedLight.indirectSpecular *= 0.35;`);
   };
-  mat.customProgramCacheKey = () => 'grass';
+  mat.customProgramCacheKey = () => `grass|${sunKey()}`;
   mat.userData.cam = uniforms.uGrassCam.value;
   return mat;
 }

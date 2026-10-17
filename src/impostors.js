@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { patchLod } from './materials.js';
+import { patchLod, patchSunlight, sunKey } from './materials.js';
 
 /**
  * Far trees as impostors: each tree type is rendered at load from VIEWS
@@ -214,6 +214,7 @@ export function impostorMaterial(baked) {
   mat.envMapIntensity = 0.35; // foliage, like the near trees
   mat.onBeforeCompile = (shader) => {
     patchLod(shader, 'far');
+    patchSunlight(shader);
     shader.uniforms.uImpAlbedo = { value: baked.albedo };
     shader.uniforms.uImpNormal = { value: baked.normal };
     shader.vertexShader = shader.vertexShader
@@ -261,6 +262,6 @@ export function impostorMaterial(baked) {
           normal = normalize((viewMatrix * vec4(iW, 0.0)).xyz);
         }`);
   };
-  mat.customProgramCacheKey = () => 'impostor';
+  mat.customProgramCacheKey = () => `impostor|${sunKey()}`;
   return mat;
 }

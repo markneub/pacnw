@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE } from './config.js';
 import { rawGroundAt } from './terrain.js';
+import { shared } from './materials.js';
 
 // Lighting baked at load time. None of this costs anything per frame: it ends
 // up in vertex colours and instance tints. It works from geometry alone, so it
@@ -126,6 +127,16 @@ export function bakeCanopy(placements) {
     }
   }
   for (let i = 0; i < grid.length; i++) grid[i] = 1 - Math.exp(-grid[i] * 1.1);
+
+  // the same map on the GPU, for sunlight through the canopy (patchSunlight)
+  const bytes = new Uint8Array(N * N);
+  for (let i = 0; i < grid.length; i++) bytes[i] = Math.round(Math.min(1, grid[i]) * 255);
+  const tex = new THREE.DataTexture(bytes, N, N, THREE.RedFormat);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  shared.uCanopyMap.value = tex;
+  shared.uCanopyRect.value.set(-half, -half, WORLD_SIZE, WORLD_SIZE);
 
   return function occlusionAt(x, z) {
     const gx = THREE.MathUtils.clamp((x + half) / RES - 0.5, 0, N - 1.001);

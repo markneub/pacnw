@@ -105,7 +105,18 @@ function patchCards(mat) {
         // the side of a spray facing away from its (outward, up) normal is the
         // underside: seen from below, crowns should be darker, not sky-lit
         // (snow from below: you'd see the dark branch under it, not white)
-        diffuseColor.rgb *= mix(${snow ? '0.22' : '0.6'}, 1.0, smoothstep(-0.35, 0.2, dot(normal, normalize(vViewPosition))));`);
+        {
+          vec3 cardV = normalize(vViewPosition);
+          float cardD = dot(normal, cardV);
+          diffuseColor.rgb *= mix(${snow ? '0.22' : '0.6'}, 1.0, smoothstep(-0.35, 0.2, cardD));
+          // seen from behind, mirror the normal toward the viewer (keeping its up/out
+          // tilt): with N.V < 0 the specular term blows up and bleaches the spray
+          if (cardD < 0.0) normal = normalize(normal - 2.0 * cardD * cardV);
+        }`)
+      // needles are matte: grazing-angle Fresnel off a low sun made sprays grey-white
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        reflectedLight.directSpecular *= 0.15;
+        reflectedLight.indirectSpecular *= 0.35;`);
   };
   mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards${snow ? 's' : ''}`;
 }

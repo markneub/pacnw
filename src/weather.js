@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { snowlineAt } from './terrain.js';
-import { createSky } from './atmosphere.js';
+import { createSky, SUN_DIR, SUN_COLOR } from './atmosphere.js';
 import { shared } from './materials.js';
 
 const smooth = THREE.MathUtils.smoothstep;
@@ -153,6 +153,9 @@ const LOW = {
   hemiIntensity: 1.5,
   sunIntensity: 0.8,
 };
+const OVERCAST_DIR = new THREE.Vector3(-0.4, 1, 0.3).normalize(); // the diffuse "sun" behind the cloud deck
+const SUN_FOG = new THREE.Color(0xb9c2b8); // sunlit haze: a touch warmer and brighter
+const SUN_HEMI = new THREE.Color(0xb4c8de); // blue sky between the clouds
 const HIGH = {
   fog: new THREE.Color(0xc4ccd4),
   density: 0.0145,
@@ -166,6 +169,8 @@ const HIGH = {
 export class Weather {
   constructor(scene, renderer, { particles = 1 } = {}) {
     this.scene = scene;
+    this.renderer = renderer;
+    this.baseExposure = renderer.toneMappingExposure;
     this.sky = createSky();
     scene.add(this.sky.mesh);
     this.rain = createRain(Math.round(14000 * particles));
@@ -179,13 +184,15 @@ export class Weather {
 
     this.hemi = new THREE.HemisphereLight(LOW.hemiSky, LOW.hemiGround, LOW.hemiIntensity);
     this.sun = new THREE.DirectionalLight(0xfff4e0, LOW.sunIntensity);
-    this.sun.position.set(-0.4, 1, 0.3).multiplyScalar(100);
+    this.sun.position.copy(OVERCAST_DIR).multiplyScalar(100);
     scene.add(this.hemi, this.sun);
 
     this.audio = null;
     this.rainAmount = 1;
     this.snowAmount = 0;
     this.override = null; // 'rain' | 'snow' | 'clear' | null (automatic by altitude)
+    this.sunAmount = 0; // 0 overcast .. 1 sun break (shared.uSun)
+    this.sunCycle = true; // ?weather= or ?off=sun pin it
   }
 
   cycleOverride() {
@@ -198,8 +205,13 @@ export class Weather {
     const y = camera.position.y;
     const line = snowlineAt(camera.position.x, camera.position.z);
     const snowT = smooth(y, line - 30, line + 10);
-    let rain = 1 - smooth(y, line - 14, line);
-    let snow = smooth(y, line - 22, line - 6);
+    // Sun breaks: a slow cycle (~6 min) between showers and spells of low,
+    // warm sun. Starts in a break, so the first view is a sunlit one.
+    let sunT = this.sunCycle ? smooth(0.5 + 0.5 * Math.cos((time / 360) * Math.PI * 2), 0.3, 0.7) : 0;
+    if (this.override === 'clear') sunT = 1;
+    if (this.override === 'rain' || this.override === 'snow') sunT = 0;
+    let rain = (1 - smooth(y, line - 14, line)) * (1 - sunT);
+    let snow = smooth(y, line - 22, line - 6) * (1 - 0.75 * sunT);
     if (this.override === 'rain') { rain = 1; snow = 0; }
     if (this.override === 'snow') { rain = 0; snow = 1; }
     if (this.override === 'clear') { rain = 0; snow = 0; }
@@ -209,6 +221,10 @@ export class Weather {
     this.started = true;
     this.rainAmount += (rain - this.rainAmount) * k;
     this.snowAmount += (snow - this.snowAmount) * k;
+    this.sunAmount += (sunT - this.sunAmount) * (this.started2 ? 1 - Math.exp(-dt * 0.5) : 1);
+    this.started2 = true;
+    const sun = this.sunAmount;
+    shared.uSun.value = sun;
 
     for (const [obj, amount] of [[this.rain, this.rainAmount], [this.snow, this.snowAmount]]) {
       const u = obj.material.uniforms;
@@ -218,26 +234,32 @@ export class Weather {
       obj.visible = amount > 0.01 && !this.particlesOff;
     }
 
-    // Atmosphere follows altitude; clear weather thins the fog.
-    const clear = this.override === 'clear' ? 0.55 : 1;
+    // Atmosphere follows altitude; sun breaks thin the fog (but leave a haze for
+    // the light to show in) and warm everything up.
     const fog = this.scene.fog ?? this.fogOff; // ?off=fog keeps updating a detached copy
-    fog.color.copy(LOW.fog).lerp(HIGH.fog, snowT);
-    fog.near = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT)
-      * THREE.MathUtils.lerp(clear, 1, Math.max(this.rainAmount, this.snowAmount));
-    this.hemi.color.copy(LOW.hemiSky).lerp(HIGH.hemiSky, snowT);
+    fog.color.copy(LOW.fog).lerp(HIGH.fog, snowT).lerp(SUN_FOG, sun * (1 - 0.6 * snowT));
+    const density = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT) * THREE.MathUtils.lerp(1, 0.62, sun);
+    fog.near = Math.round(sun * 255) + Math.min(density, 0.999); // see installHeightFog
+    this.hemi.color.copy(LOW.hemiSky).lerp(HIGH.hemiSky, snowT).lerp(SUN_HEMI, sun * 0.6);
     this.hemi.groundColor.copy(LOW.hemiGround).lerp(HIGH.hemiGround, snowT);
-    this.hemi.intensity = THREE.MathUtils.lerp(LOW.hemiIntensity, HIGH.hemiIntensity, snowT);
-    this.sun.intensity = THREE.MathUtils.lerp(LOW.sunIntensity, HIGH.sunIntensity, snowT)
-      * (this.override === 'clear' ? 2.2 : 1);
+    this.hemi.intensity = THREE.MathUtils.lerp(LOW.hemiIntensity, HIGH.hemiIntensity, snowT) * (1 - 0.4 * sun); // in sun, direct light dominates
+    this.sun.intensity = THREE.MathUtils.lerp(LOW.sunIntensity, HIGH.sunIntensity, snowT) * (1 - sun) + 2.3 * sun;
+    // a touch less exposure in sun, or sunlit foliage tone-maps to beige
+    this.renderer.toneMappingExposure = this.baseExposure * (1 - 0.08 * sun);
+    this.sun.color.setRGB(1, 0.96, 0.88).lerp(SUN_COLOR, sun);
+    // overcast light comes from high up (soft, no low glints on wet ground);
+    // the sun swings down to its low WNW position as a break arrives
+    this.sun.position.copy(OVERCAST_DIR).lerp(SUN_DIR, sun).normalize().multiplyScalar(100);
 
     this.sky.uniforms.uHorizon.value.copy(fog.color);
     this.sky.uniforms.uZenith.value.copy(LOW.zenith).lerp(HIGH.zenith, snowT);
+    this.sky.uniforms.uSun.value = sun;
     this.sky.uniforms.uTime.value = time;
     fog.far = time; // drifts the mist banks
 
     // Surfaces stay damp in the rainforest even between showers; they dry out
     // in clear weather and there's no liquid water up in the snow.
-    const wetTarget = (this.override === 'clear' ? 0.15 : 0.55 + 0.45 * this.rainAmount) * (1 - snowT);
+    const wetTarget = (0.55 + 0.45 * this.rainAmount - 0.35 * sun) * (1 - snowT);
     shared.uWet.value += (wetTarget - shared.uWet.value) * (this.wetStarted ? 1 - Math.exp(-dt * 0.3) : 1);
     this.wetStarted = true;
 

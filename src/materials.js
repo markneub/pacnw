@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SNOWLINE } from './config.js';
+import { SUN_DIR } from './atmosphere.js';
 
 // Uniforms shared by every patched material, updated once per frame.
 export const shared = {
@@ -10,6 +11,9 @@ export const shared = {
   uLodRadius: { value: 85 }, // m; full-detail trees inside, far LOD outside
   uLodBand: { value: 12 }, // m either side of uLodRadius over which the tiers crossfade
   uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
+  uSun: { value: 0 }, // 0 overcast .. 1 sun break (weather.js)
+  uCanopyMap: { value: null }, // R8, 0 open sky .. 1 deep shade (bake.js bakeCanopy)
+  uCanopyRect: { value: new THREE.Vector4(-1000, -1000, 2000, 2000) }, // minX, minZ, sizeX, sizeZ
 };
 
 /**
@@ -92,6 +96,7 @@ export function addWindSway(material, strength = 0.012, wet = 0.25, lod = null) 
   material.onBeforeCompile = (shader) => {
     patchWet(shader, wet);
     patchLod(shader, lod);
+    patchSunlight(shader);
     shader.uniforms.uTime = shared.uTime;
     shader.uniforms.uWind = shared.uWind;
     shader.vertexShader = shader.vertexShader
@@ -115,7 +120,7 @@ export function addWindSway(material, strength = 0.012, wet = 0.25, lod = null) 
         transformed.z += cos(uTime * 1.1 + swayPhase.y) * swayH * swayH * ${strength.toFixed(4)} * 0.03 * uWind;`,
       );
   };
-  material.customProgramCacheKey = () => `wind${strength}|${wet}|${lod}`;
+  material.customProgramCacheKey = () => `wind${strength}|${wet}|${lod}|${sunKey()}`;
   return material;
 }
 
@@ -129,6 +134,7 @@ export function addGroundCover(material, { moss = 1, lod = null } = {}) {
   material.onBeforeCompile = (shader) => {
     patchWet(shader, 1);
     patchLod(shader, lod);
+    patchSunlight(shader);
     shader.uniforms.uSnowline = shared.uSnowline;
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -172,6 +178,68 @@ export function addGroundCover(material, { moss = 1, lod = null } = {}) {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), gcSnow);`,
       );
   };
-  material.customProgramCacheKey = () => `groundcover|${moss}|${lod}`;
+  material.customProgramCacheKey = () => `groundcover|${moss}|${lod}|${sunKey()}`;
   return material;
 }
+
+/**
+ * Sunlight through the canopy, for everything outdoors: the sun's direct light
+ * is scaled by how open the canopy is along the line toward the sun (the baked
+ * canopy map, sampled where that line crosses the crown layer ~12 m up). In a
+ * sun break that becomes dappled light: a world-anchored noise, drifting with
+ * the wind, against the local canopy density, so clearings are sunlit, forest
+ * interiors are in shade, and light falls through in patches in between. Under
+ * overcast it's just a soft darkening. Cheap: one texture fetch and two noise
+ * lookups per pixel. Call from a material's onBeforeCompile; `?off=dapple`
+ * leaves it out (patchSunlight.enabled = false before materials compile).
+ */
+const SUN_OFFSET = SUN_DIR.clone().multiplyScalar(12 / SUN_DIR.y); // to the crown layer
+const SUNLIGHT_CHUNK = THREE.ShaderChunk.lights_fragment_begin.replace(
+  'getDirectionalLightInfo( directionalLight, directLight );',
+  'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= sunVis;',
+);
+export function patchSunlight(shader) {
+  if (!patchSunlight.enabled || !shared.uCanopyMap.value) return;
+  shader.uniforms.uCanopyMap = shared.uCanopyMap;
+  shader.uniforms.uCanopyRect = shared.uCanopyRect;
+  shader.uniforms.uSun = shared.uSun;
+  shader.uniforms.uTime = shared.uTime;
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+      uniform sampler2D uCanopyMap;
+      uniform vec4 uCanopyRect;
+      uniform float uSun;
+      uniform float uTime;
+      float svHash(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.x + p3.y) * p3.z);
+      }
+      float svNoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(svHash(i), svHash(i + vec2(1, 0)), f.x), mix(svHash(i + vec2(0, 1)), svHash(i + vec2(1, 1)), f.x), f.y);
+      }
+      float sunVisibility(vec3 wp) {
+        // two samples along the ray, through the lower and upper crowns; a low
+        // sun's path crosses several crowns, so the (soft, baked) density is scaled up
+        vec2 o = vec2(${SUN_OFFSET.x.toFixed(3)}, ${SUN_OFFSET.z.toFixed(3)});
+        vec2 q = wp.xz + o * 0.65;
+        float c1 = texture2D(uCanopyMap, (q - uCanopyRect.xy) / uCanopyRect.zw).r;
+        float c2 = texture2D(uCanopyMap, (wp.xz + o * 1.5 - uCanopyRect.xy) / uCanopyRect.zw).r;
+        float c = 1.0 - (1.0 - min(1.0, c1 * 2.4)) * (1.0 - min(1.0, c2 * 2.4));
+        vec2 dp = q * 0.45 + vec2(uTime * 0.04, uTime * 0.025);
+        float n = svNoise(dp) * 0.6 + svNoise(dp * 2.7 + 7.3) * 0.4;
+        float dappled = smoothstep(c - 0.16, c + 0.16, n * 1.15 - 0.08);
+        return mix(1.0 - 0.6 * c, dappled, uSun);
+      }`)
+    .replace('#include <lights_fragment_begin>', `
+      float sunVis = 1.0;
+      #ifdef USE_FOG
+        sunVis = sunVisibility(vFogWorld);
+      #endif
+      ${SUNLIGHT_CHUNK}`);
+}
+patchSunlight.enabled = true;
+export const sunKey = () => (patchSunlight.enabled && shared.uCanopyMap.value ? 'sv1' : 'sv0');
