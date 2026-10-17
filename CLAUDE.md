@@ -34,7 +34,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   are in `CARD_TINT` (vegetation.js). Hemlock ~3.7k tris. **Cedar done:** `branchy_cedar`: 27 m, crown from 5 m,
   J-shaped branches (elev down, *negative* sag curves the tips up), `hang=0.55` hangs sprays vertically like curtains,
   `card_every=0.6, cross=0.35` (was 0.45/0.7: the phone bench showed trees 3.4 ms / frame 7.3 ms at cedar-rich spawn), `flutes=7` buttress ridges on the lower 12% of the trunk (`trunk(flutes=, flute_h=)`), and
-  CedarBark. `cedar_spray()` paints flat scale-leaf fans (overlapping lobes, not needles). Tint (0.5, 0.56, 0.46). ~3.9k tris.
+  CedarBark (0.33, 0.235, 0.18: was a saturated rust 0.42/0.24/0.16). `cedar_spray()` paints flat scale-leaf fans (overlapping lobes, not needles). Tint (0.5, 0.56, 0.46). ~3.9k tris.
   `?bench=trees,near40` measured: 40 m vs 60 m saves 1.0 ms at spawn (full 7.5 ms, trees 2.9), 0.0 in the forest, so phones went to 40 m. New `branchy_conifer` options consume no extra rng unless used, so fir/hemlock stay identical. All cards
   are now darkened up to 40% where the visible side faces away from the card normal (crown undersides seen from below
   were sky-lit and pale). **Snowy fir/hemlock done:** `branchy_fir/hemlock(snow=True)` = the same tree
@@ -233,7 +233,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   its fade-in, and frustum-tests a box using the chunk's real ground height range (9 `rawGroundAt` samples; a ±40 m box
   behind a downward-looking camera never culled). It draws ~48% of tufts, and a culled-vs-all render differs by 0 pixels. The vertex shader picks each tuft's world spot
   (stable while in range), reads the baked **grass map** (terrain-grid resolution: alpha = density from the forest-floor
-  layer × no-snow × (open sky² × meadow noise + lakeshore); rgb = grass palette × the terrain's baked shade, taken as
+  layer × no-snow × (open sky² × meadow noise + lakeshore), open = 1 − min(1, canopy × 2.2) so closed canopy has ~no grass; rgb = grass palette × the terrain's baked shade, taken as
   shaded/unshaded tile vertex colour), sits on `gGround()` (texelFetch of the height grid with the terrain's exact
   triangulation, so it matches groundAt), and skips the trail via the terrain's `cutUniforms` mask and water. Tufts
   shrink into the ground (smoothstep on density − hash) instead of popping. They widen with distance (up to 2.6× by

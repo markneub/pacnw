@@ -130,12 +130,14 @@ function bakeGrassMap(terrain, canopyAt) {
       nv.set(h(ix - 1, iz) - h(ix + 1, iz), 2 * step, h(ix, iz - 1) - h(ix, iz + 1)).normalize();
       const slope = 1 - nv.y;
       groundLayers(x, y, z, slope, layers);
-      const open = 1 - canopyAt(x, z);
+      // the baked canopy is soft and low (a closed crown reads ~0.3-0.5), so stretch it, as the
+      // dappled sunlight does: under a closed canopy the floor is moss and ferns, not lawn
+      const open = 1 - Math.min(1, canopyAt(x, z) * 2.2);
       const meadow = smooth(nForest(x * 0.011 + 31, z * 0.011 - 17) * 0.5 + 0.5, 0.3, 0.75);
       const shore = 1 - smooth(y, WATER_LEVEL + 3, WATER_LEVEL + 14);
       // no grass through snow (the 5 m map would smear it over the snow edge)
       const snowFree = 1 - smooth(layers[2], 0.03, 0.3);
-      let density = layers[0] * snowFree * Math.min(1, 0.05 + 0.95 * open * open * (0.3 + 0.7 * meadow) + 0.8 * shore * open);
+      let density = layers[0] * snowFree * Math.min(1, 0.03 + 0.97 * open * open * (0.3 + 0.7 * meadow) + 0.8 * shore * open);
       if (y < WATER_LEVEL + 0.2) density = 0;
 
       groundColor(x, y, z, slope, col);
