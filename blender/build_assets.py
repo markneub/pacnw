@@ -324,7 +324,7 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
 def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
                     elev=(-0.12, 0.35), sag=(0.12, 0.28), card_droop=0.12, whorl=(4, 5, 5, 6),
                     spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35, bark=None,
-                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None):
+                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None, stubs=16, card_scale=1.0):
     """
     A conifer up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
     then whorls of branches clothed in needle-spray cards, forming a ragged
@@ -349,7 +349,7 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
           rings=8 if (nod or flutes) else 6, lean=(nod, 0.0), flutes=flutes, flute_h=height * 0.12)
     r_at = lambda z: r_trunk * (1.0 - (1.0 - taper) * z / trunk_h)
     axis_at = lambda z: Vector((nod * (z / trunk_h) ** 2, 0.0, 0.0))  # the trunk's centre line
-    for _ in range(16):  # dead stubs on the bare lower trunk
+    for _ in range(stubs):  # dead stubs on the bare lower trunk
         z = rng.uniform(2.5, max(3.0, crown_base + 1.0))
         a = rng.uniform(0, TAU)
         L = rng.uniform(0.3, 1.3)
@@ -392,7 +392,7 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
                 if hang and rng.random() < hang:  # hang the spray from the branch, like a curtain
                     roll = rng.choice((-1, 1)) * rng.uniform(1.15, 1.45)
                 side = side0 * math.cos(roll) + fwd.cross(side0).normalized() * math.sin(roll)
-                cl = min(1.6, 0.8 + L * 0.3) * rng.uniform(0.85, 1.1)
+                cl = min(1.6, 0.8 + L * 0.3) * rng.uniform(0.85, 1.1) * card_scale
                 _card(b, cards, c, fwd, side, cl, cl * 0.9, card_droop * cl, (centre.x, centre.y), flip_u=rng.random() < 0.5)
                 if snow and abs(roll) < 0.9 and srng.random() < 0.85:
                     # snow settles flat on top of the spray, following its droop
@@ -441,6 +441,15 @@ def branchy_cedar(M, name, seed=3):
                            r_trunk=0.8, elev=(-0.35, 0.25), sag=(-0.32, -0.12), card_droop=0.25,
                            spacing=(0.4, 0.58), fill=(0.15, 0.85), nod=0.9, flare=1.7,
                            bark=M["cedar_bark"], hang=0.55, flutes=7, card_every=0.6, cross=0.35)
+
+
+def branchy_sapling(M, name, seed=4, snow=False):
+    """A young fir: foliage right to the ground, short whorls, a stiff leader."""
+    return branchy_conifer(M, name, M["fir_frost_cards"] if snow else M["fir_cards"], seed, height=6.5,
+                           crown_base=0.35, max_radius=1.9, r_trunk=0.15, elev=(0.0, 0.3), sag=(0.05, 0.15),
+                           card_droop=0.06, whorl=(4, 5, 5), spacing=(0.3, 0.42), fill=(0.08, 1.0), flare=1.1,
+                           stubs=0, card_scale=0.72, card_every=0.4, cross=0.75,
+                           snow=M["snow_cards"] if snow else None)
 
 
 def douglas_fir(M, name, snow, seed=1, lod=False):
@@ -721,8 +730,8 @@ def main():
     branchy_hemlock(M, "hemlock")
     branchy_hemlock(M, "hemlock_snow", snow=True)
     branchy_cedar(M, "cedar")
-    sapling(M, "sapling", snow=False)
-    sapling(M, "sapling_snow", snow=True)
+    branchy_sapling(M, "sapling")
+    branchy_sapling(M, "sapling_snow", snow=True)
     snag(M, "snag")
 
     # far-distance versions (one material, colours in vertex colours)
