@@ -86,6 +86,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
     chunks get frustum-culled wrongly. `?farTrees=lod` uses the old `*_lod` chunks (kept for A/B). Phone far trees: 279k → 4.6k
     tris, 68 → 15 draws. Spawn totals: phone 0.60M/182 → 0.33M/129, desktop 1.54M/341 → 0.92M/222. Bake: ~1.8 s in
     SwiftShader (the GPU is fast). Load step 'tree impostors'. Watch: `discard` on Apple GPUs, and alpha thinning in mips.
+    Phone A/B (`?bench=trees&views=spawn,forest`, full clock): trees "saves" impostors 0.7 / 0.3 ms vs `farTrees=lod` 1.3 / 1.0 ms
+    (spawn / forest). Full frame 4.8 / 3.7 vs 4.8 / 4.5. `discard` is not a problem; the tree cost roughly halved.
   - Ferns: near pool only, and they shrink into the ground at `uFernRadius` ('fade' mode).
   - Boulders: near pool + far chunks like trees (`boulder_x` + `boulder_x_lod`). Logs, stumps and furniture: 125 m chunks only.
     Any node with a `<name>_lod` partner gets two tiers (`loadPrototypes` loads forest.glb and rocks.glb).
