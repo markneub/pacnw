@@ -63,8 +63,16 @@ export class Post {
     this.sceneRT.isXRRenderTarget = true;
     this.sceneRT.texture.colorSpace = THREE.SRGBColorSpace;
     this.sceneRT.texture.internalFormat = 'RGBA8'; // as the MSAA buffer it resolves from (an sRGB format would fail the blit)
-    this.vA = rt(2, 2); // volumetric light (quarter res) + its blur
-    this.vB = rt(2, 2);
+    // volumetric light (quarter res, half float: lit mist toward the sun goes above 1),
+    // its blur, and a ping-pong history for temporal accumulation
+    const rtF = (w, h) => new THREE.WebGLRenderTarget(w, h, { depthBuffer: false, type: THREE.HalfFloatType });
+    this.vA = rtF(2, 2);
+    this.vB = rtF(2, 2);
+    this.hist = [rtF(2, 2), rtF(2, 2)];
+    this.histValid = false;
+    this.prevViewProj = new THREE.Matrix4();
+    this.prevCamPos = new THREE.Vector3();
+
     this.qA = rt(2, 2);
     this.qB = rt(2, 2);
     this.gA = rt(2, 2);
@@ -79,15 +87,18 @@ export class Post {
       uniform sampler2D tScene;
       uniform vec2 uSunUv;
       uniform float uAspect;
+      uniform vec2 uTexel; // full-res texel
       varying vec2 vUv;
       void main() {
-        vec3 c = texture2D(tScene, vUv).rgb;
+        // a 4x4 box (4 bilinear taps) per quarter-res pixel: one tap shimmered at leaf edges as you walk
+        vec3 c = 0.25 * (texture2D(tScene, vUv + uTexel * vec2(-1.0, -1.0)).rgb + texture2D(tScene, vUv + uTexel * vec2(1.0, -1.0)).rgb
+          + texture2D(tScene, vUv + uTexel * vec2(-1.0, 1.0)).rgb + texture2D(tScene, vUv + uTexel * vec2(1.0, 1.0)).rgb);
         float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
         vec2 d = (vUv - uSunUv) * vec2(uAspect, 1.0);
         float nearSun = exp(-dot(d, d) * 1.0);
         float rays = smoothstep(0.62, 0.95, lum) * nearSun;
         gl_FragColor = vec4(c * rays, 1.0);
-      }`, { tScene: { value: null }, uSunUv: { value: this.sunUv }, uAspect: { value: 1 } });
+      }`, { tScene: { value: null }, uSunUv: { value: this.sunUv }, uAspect: { value: 1 }, uTexel: { value: new THREE.Vector2() } });
 
     // 2. radial blur toward the sun (run twice with different step lengths)
     this.radial = pass(/* glsl */ `
@@ -187,6 +198,46 @@ export class Post {
       uTime: { value: 0 }, uSun: { value: 0 }, uFrame: { value: 0 },
     });
 
+    // 2b. temporal accumulation of the mist light: reproject last frame's result
+    // (by this pixel's depth) and blend a little of the new, noisy frame in;
+    // clamped to the new frame's neighbourhood so moving edges don't ghost
+    this.resolve = pass(/* glsl */ `
+      uniform sampler2D tCur;
+      uniform sampler2D tHist;
+      uniform sampler2D tDepth;
+      uniform mat4 uInvProj;
+      uniform mat4 uCamWorld;
+      uniform mat4 uPrevViewProj;
+      uniform vec2 uTexel; // quarter-res texel
+      uniform float uBlend; // share of the new frame (1 = no history)
+      varying vec2 vUv;
+      void main() {
+        vec3 cur = texture2D(tCur, vUv).rgb;
+        vec3 lo = cur, hi = cur;
+        for (int k = 0; k < 4; k++) {
+          vec2 o = vec2(k == 0 ? 1.0 : k == 1 ? -1.0 : 0.0, k == 2 ? 1.0 : k == 3 ? -1.0 : 0.0) * uTexel;
+          vec3 n = texture2D(tCur, vUv + o).rgb;
+          lo = min(lo, n);
+          hi = max(hi, n);
+        }
+        // a little slack: the input is noisy by design
+        vec3 pad = (hi - lo) * 0.5 + 0.02;
+        lo -= pad;
+        hi += pad;
+        float depth = texture2D(tDepth, vUv).r;
+        vec4 vp = uInvProj * vec4(vUv * 2.0 - 1.0, min(depth, 0.9999) * 2.0 - 1.0, 1.0);
+        vec4 world = uCamWorld * vec4(vp.xyz / vp.w, 1.0);
+        vec4 prev = uPrevViewProj * world;
+        vec2 puv = prev.xy / prev.w * 0.5 + 0.5;
+        float inside = step(0.0, puv.x) * step(puv.x, 1.0) * step(0.0, puv.y) * step(puv.y, 1.0) * step(0.0, prev.w);
+        vec3 hist = clamp(texture2D(tHist, puv).rgb, lo, hi);
+        gl_FragColor = vec4(mix(cur, hist, (1.0 - uBlend) * inside), 1.0);
+      }`, {
+      tCur: { value: null }, tHist: { value: null }, tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() },
+      uCamWorld: { value: new THREE.Matrix4() }, uPrevViewProj: { value: new THREE.Matrix4() },
+      uTexel: { value: new THREE.Vector2() }, uBlend: { value: 1 },
+    });
+
     // 3. glow: highlight extract + separable 9-tap blur (quarter res)
     this.glowExtract = pass(/* glsl */ `
       uniform sampler2D tScene;
@@ -255,7 +306,10 @@ export class Post {
     this.sceneRT.setSize(w, h);
     const qw = Math.max(1, Math.round(w / 4));
     const qh = Math.max(1, Math.round(h / 4));
-    for (const t of [this.qA, this.qB, this.gA, this.gB, this.vA, this.vB]) t.setSize(qw, qh);
+    for (const t of [this.qA, this.qB, this.gA, this.gB, this.vA, this.vB, ...this.hist]) t.setSize(qw, qh);
+    this.resolve.uniforms.uTexel.value.set(1 / qw, 1 / qh);
+    this.bright.uniforms.uTexel.value.set(1 / w, 1 / h);
+    this.histValid = false;
     this.blurTexel = [1 / qw, 1 / qh];
   }
 
@@ -263,6 +317,7 @@ export class Post {
   render(scene, camera, forceRays = false) {
     const r = this.renderer;
     if (!this.enabled) {
+      this.histValid = false;
       r.setRenderTarget(null);
       r.render(scene, camera);
       return;
@@ -310,12 +365,30 @@ export class Post {
       v.uSun.value = sun;
       v.uFrame.value = (v.uFrame.value + 1) % 64;
       blit(this.volume, this.vA);
-      this.blur.uniforms.tSrc.value = this.vA.texture;
+      // accumulate over frames (the per-frame jitter averages out instead of shimmering)
+      const camPos = v.uCamPos.value;
+      const jumped = !this.histValid || camPos.distanceTo(this.prevCamPos) > 4;
+      const rs = this.resolve.uniforms;
+      rs.tCur.value = this.vA.texture;
+      rs.tHist.value = this.hist[0].texture;
+      rs.tDepth.value = this.sceneRT.depthTexture;
+      rs.uInvProj.value.copy(camera.projectionMatrixInverse);
+      rs.uCamWorld.value.copy(camera.matrixWorld);
+      rs.uPrevViewProj.value.copy(this.prevViewProj);
+      rs.uBlend.value = jumped ? 1 : 0.15;
+      blit(this.resolve, this.hist[1]);
+      this.hist.reverse(); // hist[0] is now this frame's result
+      this.histValid = true;
+      this.blur.uniforms.tSrc.value = this.hist[0].texture;
       this.blur.uniforms.uDir.value.set(this.blurTexel[0] * 0.75, 0);
       blit(this.blur, this.vB);
       this.blur.uniforms.tSrc.value = this.vB.texture;
       this.blur.uniforms.uDir.value.set(0, this.blurTexel[1] * 0.75);
       blit(this.blur, this.vA);
+      this.prevViewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      this.prevCamPos.copy(camPos);
+    } else {
+      this.histValid = false;
     }
     // glow
     if (this.effects || forceRays) {
