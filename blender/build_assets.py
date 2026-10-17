@@ -168,6 +168,7 @@ def mats():
         "lod": material("LodVertexColor", (1.0, 1.0, 1.0), 0.85),
         "fir_cards": card_material("FirCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
         "hemlock_cards": card_material("HemlockCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
+        "cedar_cards": card_material("CedarCards", os.path.join(ROOT, "public", "textures", "foliage", "cedar_spray.png")),
     }
 
 
@@ -175,8 +176,9 @@ def mats():
 # Conifer construction
 # ---------------------------------------------------------------------------
 
-def trunk(b, mat, height, r_base, r_top, sides=7, flare=1.0, lean=(0.0, 0.0), rings=4):
-    """Tapered cylinder along +Z, optionally flared at the base."""
+def trunk(b, mat, height, r_base, r_top, sides=7, flare=1.0, lean=(0.0, 0.0), rings=4, flutes=0, flute_h=0.0):
+    """Tapered cylinder along +Z, optionally flared at the base. `flutes` > 0
+    ridges the lower `flute_h` metres (buttresses, like an old redcedar)."""
     loops = []
     for k in range(rings + 1):
         t = k / rings
@@ -188,7 +190,9 @@ def trunk(b, mat, height, r_base, r_top, sides=7, flare=1.0, lean=(0.0, 0.0), ri
         loop = []
         for i in range(sides):
             a = TAU * i / sides
-            jitter = 1.0 + (0.12 if (k == 0 and i % 2 == 0 and flare > 1.0) else 0.0)
+            jitter = 1.0 + (0.12 if (k == 0 and i % 2 == 0 and flare > 1.0 and not flutes) else 0.0)
+            if flutes and z < flute_h:
+                jitter *= 1.0 + 0.22 * (1.0 - z / flute_h) ** 1.5 * math.cos(a * flutes)
             loop.append(b.v((ox + math.cos(a) * r * jitter, oy + math.sin(a) * r * jitter, z)))
         loops.append(loop)
     for k in range(rings):
@@ -315,7 +319,8 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
 
 def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
                     elev=(-0.12, 0.35), sag=(0.12, 0.28), card_droop=0.12, whorl=(4, 5, 5, 6),
-                    spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35):
+                    spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35, bark=None,
+                    hang=0.0, flutes=0, card_every=0.6):
     """
     A conifer up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
     then whorls of branches clothed in needle-spray cards, forming a ragged
@@ -325,13 +330,16 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
       fill       the crown fills out over the first fill[0] of its height, then
                  tapers with exponent fill[1]
       nod        sideways bend (m) of the top of the trunk: hemlock's nodding leader
+      hang       share of sprays hung vertically from the branch (redcedar's curtains)
+      flutes     buttress ridges at the trunk base
     """
+    bark = bark or M["bark"]
     rng = random.Random(seed)
     b = MeshBuilder()
     trunk_h = height * 0.97
     taper = 0.12
-    trunk(b, M["bark"], trunk_h, r_trunk, r_trunk * taper, flare=flare, sides=10, rings=8 if nod else 6,
-          lean=(nod, 0.0))
+    trunk(b, bark, trunk_h, r_trunk, r_trunk * taper, flare=flare, sides=14 if flutes else 10,
+          rings=8 if (nod or flutes) else 6, lean=(nod, 0.0), flutes=flutes, flute_h=height * 0.12)
     r_at = lambda z: r_trunk * (1.0 - (1.0 - taper) * z / trunk_h)
     axis_at = lambda z: Vector((nod * (z / trunk_h) ** 2, 0.0, 0.0))  # the trunk's centre line
     for _ in range(16):  # dead stubs on the bare lower trunk
@@ -367,13 +375,15 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
             def at(s):
                 return base + horiz * (L * s) + up * (L * (el * s - sg * s * s))
 
-            _stick(b, M["bark"], base, at(0.85), 0.03 + 0.025 * L)
-            n_cards = max(2, round(L / 0.6))
+            _stick(b, bark, base, at(0.85), 0.03 + 0.025 * L)
+            n_cards = max(2, round(L / card_every))
             for k in range(n_cards):
                 s = 0.22 + 0.78 * (k + 0.5) / n_cards
                 c = at(s)
                 fwd = (at(min(1.0, s + 0.05)) - at(max(0.0, s - 0.05))).normalized()
                 roll = rng.uniform(-0.6, 0.6)
+                if hang and rng.random() < hang:  # hang the spray from the branch, like a curtain
+                    roll = rng.choice((-1, 1)) * rng.uniform(1.15, 1.45)
                 side = side0 * math.cos(roll) + fwd.cross(side0).normalized() * math.sin(roll)
                 cl = min(1.6, 0.8 + L * 0.3) * rng.uniform(0.85, 1.1)
                 _card(b, cards, c, fwd, side, cl, cl * 0.9, card_droop * cl, (centre.x, centre.y), flip_u=rng.random() < 0.5)
@@ -403,6 +413,16 @@ def branchy_hemlock(M, name, seed=2):
     return branchy_conifer(M, name, M["hemlock_cards"], seed, height=26.0, crown_base=4.5, max_radius=4.2,
                            r_trunk=0.5, elev=(-0.3, 0.3), sag=(0.3, 0.5), card_droop=0.3,
                            spacing=(0.42, 0.62), fill=(0.1, 1.15), nod=1.3, flare=1.25)
+
+
+def branchy_cedar(M, name, seed=3):
+    """Western redcedar: buttressed, fluted base with reddish bark; branches dip
+    from the trunk then sweep up at the tips (J-shaped), hung with flat
+    scale-leaf sprays like curtains; drooping leader."""
+    return branchy_conifer(M, name, M["cedar_cards"], seed, height=27.0, crown_base=5.0, max_radius=4.4,
+                           r_trunk=0.8, elev=(-0.35, 0.25), sag=(-0.32, -0.12), card_droop=0.25,
+                           spacing=(0.4, 0.58), fill=(0.15, 0.85), nod=0.9, flare=1.7,
+                           bark=M["cedar_bark"], hang=0.55, flutes=7, card_every=0.45)
 
 
 def douglas_fir(M, name, snow, seed=1, lod=False):
@@ -682,7 +702,7 @@ def main():
     douglas_fir(M, "fir_snow", snow=True)
     branchy_hemlock(M, "hemlock")
     hemlock(M, "hemlock_snow", snow=True)
-    cedar(M, "cedar")
+    branchy_cedar(M, "cedar")
     sapling(M, "sapling", snow=False)
     sapling(M, "sapling_snow", snow=True)
     snag(M, "snag")
@@ -698,7 +718,10 @@ def main():
             foliage=[M["needles_dark"], M["needles"]], trunk_mat=M["bark"], droop=0.8, r_trunk=0.5,
             leader_lean=1.3, shape_pow=1.1, lod=True)
     hemlock(M, "hemlock_snow_lod", snow=True, lod=True)
-    cedar(M, "cedar_lod", lod=True)
+    # matches the branchy cedar (only for ?farTrees=lod)
+    conifer("cedar_lod", M, 3, height=27.0, crown_base=5.0, max_radius=4.0, tiers=8, points=6,
+            foliage=[M["cedar"], M["needles"]], trunk_mat=M["cedar_bark"], droop=0.9, r_trunk=0.8,
+            flare=1.7, shape_pow=0.8, top_radius=0.5, leader_lean=0.9, lod=True)
     sapling(M, "sapling_lod", snow=False, lod=True)
     sapling(M, "sapling_snow_lod", snow=True, lod=True)
     snag_lod(M, "snag_lod")

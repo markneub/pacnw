@@ -42,6 +42,31 @@ def lerp(a, b, t):
     return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in range(len(a)))
 
 
+def finish(img):
+    """Downsample, and bleed colour into the transparent texels (for mipmaps)."""
+    img = img.resize((SIZE, SIZE), Image.LANCZOS)
+    a = np.asarray(img).astype(np.float32)
+    alpha = a[:, :, 3] / 255.0
+    hard = (alpha > 0.35).astype(np.float32)
+    # bleed colour outward: repeated blurs of premultiplied colour
+    rgb = a[:, :, :3] * hard[:, :, None]
+    acc_rgb = rgb.copy()
+    acc_w = hard.copy()
+    cur_rgb, cur_w = rgb, hard
+    for radius in (2, 4, 8, 16, 32):
+        cur_rgb = box_blur(cur_rgb, radius)
+        cur_w = box_blur(cur_w, radius)
+        fill = (acc_w < 0.5) & (cur_w > 1e-3)
+        acc_rgb[fill] = cur_rgb[fill] / cur_w[fill][:, None]
+        acc_w[fill] = 1.0
+    # anything the blurs didn't reach: the average needle colour
+    acc_rgb[acc_w < 0.5] = rgb[hard > 0].mean(0)
+    out = np.zeros((SIZE, SIZE, 4), np.uint8)
+    out[:, :, :3] = np.clip(np.where(hard[:, :, None] > 0, a[:, :, :3], acc_rgb), 0, 255)
+    out[:, :, 3] = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
+    return Image.fromarray(out, "RGBA")
+
+
 def spray(seed, old, new, needle_len=0.1, axis_spacing=0.0075, n_side=11, side_len=(0.46, 0.30),
           side_angle=(38, 52), side_spacing=0.008, sub_shoots=0, needle_angle=(48, 72), width=3):
     """
@@ -110,27 +135,67 @@ def spray(seed, old, new, needle_len=0.1, axis_spacing=0.0075, n_side=11, side_l
             ty = min(W - margin, max(margin, by + side * math.sin(sa) * sl))
             needles(bx, by, tx, ty, nlen * 0.7, side_spacing * W, age0 + 0.2, min(1.0, age1 + 0.2), width * SS)
 
-    img = img.resize((SIZE, SIZE), Image.LANCZOS)
-    a = np.asarray(img).astype(np.float32)
-    alpha = a[:, :, 3] / 255.0
-    hard = (alpha > 0.35).astype(np.float32)
-    # bleed colour outward: repeated blurs of premultiplied colour
-    rgb = a[:, :, :3] * hard[:, :, None]
-    acc_rgb = rgb.copy()
-    acc_w = hard.copy()
-    cur_rgb, cur_w = rgb, hard
-    for radius in (2, 4, 8, 16, 32):
-        cur_rgb = box_blur(cur_rgb, radius)
-        cur_w = box_blur(cur_w, radius)
-        fill = (acc_w < 0.5) & (cur_w > 1e-3)
-        acc_rgb[fill] = cur_rgb[fill] / cur_w[fill][:, None]
-        acc_w[fill] = 1.0
-    # anything the blurs didn't reach: the average needle colour
-    acc_rgb[acc_w < 0.5] = rgb[hard > 0].mean(0)
-    out = np.zeros((SIZE, SIZE, 4), np.uint8)
-    out[:, :, :3] = np.clip(np.where(hard[:, :, None] > 0, a[:, :, :3], acc_rgb), 0, 255)
-    out[:, :, 3] = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
-    return Image.fromarray(out, "RGBA")
+    return finish(img)
+
+
+def cedar_spray(seed=13):
+    """
+    Western redcedar: no needles; flat, fern-like fans of tiny overlapping
+    scales. A main axis with alternating branchlets that branch again, each
+    drawn as a chain of small scale lobes, yellow-green with lighter tips.
+    """
+    rng = random.Random(seed)
+    W = SIZE * SS
+    img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    old, new = (52, 88, 34), (124, 150, 62)
+
+    def frond(x0, y0, x1, y1, w, age0, age1):
+        """A scale-covered shoot: overlapping lobes tapering toward the tip."""
+        L = math.hypot(x1 - x0, y1 - y0)
+        n = max(3, int(L / (w * 0.55)))
+        for i in range(n + 1):
+            t = i / n
+            cx, cy = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+            r = w * (1.0 - 0.55 * t) * rng.uniform(0.85, 1.1)
+            col = lerp(old, new, (age0 + (age1 - age0) * t) ** 1.4)
+            col = tuple(max(0, min(255, c + rng.randint(-8, 8))) for c in col)
+            d.ellipse([cx - r, cy - r * 0.8, cx + r, cy + r * 0.8], fill=col + (255,))
+
+    margin = 0.06 * W
+    y_mid = W / 2
+    x0, x1 = margin * 0.3, W - margin
+    pts = [(x0 + (x1 - x0) * k / 6, y_mid + rng.uniform(-0.015, 0.015) * W) for k in range(7)]
+    branchlets = []
+    n_side = 16
+    for i in range(n_side):
+        t = 0.05 + 0.88 * i / (n_side - 1)
+        k = min(5, int(t * 6))
+        f = t * 6 - k
+        sx = pts[k][0] + (pts[k + 1][0] - pts[k][0]) * f
+        sy = pts[k][1] + (pts[k + 1][1] - pts[k][1]) * f
+        side = 1 if i % 2 else -1
+        length = (0.44 - 0.30 * t) * W * rng.uniform(0.85, 1.1)
+        ang = math.radians(rng.uniform(40, 55))
+        ex, ey = sx + math.cos(ang) * length, sy + side * math.sin(ang) * length
+        ey = min(W - margin, max(margin, ey))
+        branchlets.append((sx, sy, ex, ey, side, t, length, ang))
+    # draw finest first so the main axis sits on top
+    for sx, sy, ex, ey, side, t, length, ang in branchlets:
+        for j in range(5):
+            u = 0.2 + 0.16 * j
+            bx, by = sx + (ex - sx) * u, sy + (ey - sy) * u
+            sl = length * (0.5 - 0.3 * u)
+            sa = ang + math.radians(rng.uniform(30, 45)) * (1 if j % 2 else -1)
+            tx = bx + math.cos(sa) * sl
+            ty = min(W - margin, max(margin, by + side * math.sin(sa) * sl))
+            frond(bx, by, tx, ty, 0.02 * W, t * 0.6 + 0.2, min(1.0, t * 0.6 + 0.6))
+    for sx, sy, ex, ey, side, t, length, ang in branchlets:
+        frond(sx, sy, ex, ey, 0.026 * W, t * 0.6, min(1.0, t * 0.6 + 0.4))
+    for k in range(6):
+        (ax, ay), (bx, by) = pts[k], pts[k + 1]
+        frond(ax, ay, bx, by, 0.032 * W, k / 6 * 0.7, (k + 1) / 6 * 0.7)
+    return finish(img)
 
 
 SPRAYS = {
@@ -141,6 +206,7 @@ SPRAYS = {
     "hemlock_spray": dict(seed=11, old=(26, 54, 36), new=(70, 112, 56), needle_len=0.05, axis_spacing=0.005,
                           n_side=13, side_len=(0.44, 0.26), side_angle=(48, 62), side_spacing=0.0055,
                           sub_shoots=3, needle_angle=(65, 85), width=2),
+    "cedar_spray": cedar_spray,
 }
 
 
@@ -148,7 +214,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     for name, params in SPRAYS.items():
         path = os.path.join(OUT, f"{name}.png")
-        spray(**params).save(path, optimize=True)
+        (params() if callable(params) else spray(**params)).save(path, optimize=True)
         print("wrote", path, os.path.getsize(path) // 1024, "KB")
 
 

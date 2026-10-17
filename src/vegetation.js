@@ -78,8 +78,9 @@ export async function loadPrototypes(urls) {
 
 /**
  * Alpha-tested foliage cards: both faces shaded with the card's own normal
- * (three flips it on back faces, which would make the underside of every
- * spray dark), and alpha boosted with the mip level so sprays don't thin out
+ * (three would flip it per face, which is arbitrary for cards), darkened where
+ * you see the side facing away from that normal (crown undersides), and alpha
+ * boosted with the mip level so sprays don't thin out
  * and vanish with distance (averaged alpha drops below the test threshold).
  */
 function patchCards(mat) {
@@ -97,13 +98,17 @@ function patchCards(mat) {
         }
         #endif
         #include <alphatest_fragment>`)
-      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+        normal = normalize(vNormal);
+        // the side of a spray facing away from its (outward, up) normal is the
+        // underside: seen from below, crowns should be darker, not sky-lit
+        diffuseColor.rgb *= mix(0.6, 1.0, smoothstep(-0.35, 0.2, dot(normal, normalize(vViewPosition))));`);
   };
   mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards`;
 }
 
 /** Colour multiplier per foliage-card material. */
-const CARD_TINT = { FirCards: [0.55, 0.6, 0.52], HemlockCards: [0.68, 0.72, 0.66] };
+const CARD_TINT = { FirCards: [0.55, 0.6, 0.52], HemlockCards: [0.68, 0.72, 0.66], CedarCards: [0.5, 0.56, 0.46] };
 
 // Scanned-rock materials waiting for their textures (applyRockTextures).
 const scanMaterials = [];

@@ -62,7 +62,7 @@ export function bakePrototypeAO(parts, kind) {
 
 // Approximate crown radius (m, at scale 1) for canopy shading.
 const CROWN = {
-  fir: 3.3, fir_snow: 4.4, hemlock: 4.2, hemlock_snow: 4, cedar: 5.2,
+  fir: 3.3, fir_snow: 4.4, hemlock: 4.2, hemlock_snow: 4, cedar: 4.4,
   sapling: 1.6, sapling_snow: 1.6, snag: 0.8,
 };
 
