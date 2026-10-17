@@ -219,7 +219,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   limited to right around the sun (exp(−5d²), lum 0.75–0.98) so bright clouds don't smear into glare.
   The sky is drawn **last among the opaques** (`renderOrder` 100, `depthTest` on, vertex z forced to the far plane), so its
   cloud noise only runs where sky is visible, and the overcast/sunny halves are skipped by uniform branches when
-  `uSun` is ~0/~1. Phone bench before this: `- sky` saved 1.3 ms at spawn and in the forest (full 7.6 / 6.1 ms).
+  `uSun` is ~0/~1. Phone bench: `- sky` saved 1.3 ms at spawn and in the forest before this (full 7.6 / 6.1 ms), 0.1 ms after (full 6.3 / 5.0;
+  rays/glow + mist light 0.2).
 - **Close-up ground detail** (`src/grounddetail.js`): photographic albedo + normal maps for 4 layers (forest
   floor, rock, snow, mud/dirt), weighted by per-vertex `aLayers` (terrain `groundLayers()`, trail tread/banks →
   dirt), within `uGDRange` (20–45 m desktop, 15–32 m phone). The photo *modulates* the existing colour
