@@ -94,7 +94,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   finger (only while walking) is free look. No on-screen touch UI apart from that faint look-mode vignette, and no jumping (both at the user's request). Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
   turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, half the
   particles). Override with `?quality=low|high`.
-- `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera, with fog/light
+- `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera (plus sun-break **motes**: ~900 soft
+  additive points within 7 m, lit by forward scattering × canopy sun visibility; `?off=motes`, bench row `motes`), with fog/light
   lerped by altitude relative to the local snowline, and WebAudio noise ambience.
 - **Realism direction (agreed): stylized low-poly now ("A"). The long-term goal is near-photoreal *up
   close*, with cheap representations further out, working incrementally with careful, measured

@@ -143,6 +143,82 @@ function createSnow(count = 14000) {
   return points;
 }
 
+const MOTE_BOX = new THREE.Vector3(16, 8, 16);
+
+/**
+ * Dust motes and seed fluff drifting in the air: invisible in overcast, they
+ * catch the light in a sun break, brightest looking toward the sun (forward
+ * scattering) and only where the canopy lets the sun through, so they
+ * gather in the shafts. Soft, close to the camera (≤7 m), additive, ~900 points.
+ */
+function createMotes(count = 900) {
+  const offsets = new Float32Array(count * 3);
+  for (let i = 0; i < offsets.length; i++) offsets[i] = Math.random();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(offsets, 3));
+  const off = SUN_DIR.clone().multiplyScalar(1 / SUN_DIR.y); // per metre of height, toward the sun
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uCam: { value: new THREE.Vector3() },
+      uBox: { value: MOTE_BOX },
+      uIntensity: { value: 0 },
+      uPixelRatio: { value: 1 },
+      uCanopyMap: shared.uCanopyMap,
+      uCanopyRect: shared.uCanopyRect,
+    },
+    vertexShader: /* glsl */ `
+      uniform float uTime;
+      uniform vec3 uCam;
+      uniform vec3 uBox;
+      uniform float uPixelRatio;
+      uniform sampler2D uCanopyMap;
+      uniform vec4 uCanopyRect;
+      varying float vAlpha;
+      void main() {
+        float seed = fract(position.x * 53.1 + position.y * 17.3 + position.z * 7.7);
+        // a slow drift on the breeze, rising and sinking a little
+        vec3 p = position * uBox + vec3(0.25, 0.02 * sin(seed * 31.0), 0.12) * uTime;
+        p.x += sin(uTime * (0.21 + 0.2 * seed) + seed * 40.0) * 0.6;
+        p.y += sin(uTime * (0.17 + 0.15 * seed) + seed * 13.0) * 0.4;
+        p.z += cos(uTime * (0.19 + 0.18 * seed) + seed * 23.0) * 0.6;
+        vec3 origin = uCam - uBox * vec3(0.5, 0.35, 0.5);
+        p = mod(p - origin, uBox) + origin;
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        gl_PointSize = max(1.5, (0.03 + seed * 0.03) * uPixelRatio * (700.0 / -mvPosition.z));
+        // in sunlight? (the canopy along the ray toward the sun, as for the ground)
+        vec2 q = p.xz + vec2(${off.x.toFixed(3)}, ${off.z.toFixed(3)}) * 10.0;
+        float c = texture2D(uCanopyMap, (q - uCanopyRect.xy) / uCanopyRect.zw).r;
+        float lit = 1.0 - smoothstep(0.12, 0.38, c);
+        // forward scattering: bright toward the sun, faint elsewhere
+        vec3 toP = normalize(p - uCam);
+        float phase = 0.12 + 1.6 * pow(max(dot(toP, ${'vec3(' + [SUN_DIR.x, SUN_DIR.y, SUN_DIR.z].map((v) => v.toFixed(4)).join(', ') + ')'}), 0.0), 6.0);
+        float d = length(p - uCam);
+        float fade = smoothstep(0.8, 2.0, d) * (1.0 - smoothstep(4.5, 7.5, d));
+        vAlpha = lit * phase * fade * (0.5 + 0.5 * seed);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uIntensity;
+      varying float vAlpha;
+      void main() {
+        float r = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.0, r);
+        gl_FragColor = vec4(vec3(1.0, 0.86, 0.62) * (a * a * vAlpha * uIntensity * 0.45), 1.0);
+      }
+    `,
+  });
+  const points = new THREE.Points(geo, mat);
+  points.name = 'motes';
+  points.frustumCulled = false;
+  points.renderOrder = 12;
+  return points;
+}
+
 // Atmosphere presets: overcast temperate rainforest vs. high-country snow.
 const LOW = {
   fog: new THREE.Color(0x7d8b8c),
@@ -176,7 +252,9 @@ export class Weather {
     this.rain = createRain(Math.round(14000 * particles));
     this.snow = createSnow(Math.round(14000 * particles));
     this.snow.material.uniforms.uPixelRatio.value = renderer.getPixelRatio();
-    scene.add(this.rain, this.snow);
+    this.motes = createMotes(Math.round(900 * particles));
+    this.motes.material.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+    scene.add(this.rain, this.snow, this.motes);
 
     // THREE.Fog as a carrier: near = density, far = time (see installHeightFog)
     scene.fog = new THREE.Fog(LOW.fog.clone(), LOW.density, 0);
@@ -232,6 +310,13 @@ export class Weather {
       u.uCam.value.copy(camera.position);
       u.uIntensity.value = amount;
       obj.visible = amount > 0.01 && !this.particlesOff;
+    }
+    {
+      const u = this.motes.material.uniforms;
+      u.uTime.value = time;
+      u.uCam.value.copy(camera.position);
+      u.uIntensity.value = sun * (1 - snowT);
+      this.motes.visible = u.uIntensity.value > 0.01 && !this.particlesOff && !this.motesOff;
     }
 
     // Atmosphere follows altitude; sun breaks thin the fog (but leave a haze for

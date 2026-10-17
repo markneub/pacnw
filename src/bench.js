@@ -113,6 +113,12 @@ export async function runBench({
     ['water', '- water', () => hide(byName('lake'))],
     ['sky', '- sky', () => hide(byName('sky'))],
     ['weather', '- rain/snow', () => hide(weather.rain, weather.snow)],
+    ['motes', '- motes', () => {
+      const was = [weather.motesOff, weather.motes.visible];
+      weather.motesOff = true;
+      weather.motes.visible = false;
+      return () => { [weather.motesOff, weather.motes.visible] = was; };
+    }],
     ['empty', 'empty scene', () => hide(...scene.children)],
   ];
   // other resolutions, up to the screen's own

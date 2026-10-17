@@ -41,7 +41,7 @@ shared.uLodRadius.value = VIEW_DIST.treeDetail;
 shared.uFernRadius.value = VIEW_DIST.ferns;
 
 // ?off=a,b,... switches parts off to find what costs the most on a device:
-// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass, sun, dapple, post.
+// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass, sun, dapple, post, motes.
 // ?dpr=1 forces the render resolution scale.
 const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
 patchSunlight.enabled = !off.has('dapple'); // sunlight through the canopy
@@ -160,6 +160,7 @@ async function init() {
     if (off.has(name === 'lake' ? 'water' : name)) scene.getObjectByName(name).visible = false;
   }
   if (off.has('weather')) weather.particlesOff = true;
+  if (off.has('motes')) weather.motesOff = true;
   if (off.has('env')) scene.environment = null;
   if (off.has('fog')) {
     weather.fogOff = scene.fog;

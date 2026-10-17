@@ -67,3 +67,8 @@ of position, so no other tree moved. Budget unchanged (same draws and pools; sli
 In a sun break, needle sprays and fern fronds now glow when you look toward the sun through them (light
 transmitted through thin leaves, as in the god-ray photo). It's gated by the same canopy sun visibility as the dapples,
 so shaded ferns stay dark. A few ALU ops per foliage pixel; `?off=dapple` turns it off together with the dapples.
+
+### 7. Motes in the light
+In a sun break, soft specks of dust and seed fluff drift slowly near you (within ~7 m). They're only visible where the
+canopy lets the sun through, and brightest looking toward the sun (forward scattering), so they gather in the shafts.
+900 points (450 on phones), additive, no texture. `?off=motes`, bench row `motes`.
