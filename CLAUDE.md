@@ -33,7 +33,9 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `hemlock_spray.png` (lacy: side shoots fork again, `spray(sub_shoots=3)`), tint (0.68, 0.72, 0.66). Per-material tints
   are in `CARD_TINT` (vegetation.js). Hemlock ~3.7k tris. `fir_snow`, `hemlock_snow`, cedar and sapling are still the old
   cone trees. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M (fir) → 0.60M (hemlock) tris,
-  draws unchanged. CROWN fir 3.3. Reference photos: `inspo/README.md`. Gotcha: when adding a material patch in
+  draws unchanged. CROWN fir 3.3. Phone bench with branchy fir + hemlock (full clock): trees "saves" spawn 0.7 → 2.0 ms,
+  forest 0.3 → 1.1 ms; full frame 4.3 / 4.8 ms (still ≲6). Levers if needed: a shorter near radius for card trees on
+  phones, fewer crossed cards, a coarser card-tree LOD between near and impostor. Reference photos: `inspo/README.md`. Gotcha: when adding a material patch in
   `convertMaterial`, don't splice an `if` into the wind-sway/ground-cover if/else chain. It turned every tree into
   moss-speckled rock.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
