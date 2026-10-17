@@ -35,7 +35,7 @@ const VIEWS = [
  *  quick  smoke test for slow software renderers (one view, tiny batches)
  */
 export async function runBench({
-  renderer, scene, camera, player, veg, weather, grass, spawn, quick = false, rows = [], views: viewKeys = [], heat = 0,
+  renderer, scene, camera, player, veg, weather, grass, post, spawn, quick = false, rows = [], views: viewKeys = [], heat = 0,
 }) {
   const t0Run = performance.now();
   const N = quick ? 2 : 12; // frames per batch
@@ -45,7 +45,7 @@ export async function runBench({
   const gl = renderer.getContext();
   const pixel = new Uint8Array(4);
   const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-  const render = () => renderer.render(scene, camera);
+  const render = () => (post ? post.render(scene, camera) : renderer.render(scene, camera));
   const byName = (n) => scene.getObjectByName(n);
   const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
@@ -103,6 +103,12 @@ export async function runBench({
       };
       set(40);
       return () => set(was);
+    }],
+    // the post passes on top of the scene (the full A/B is ?off=post, which also moves MSAA back to the canvas)
+    ['post', '- rays/glow', () => {
+      if (!post?.enabled) return () => {};
+      post.effects = false;
+      return () => { post.effects = true; };
     }],
     ['water', '- water', () => hide(byName('lake'))],
     ['sky', '- sky', () => hide(byName('sky'))],

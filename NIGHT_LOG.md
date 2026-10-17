@@ -28,3 +28,19 @@ That retires the last of the old cone trees. ~1.1k tris each (+0.3k snow).
   `?bench&weather=sun` with `?bench&weather=sun&off=dapple`.
 - **Matte foliage:** needle cards and grass now keep only 15% of their direct specular. Grazing-angle Fresnel was
   turning sprays grey-white under a low sun. This improves the overcast look too: deeper, richer greens.
+
+### 3. God rays, soft glow, grade (`src/post.js`)
+The scene now renders into an offscreen target (MSAA moved there from the canvas), followed by:
+- **Light shafts** in a sun break: bright sky near the sun goes through a two-pass radial blur toward the sun's screen
+  position at quarter resolution. The canopy and trunks cut it into rays. They fade as you look away from the sun and
+  are skipped entirely in overcast (3 quarter-res passes when on).
+- **Soft glow** around bright sky (quarter res, 3 passes).
+- **Grade:** warmer highlights in a sun break, slightly cool shadows, a soft vignette, and fine grain that hides fog
+  banding.
+- **Same image otherwise:** three applies fog *after* tone mapping, so a plain linear HDR target made the fog lighter
+  and bluer. The target is flagged so three tone-maps and encodes into it exactly as it does for the canvas. With
+  rays/glow off, the composite reproduces the old image (apart from vignette and grain).
+- **Measure:** `?bench=post&weather=sun` (row "- rays/glow": the cost of the shafts and glow passes). The whole
+  pipeline, including the MSAA move and the full-screen composite, is A/B'd with `?off=post`:
+  compare `?bench=trees&views=spawn` with and without `&off=post` (the "full" lines).
+- Best view: `?weather=sun&yaw=1.0&pitch=0.12` (spawn, facing the sun) or `?weather=sun&x=110&z=470&yaw=0.9`.

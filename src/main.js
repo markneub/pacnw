@@ -17,6 +17,7 @@ import { loadTextureSet } from './textures.js';
 import { runBench } from './bench.js';
 import { AutoResolution } from './autores.js';
 import { buildGrass } from './grass.js';
+import { Post } from './post.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -40,12 +41,14 @@ shared.uLodRadius.value = VIEW_DIST.treeDetail;
 shared.uFernRadius.value = VIEW_DIST.ferns;
 
 // ?off=a,b,... switches parts off to find what costs the most on a device:
-// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass, sun, dapple.
+// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass, sun, dapple, post.
 // ?dpr=1 forces the render resolution scale.
 const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
 patchSunlight.enabled = !off.has('dapple'); // sunlight through the canopy
 
-const renderer = new THREE.WebGLRenderer({ antialias: !off.has('aa'), powerPreference: 'high-performance' });
+const postOn = !off.has('post');
+// with post-processing the scene renders into an MSAA target, so the canvas itself needs no antialiasing
+const renderer = new THREE.WebGLRenderer({ antialias: !off.has('aa') && !postOn, powerPreference: 'high-performance' });
 renderer.setPixelRatio(params.has('dpr') ? parseFloat(params.get('dpr'))
   // phones at 2x: ?bench showed +0.9–4.1 ms over 1.25x, and the user played ?dpr=2 without dropped frames
   : Math.min(window.devicePixelRatio, lowPower ? 2 : 1.5));
@@ -53,6 +56,9 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.45;
 document.getElementById('app').appendChild(renderer.domElement);
+// god rays, soft glow and the grade (post.js); it does the ACES tone mapping itself
+const post = new Post(renderer, { samples: off.has('aa') ? 0 : 4 });
+post.enabled = postOn;
 
 const scene = new THREE.Scene();
 scene.environment = createEnvironment(renderer);
@@ -184,7 +190,7 @@ async function init() {
     // ?bench (everything) · ?bench=trees,grass (just those rows) · &views=spawn · &heat=30 · quick (SwiftShader smoke test)
     const list = (k) => (params.get(k) ?? '').split(',').filter((v) => v && v !== 'all' && v !== 'quick');
     await runBench({
-      renderer, scene, camera, player, veg, weather, grass, spawn: SPAWN,
+      renderer, scene, camera, player, veg, weather, grass, post, spawn: SPAWN,
       quick: (params.get('bench') ?? '').split(',').includes('quick'), rows: list('bench'), views: list('views'),
       heat: parseFloat(params.get('heat') ?? '0') || 0,
     });
@@ -269,7 +275,7 @@ async function init() {
       hud.textContent = text;
     }
 
-    renderer.render(scene, camera);
+    post.render(scene, camera);
     perf?.end();
     if (still) {
       renderer.setAnimationLoop(null);
@@ -277,7 +283,7 @@ async function init() {
     }
   });
 
-  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail, veg, grass };
+  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail, veg, grass, post };
 }
 
 let flashTimer;
@@ -310,6 +316,7 @@ function warmUp() {
   renderer.readRenderTargetPixels(target, 0, 0, 1, 1, new Uint8Array(4));
   renderer.setRenderTarget(null);
   target.dispose();
+  post.warmUp(scene, camera);
   for (const [o, visible, culled] of restore) {
     o.visible = visible;
     o.frustumCulled = culled;

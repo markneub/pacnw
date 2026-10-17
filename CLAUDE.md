@@ -154,6 +154,19 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - **Measure before and after any perf change.** Count draw calls and triangles at fixed views (spawn, lake,
   forest `x=-30&z=420`, ridge `x=-60&z=-250`) with `?quality=high` and `?quality=low` via
   `renderer.info.render` after a `still` render. Note: `info.triangles` counts LOD-hidden instances too.
+- **Sun breaks + dapple** (overnight, see NIGHT_LOG.md): `weather.js` cycles overcast ↔ sun (`shared.uSun`, ~6 min,
+  starts sunny; `?weather=sun` pins it, `rain|snow|still` pin overcast, `?off=sun` stops the cycle). `SUN_DIR`/`SUN_COLOR`
+  live in `atmosphere.js`. The fog carrier packs the sun into `fog.near` (`round(sun*255) + density`). Overcast light comes from high
+  (`OVERCAST_DIR`) and lerps to the low sun. `patchSunlight` (materials.js) scales direct light by the canopy map
+  along the sun ray (dapples in sun); `?off=dapple`. Cards and grass keep only 15% direct specular (grazing Fresnel
+  bleached them under a low sun).
+- **Post** (`src/post.js`, `?off=post`): the scene renders into an MSAA target (the canvas then has no antialias), then
+  god rays (quarter-res bright pass + 2× radial blur toward the sun, only when `uSun × facing` > 0.01), glow, and a
+  composite (screen blend, grade, vignette, grain). **The scene target is flagged `isXRRenderTarget` with an sRGB colour
+  space and `internalFormat 'RGBA8'`** so three tone-maps/encodes into it like the canvas. three applies fog *after*
+  tone mapping, so a linear HDR target changed the fog. The RGBA8 internal format is needed or the MSAA resolve blit
+  (RGBA8 → SRGB8_ALPHA8) fails and the image is black. `Post.render` restores `renderer.info.render` to the scene's
+  numbers (the passes add ≤7 draws). Bench row `post` = "- rays/glow" (`post.effects`).
 - `src/atmosphere.js`: `installHeightFog()` replaces three's fog chunks globally, so it must run before
   any material compiles. **`scene.fog` is a `THREE.Fog` used as a carrier: `near` = density, `far` = time**
   (three refreshes those uniforms on every material). Fog thickens below ~18 m + 45 m falloff, and
