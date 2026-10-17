@@ -26,8 +26,13 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `uvs=` per face and `custom_normals`, and the export has texcoords on. Materials whose name ends in "Cards" are smooth-shaded.
   In JS (`convertMaterial` → `patchCards`): map + alphaTest 0.5, DoubleSide, colour (0.55, 0.6, 0.52), the back-face normal
   flip undone, and alpha × (1 + 0.3·mip level) so sprays don't vanish with distance. The impostor bake samples the map and
-  uses vertex normals for cards. `fir_lod` is a matching narrow cone (only for `?farTrees=lod`). `fir_snow`, hemlock, cedar
-  and sapling are still the old cone trees. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M tris,
+  uses vertex normals for cards. `fir_lod` is a matching narrow cone (only for `?farTrees=lod`).
+  **Hemlock done too:** both trees come from `branchy_conifer(...)` (elev, sag, card_droop, whorl, spacing, fill = crown
+  profile, nod = sideways bend of the trunk top for hemlock's nodding leader; branch origins follow the bent axis).
+  `branchy_hemlock`: 26 m, crown from 4.5 m, max radius 4.2, branches angled down with pendulous tips, `HemlockCards` with
+  `hemlock_spray.png` (lacy: side shoots fork again, `spray(sub_shoots=3)`), tint (0.68, 0.72, 0.66). Per-material tints
+  are in `CARD_TINT` (vegetation.js). Hemlock ~3.7k tris. `fir_snow`, `hemlock_snow`, cedar and sapling are still the old
+  cone trees. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M (fir) → 0.60M (hemlock) tris,
   draws unchanged. CROWN fir 3.3. Reference photos: `inspo/README.md`. Gotcha: when adding a material patch in
   `convertMaterial`, don't splice an `if` into the wind-sway/ground-cover if/else chain. It turned every tree into
   moss-speckled rock.

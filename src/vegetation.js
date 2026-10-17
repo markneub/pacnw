@@ -102,6 +102,9 @@ function patchCards(mat) {
   mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards`;
 }
 
+/** Colour multiplier per foliage-card material. */
+const CARD_TINT = { FirCards: [0.55, 0.6, 0.52], HemlockCards: [0.68, 0.72, 0.66] };
+
 // Scanned-rock materials waiting for their textures (applyRockTextures).
 const scanMaterials = [];
 
@@ -127,9 +130,9 @@ function convertMaterial(src, assetName, lod, cache) {
   if (cards) {
     mat.map = src.map; // the needle spray (RGBA, embedded in the GLB)
     mat.alphaTest = 0.5;
-    // the spray texture is painted bright; deepen it to Douglas fir green so it
-    // sits with the other conifers (the impostor bake reads this colour too)
-    mat.color.setRGB(0.55, 0.6, 0.52);
+    // the spray textures are painted bright; deepen them to each species' green
+    // so they sit together (the impostor bake reads this colour too)
+    mat.color.setRGB(...(CARD_TINT[src.name] ?? [0.6, 0.6, 0.6]));
   }
   // needles shed water and scatter light: keep sky reflections off foliage
   if (/Needles|Foliage|Fern|Cards/.test(src.name)) mat.envMapIntensity = 0.35;

@@ -167,6 +167,7 @@ def mats():
         "sign_post": material("SignPost", (0.33, 0.23, 0.15)),
         "lod": material("LodVertexColor", (1.0, 1.0, 1.0), 0.85),
         "fir_cards": card_material("FirCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
+        "hemlock_cards": card_material("HemlockCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
     }
 
 
@@ -312,35 +313,46 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
     b.face(idx, mat, uvs=us)
 
 
-def branchy_fir(M, name, seed=1, height=30.0, crown_base=10.5, max_radius=3.6, r_trunk=0.62):
+def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
+                    elev=(-0.12, 0.35), sag=(0.12, 0.28), card_droop=0.12, whorl=(4, 5, 5, 6),
+                    spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35):
     """
-    Douglas fir up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
-    then whorls of branches clothed in needle-spray cards, forming a narrow,
-    ragged crown with gaps you can see through.
+    A conifer up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
+    then whorls of branches clothed in needle-spray cards, forming a ragged
+    crown with gaps you can see through.
+      elev       branch angle (rad) at the crown base and gained toward the top
+      sag        range of how much branch tips sag (share of length)
+      fill       the crown fills out over the first fill[0] of its height, then
+                 tapers with exponent fill[1]
+      nod        sideways bend (m) of the top of the trunk: hemlock's nodding leader
     """
     rng = random.Random(seed)
     b = MeshBuilder()
     trunk_h = height * 0.97
     taper = 0.12
-    trunk(b, M["bark"], trunk_h, r_trunk, r_trunk * taper, flare=1.35, sides=10, rings=6)
+    trunk(b, M["bark"], trunk_h, r_trunk, r_trunk * taper, flare=flare, sides=10, rings=8 if nod else 6,
+          lean=(nod, 0.0))
     r_at = lambda z: r_trunk * (1.0 - (1.0 - taper) * z / trunk_h)
+    axis_at = lambda z: Vector((nod * (z / trunk_h) ** 2, 0.0, 0.0))  # the trunk's centre line
     for _ in range(16):  # dead stubs on the bare lower trunk
-        z = rng.uniform(2.5, crown_base + 1.0)
+        z = rng.uniform(2.5, max(3.0, crown_base + 1.0))
         a = rng.uniform(0, TAU)
         L = rng.uniform(0.3, 1.3)
-        base = Vector((math.cos(a) * r_at(z) * 0.85, math.sin(a) * r_at(z) * 0.85, z))
+        base = axis_at(z) + Vector((math.cos(a) * r_at(z) * 0.85, math.sin(a) * r_at(z) * 0.85, z))
         tip = base + Vector((math.cos(a) * L, math.sin(a) * L, -L * rng.uniform(0.1, 0.5)))
         _stick(b, M["snag"], base, tip, rng.uniform(0.03, 0.06))
 
-    cards = M["fir_cards"]
     up = Vector((0.0, 0.0, 1.0))
+    # normalise the crown profile so its widest point is max_radius
+    prof_fn = lambda t: min(1.0, t / fill[0]) ** 0.5 * (1.0 - t) ** fill[1]
+    prof_max = max(prof_fn(i / 200) for i in range(201))
     z = crown_base
     while z < height - 0.8:
         t = (z - crown_base) / (height - crown_base)
-        # narrow crown: fills out over the first fifth, then tapers to the leader
-        prof = min(1.0, t / 0.2) ** 0.5 * (1.0 - t) ** 0.9 / 0.82
-        nb = rng.choice((4, 5, 5, 6))
+        prof = prof_fn(t) / prof_max
+        nb = rng.choice(whorl)
         a0 = rng.uniform(0, TAU)
+        centre = axis_at(z)
         for i in range(nb):
             if rng.random() < 0.12:
                 continue  # gaps make the crown ragged and see-through
@@ -348,12 +360,12 @@ def branchy_fir(M, name, seed=1, height=30.0, crown_base=10.5, max_radius=3.6, r
             L = max(0.45, max_radius * prof * rng.uniform(0.6, 1.25))
             horiz = Vector((math.cos(a), math.sin(a), 0.0))
             side0 = Vector((-math.sin(a), math.cos(a), 0.0))
-            elev = 0.35 * t - 0.12 + rng.uniform(-0.08, 0.08)  # lower branches droop, upper sweep up
-            sag = rng.uniform(0.12, 0.28)
-            base = horiz * (r_at(z) * 0.8) + Vector((0.0, 0.0, z))
+            el = elev[1] * t + elev[0] + rng.uniform(-0.08, 0.08)
+            sg = rng.uniform(*sag)
+            base = centre + horiz * (r_at(z) * 0.8) + Vector((0.0, 0.0, z))
 
             def at(s):
-                return base + horiz * (L * s) + up * (L * (elev * s - sag * s * s))
+                return base + horiz * (L * s) + up * (L * (el * s - sg * s * s))
 
             _stick(b, M["bark"], base, at(0.85), 0.03 + 0.025 * L)
             n_cards = max(2, round(L / 0.6))
@@ -364,18 +376,33 @@ def branchy_fir(M, name, seed=1, height=30.0, crown_base=10.5, max_radius=3.6, r
                 roll = rng.uniform(-0.6, 0.6)
                 side = side0 * math.cos(roll) + fwd.cross(side0).normalized() * math.sin(roll)
                 cl = min(1.6, 0.8 + L * 0.3) * rng.uniform(0.85, 1.1)
-                _card(b, cards, c, fwd, side, cl, cl * 0.9, 0.12 * cl, (0.0, 0.0), flip_u=rng.random() < 0.5)
+                _card(b, cards, c, fwd, side, cl, cl * 0.9, card_droop * cl, (centre.x, centre.y), flip_u=rng.random() < 0.5)
                 if rng.random() < 0.7:  # a crossed card for volume seen from the side
                     side2 = side0 * math.cos(roll + 1.4) + fwd.cross(side0).normalized() * math.sin(roll + 1.4)
-                    _card(b, cards, c, fwd, side2, cl * 0.8, cl * 0.6, 0.08 * cl, (0.0, 0.0))
-        z += rng.uniform(0.38, 0.6) * (1.0 - 0.35 * t)
-    # leader: a few upright sprays at the top
+                    _card(b, cards, c, fwd, side2, cl * 0.8, cl * 0.6, card_droop * 0.7 * cl, (centre.x, centre.y))
+        z += rng.uniform(*spacing) * (1.0 - 0.35 * t)
+    # leader: a few sprays at the top, following the trunk's bend
+    top = axis_at(trunk_h)
+    lead = (Vector((nod * 0.6, 0.0, 1.0)) if nod else up).normalized()
     for k in range(3):
         a = k * TAU / 3 + rng.uniform(0, 0.5)
         horiz = Vector((math.cos(a), math.sin(a), 0.0))
-        c = Vector((horiz.x * 0.15, horiz.y * 0.15, height - 0.9))
-        _card(b, cards, c, up, horiz.cross(up), 1.4, 0.7, 0.0, (0.0, 0.0))
+        c = top + Vector((horiz.x * 0.15, horiz.y * 0.15, -0.9))
+        _card(b, cards, c, lead, horiz.cross(lead).normalized(), 1.4, 0.7, 0.3 if nod else 0.0, (top.x, top.y))
     return b.build(name)
+
+
+def branchy_fir(M, name, seed=1):
+    """Douglas fir: tall, bare for the lower third, narrow ragged crown."""
+    return branchy_conifer(M, name, M["fir_cards"], seed, height=30.0, crown_base=10.5, max_radius=3.6, r_trunk=0.62)
+
+
+def branchy_hemlock(M, name, seed=2):
+    """Western hemlock: shade-tolerant, so the crown starts low; branches sweep
+    down with pendulous tips, lacy sprays, and the leader nods over."""
+    return branchy_conifer(M, name, M["hemlock_cards"], seed, height=26.0, crown_base=4.5, max_radius=4.2,
+                           r_trunk=0.5, elev=(-0.3, 0.3), sag=(0.3, 0.5), card_droop=0.3,
+                           spacing=(0.42, 0.62), fill=(0.1, 1.15), nod=1.3, flare=1.25)
 
 
 def douglas_fir(M, name, snow, seed=1, lod=False):
@@ -653,7 +680,7 @@ def main():
 
     branchy_fir(M, "fir")
     douglas_fir(M, "fir_snow", snow=True)
-    hemlock(M, "hemlock", snow=False)
+    branchy_hemlock(M, "hemlock")
     hemlock(M, "hemlock_snow", snow=True)
     cedar(M, "cedar")
     sapling(M, "sapling", snow=False)
@@ -666,7 +693,10 @@ def main():
             foliage=[M["needles"], M["needles_dark"]], trunk_mat=M["bark"], droop=0.3,
             r_trunk=0.62, lod=True)
     douglas_fir(M, "fir_snow_lod", snow=True, lod=True)
-    hemlock(M, "hemlock_lod", snow=False, lod=True)
+    # matches the branchy hemlock (only for ?farTrees=lod)
+    conifer("hemlock_lod", M, 2, height=26.0, crown_base=4.5, max_radius=3.8, tiers=8, points=5,
+            foliage=[M["needles_dark"], M["needles"]], trunk_mat=M["bark"], droop=0.8, r_trunk=0.5,
+            leader_lean=1.3, shape_pow=1.1, lod=True)
     hemlock(M, "hemlock_snow_lod", snow=True, lod=True)
     cedar(M, "cedar_lod", lod=True)
     sapling(M, "sapling_lod", snow=False, lod=True)

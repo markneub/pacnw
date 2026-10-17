@@ -3,9 +3,9 @@ Procedural foliage textures for the branch cards in blender/build_assets.py.
 
     python3 tools/make_foliage.py
 
-Writes public/textures/foliage/fir_spray.png: a Douglas fir spray (a twig with
-alternating side shoots, needles flattened into two ranks, lighter new growth
-at the tips) on a transparent background. Card UVs: u runs along the branch
+Writes public/textures/foliage/<name>.png for each entry in SPRAYS (Douglas fir,
+western hemlock): a twig with alternating side shoots, needles flattened into
+two ranks, lighter new growth at the tips, on a transparent background. Card UVs: u runs along the branch
 (0 = the end nearest the trunk), v across it.
 
 The colour is bled into the transparent texels so mipmaps don't darken the
@@ -42,13 +42,17 @@ def lerp(a, b, t):
     return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in range(len(a)))
 
 
-def fir_spray(seed=7):
+def spray(seed, old, new, needle_len=0.1, axis_spacing=0.0075, n_side=11, side_len=(0.46, 0.30),
+          side_angle=(38, 52), side_spacing=0.008, sub_shoots=0, needle_angle=(48, 72), width=3):
+    """
+    A conifer spray: a main twig with alternating side shoots (optionally with
+    their own sub-shoots, for lacy sprays like hemlock), needles flattened into
+    two ranks. `old` -> `new` colours run from the base to the growing tips.
+    """
     rng = random.Random(seed)
     W = SIZE * SS
     img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    old = (34, 64, 36)  # older needles, near the twig base
-    new = (92, 128, 52)  # new growth at the tips
     twig = (92, 70, 48)
 
     def needles(x0, y0, x1, y1, length, spacing, age0, age1, width):
@@ -65,7 +69,7 @@ def fir_spray(seed=7):
             col = lerp(old, new, age ** 1.6)
             col = tuple(max(0, min(255, c + rng.randint(-10, 10))) for c in col)
             for side in (-1, 1):
-                a = math.radians(rng.uniform(48, 72))  # swept forward
+                a = math.radians(rng.uniform(*needle_angle))  # swept forward
                 nl = length * rng.uniform(0.75, 1.1) * (0.75 + 0.25 * (1 - t))
                 ex = cx + (ux * math.cos(a) + side * px * math.sin(a)) * nl
                 ey = cy + (uy * math.cos(a) + side * py * math.sin(a)) * nl
@@ -77,12 +81,11 @@ def fir_spray(seed=7):
     x0, x1 = margin * 0.3, W - margin
     # main axis: a gentle wiggle along u
     pts = [(x0 + (x1 - x0) * k / 6, y_mid + rng.uniform(-0.02, 0.02) * W) for k in range(7)]
-    nlen = 0.1 * W
+    nlen = needle_len * W
     for k in range(6):
         (ax, ay), (bx, by) = pts[k], pts[k + 1]
-        needles(ax, ay, bx, by, nlen, 0.0075 * W, k / 6, (k + 1) / 6, 3 * SS)
+        needles(ax, ay, bx, by, nlen, axis_spacing * W, k / 6, (k + 1) / 6, width * SS)
     # alternating side shoots, shorter toward the tip, angled forward
-    n_side = 11
     for i in range(n_side):
         t = 0.08 + 0.82 * i / (n_side - 1)
         k = min(5, int(t * 6))
@@ -90,13 +93,22 @@ def fir_spray(seed=7):
         sx = pts[k][0] + (pts[k + 1][0] - pts[k][0]) * f
         sy = pts[k][1] + (pts[k + 1][1] - pts[k][1]) * f
         side = 1 if i % 2 else -1
-        length = (0.46 - 0.30 * t) * W * rng.uniform(0.85, 1.1)
-        ang = math.radians(rng.uniform(38, 52))
+        length = (side_len[0] - side_len[1] * t) * W * rng.uniform(0.85, 1.1)
+        ang = math.radians(rng.uniform(*side_angle))
         ex = sx + math.cos(ang) * length
         ey = sy + side * math.sin(ang) * length
         # keep inside the card
         ey = min(W - margin, max(margin, ey))
-        needles(sx, sy, ex, ey, nlen * 0.8, 0.008 * W, t * 0.7, min(1.0, t * 0.7 + 0.45), 3 * SS)
+        age0, age1 = t * 0.7, min(1.0, t * 0.7 + 0.45)
+        needles(sx, sy, ex, ey, nlen * 0.8, side_spacing * W, age0, age1, width * SS)
+        for j in range(sub_shoots):  # lacy: shoots off the side shoot, outward
+            u = 0.3 + 0.55 * j / max(1, sub_shoots - 1) if sub_shoots > 1 else 0.5
+            bx, by = sx + (ex - sx) * u, sy + (ey - sy) * u
+            sl = length * (0.45 - 0.25 * u) * rng.uniform(0.8, 1.1)
+            sa = ang + math.radians(rng.uniform(35, 50)) * (1 if j % 2 else -1)
+            tx = bx + math.cos(sa) * sl
+            ty = min(W - margin, max(margin, by + side * math.sin(sa) * sl))
+            needles(bx, by, tx, ty, nlen * 0.7, side_spacing * W, age0 + 0.2, min(1.0, age1 + 0.2), width * SS)
 
     img = img.resize((SIZE, SIZE), Image.LANCZOS)
     a = np.asarray(img).astype(np.float32)
@@ -121,11 +133,23 @@ def fir_spray(seed=7):
     return Image.fromarray(out, "RGBA")
 
 
+SPRAYS = {
+    # Douglas fir: longer needles, a few stiff side shoots
+    "fir_spray": dict(seed=7, old=(34, 64, 36), new=(92, 128, 52)),
+    # western hemlock: short fine needles, many side shoots that fork again
+    # (lacy, flat sprays), darker green with lighter tips
+    "hemlock_spray": dict(seed=11, old=(26, 54, 36), new=(70, 112, 56), needle_len=0.05, axis_spacing=0.005,
+                          n_side=13, side_len=(0.44, 0.26), side_angle=(48, 62), side_spacing=0.0055,
+                          sub_shoots=3, needle_angle=(65, 85), width=2),
+}
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
-    path = os.path.join(OUT, "fir_spray.png")
-    fir_spray().save(path, optimize=True)
-    print("wrote", path, os.path.getsize(path) // 1024, "KB")
+    for name, params in SPRAYS.items():
+        path = os.path.join(OUT, f"{name}.png")
+        spray(**params).save(path, optimize=True)
+        print("wrote", path, os.path.getsize(path) // 1024, "KB")
 
 
 if __name__ == "__main__":
