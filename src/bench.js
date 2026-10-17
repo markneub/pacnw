@@ -1,4 +1,6 @@
 import { groundDetail } from './grounddetail.js';
+import { VIEW_DIST } from './config.js';
+import { shared } from './materials.js';
 import { surfaceDetail } from './surfacedetail.js';
 
 /**
@@ -25,7 +27,7 @@ const VIEWS = [
 /**
  * Options (from the URL, see main.js):
  *  rows   which rows to run, e.g. ['trees', 'grass']; empty = all. Keys: trees,
- *         ferns, rocks, ground, detail, tex, grass, grass50, water, sky,
+ *         ferns, rocks, ground, detail, tex, grass, grass50, near40, water, sky,
  *         weather, empty, dpr (all the resolution rows). "full" always runs.
  *  views  e.g. ['spawn']; empty = all (spawn, forest, snow)
  *  heat   seconds of flat-out rendering first. Phones slow their GPU after
@@ -90,6 +92,17 @@ export async function runBench({
       if (!grass) return () => {};
       grass.setShare(0.5);
       return () => grass.setShare(1);
+    }],
+    // a shorter full-detail tree radius (billboards take over sooner): what would it save?
+    ['near40', 'near trees 40m', () => {
+      const was = VIEW_DIST.treeDetail;
+      const set = (r) => {
+        VIEW_DIST.treeDetail = r;
+        shared.uLodRadius.value = r;
+        veg.updateNear(camera, true);
+      };
+      set(40);
+      return () => set(was);
     }],
     ['water', '- water', () => hide(byName('lake'))],
     ['sky', '- sky', () => hide(byName('sky'))],

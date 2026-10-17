@@ -33,11 +33,11 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `hemlock_spray.png` (lacy: side shoots fork again, `spray(sub_shoots=3)`), tint (0.68, 0.72, 0.66). Per-material tints
   are in `CARD_TINT` (vegetation.js). Hemlock ~3.7k tris. **Cedar done:** `branchy_cedar`: 27 m, crown from 5 m,
   J-shaped branches (elev down, *negative* sag curves the tips up), `hang=0.55` hangs sprays vertically like curtains,
-  `card_every=0.45` (denser), `flutes=7` buttress ridges on the lower 12% of the trunk (`trunk(flutes=, flute_h=)`), and
-  CedarBark. `cedar_spray()` paints flat scale-leaf fans (overlapping lobes, not needles). Tint (0.5, 0.56, 0.46). ~5.7k tris
-  (the heaviest). New `branchy_conifer` options consume no extra rng unless used, so fir/hemlock stay identical. All cards
+  `card_every=0.6, cross=0.35` (was 0.45/0.7: the phone bench showed trees 3.4 ms / frame 7.3 ms at cedar-rich spawn), `flutes=7` buttress ridges on the lower 12% of the trunk (`trunk(flutes=, flute_h=)`), and
+  CedarBark. `cedar_spray()` paints flat scale-leaf fans (overlapping lobes, not needles). Tint (0.5, 0.56, 0.46). ~3.9k tris.
+  `?bench=trees,near40` measures what a 40 m phone detail radius (vs 60) would save. New `branchy_conifer` options consume no extra rng unless used, so fir/hemlock stay identical. All cards
   are now darkened up to 40% where the visible side faces away from the card normal (crown undersides seen from below
-  were sky-lit and pale). `fir_snow`, `hemlock_snow` and sapling are still the old cone trees. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M (fir) → 0.60M (hemlock) → 0.75M (cedar) tris,
+  were sky-lit and pale). `fir_snow`, `hemlock_snow` and sapling are still the old cone trees. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M (fir) → 0.60M (hemlock) → 0.75M (cedar) → 0.70M (lighter cedar) tris,
   draws unchanged. CROWN fir 3.3. Phone bench with branchy fir + hemlock (full clock): trees "saves" spawn 0.7 → 2.0 ms,
   forest 0.3 → 1.1 ms; full frame 4.3 / 4.8 ms (still ≲6). Levers if needed: a shorter near radius for card trees on
   phones, fewer crossed cards, a coarser card-tree LOD between near and impostor. Reference photos: `inspo/README.md`. Gotcha: when adding a material patch in
@@ -136,7 +136,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   back-to-back frames with one GPU wait. Each row is paired with alternating full-scene batches, because phones change clock
   speed mid-run. It reports each part off, an empty scene and other DPRs, in a copyable table. The user runs it on their phone
   and pastes the result. **Parameterized (v3):** `?bench=trees,grass` runs only those rows (keys: trees, ferns, rocks,
-  ground, detail, tex, grass, grass50, water, sky, weather, empty, dpr) plus the full baseline. `&views=spawn,forest,snow`,
+  ground, detail, tex, grass, grass50, near40, water, sky, weather, empty, dpr) plus the full baseline. `&views=spawn,forest,snow`,
   and `&heat=30` renders flat out first (in 200 ms slices), so the run measures the throttled state directly. The full
   run takes ~2 min. Ask for just the rows a change touches. **The user prefers not to heat up:** links go without `&heat` and measure
   the full-clock state. Judge by relative cost (paired "saves"); autores covers throttling. Rule of thumb: keep the

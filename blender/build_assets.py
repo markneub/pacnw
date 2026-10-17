@@ -320,7 +320,7 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
 def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
                     elev=(-0.12, 0.35), sag=(0.12, 0.28), card_droop=0.12, whorl=(4, 5, 5, 6),
                     spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35, bark=None,
-                    hang=0.0, flutes=0, card_every=0.6):
+                    hang=0.0, flutes=0, card_every=0.6, cross=0.7):
     """
     A conifer up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
     then whorls of branches clothed in needle-spray cards, forming a ragged
@@ -387,7 +387,7 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
                 side = side0 * math.cos(roll) + fwd.cross(side0).normalized() * math.sin(roll)
                 cl = min(1.6, 0.8 + L * 0.3) * rng.uniform(0.85, 1.1)
                 _card(b, cards, c, fwd, side, cl, cl * 0.9, card_droop * cl, (centre.x, centre.y), flip_u=rng.random() < 0.5)
-                if rng.random() < 0.7:  # a crossed card for volume seen from the side
+                if rng.random() < cross:  # a crossed card for volume seen from the side
                     side2 = side0 * math.cos(roll + 1.4) + fwd.cross(side0).normalized() * math.sin(roll + 1.4)
                     _card(b, cards, c, fwd, side2, cl * 0.8, cl * 0.6, card_droop * 0.7 * cl, (centre.x, centre.y))
         z += rng.uniform(*spacing) * (1.0 - 0.35 * t)
@@ -422,7 +422,7 @@ def branchy_cedar(M, name, seed=3):
     return branchy_conifer(M, name, M["cedar_cards"], seed, height=27.0, crown_base=5.0, max_radius=4.4,
                            r_trunk=0.8, elev=(-0.35, 0.25), sag=(-0.32, -0.12), card_droop=0.25,
                            spacing=(0.4, 0.58), fill=(0.15, 0.85), nod=0.9, flare=1.7,
-                           bark=M["cedar_bark"], hang=0.55, flutes=7, card_every=0.45)
+                           bark=M["cedar_bark"], hang=0.55, flutes=7, card_every=0.6, cross=0.35)
 
 
 def douglas_fir(M, name, snow, seed=1, lod=False):
