@@ -185,3 +185,17 @@ body.touch #hud {
   color: #1c2a22;
   font-size: 14px;
 }
+
+/* one-thumb look mode (touch.js): a faint vignette while it's on */
+#look-cue {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.28) 100%);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+#look-cue.on {
+  opacity: 1;
+}

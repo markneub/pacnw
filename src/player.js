@@ -25,6 +25,7 @@ export class Player {
     this.moveDir = new THREE.Vector3(); // reused each frame (no per-frame garbage)
     this.levelPitch = false; // one-thumb touch steering: ease the view to follow the ground ahead
     this.slopePitch = 0; // smoothed pitch of the ground ahead (radians)
+    this.spin = new THREE.Vector2(); // look glide after a released swipe (rad/s, decays)
 
     camera.rotation.order = 'YXZ';
 
@@ -60,6 +61,11 @@ export class Player {
   }
 
   update(dt) {
+    if (this.spin.x !== 0 || this.spin.y !== 0) {
+      this.look(this.spin.x * dt, this.spin.y * dt);
+      this.spin.multiplyScalar(Math.exp(-dt * 6));
+      if (this.spin.lengthSq() < 1e-4) this.spin.set(0, 0);
+    }
     const k = this.keys;
     const fwd = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);

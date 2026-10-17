@@ -179,7 +179,7 @@ async function init() {
       started = true;
       if (params.has('bench')) startBench();
       // the start box has no instructions, so give a brief hint once
-      flash(touch ? 'Slide up to walk · slide sideways to turn' : 'WASD to walk · Shift to run · mouse to look', 4000);
+      flash(touch ? 'Slide up to walk · sideways to turn · hold, then drag to look' : 'WASD to walk · Shift to run · mouse to look', 4000);
     }
   });
   document.addEventListener('pointerlockchange', () => {
