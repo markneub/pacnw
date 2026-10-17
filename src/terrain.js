@@ -419,7 +419,33 @@ export function buildWater() {
           g += (rainRing(p * 0.9, uTime) + rainRing(p * 1.3 + 17.0, uTime * 1.1)) * 0.35 * uWet;
           vec3 nWorld = normalize(vec3(-g.x, 1.0, -g.y));
           normal = normalize((viewMatrix * vec4(nWorld, 0.0)).xyz);
-        }`);
+        }`)
+      // The environment map is the load-time overcast sky: no shore, no sun
+      // break. Reflect an analytic scene instead: the far shore's treeline
+      // (dark, fogged, with jagged spire tops), faint ridges above it, then sky.
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        #ifdef USE_FOG
+        {
+          vec3 wV = normalize(vViewPosition);
+          vec3 rW = (vec4(reflect(-wV, normal), 0.0) * viewMatrix).xyz; // world space
+          float az = atan(rW.z, rW.x);
+          float e = rW.y;
+          float n1 = wHash(vec2(floor(az * 60.0), 3.0));
+          float n2 = wHash(vec2(floor(az * 60.0) + 1.0, 3.0));
+          float spires = mix(n1, n2, smoothstep(0.0, 1.0, fract(az * 60.0)));
+          float treeTop = 0.07 + 0.06 * spires + 0.04 * sin(az * 5.0 + 1.3);
+          float ridge = 0.16 + 0.07 * sin(az * 3.0 + 0.5) + 0.03 * sin(az * 11.0);
+          vec3 haze = fogColor;
+          vec3 sky = haze * (1.05 + 0.35 * smoothstep(0.0, 0.6, e));
+          vec3 hills = mix(haze * 0.82, sky, 0.25);
+          vec3 shore = mix(vec3(0.018, 0.03, 0.022), haze * 0.55, 0.45);
+          vec3 refl = e < treeTop ? shore : (e < ridge ? hills : sky);
+          // a soft edge so the bands don't alias
+          refl = mix(shore, refl, smoothstep(treeTop - 0.01, treeTop + 0.01, e));
+          float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(normal, wV), 0.0, 1.0), 5.0);
+          reflectedLight.indirectSpecular = refl * fres * 1.15;
+        }
+        #endif`);
   };
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(LAKE.x, WATER_LEVEL, LAKE.z);

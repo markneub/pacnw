@@ -72,3 +72,10 @@ so shaded ferns stay dark. A few ALU ops per foliage pixel; `?off=dapple` turns 
 In a sun break, soft specks of dust and seed fluff drift slowly near you (within ~7 m). They're only visible where the
 canopy lets the sun through, and brightest looking toward the sun (forward scattering), so they gather in the shafts.
 900 points (450 on phones), additive, no texture. `?off=motes`, bench row `motes`.
+
+### 8. Lake reflections
+The lake reflected only the load-time overcast environment map, so it was flat grey, especially in a sun break.
+It now reflects an analytic scene: a dark, fogged far-shore treeline with jagged spire tops, faint ridges above it,
+then sky that follows the current haze colour (warm in a sun break). It uses Schlick Fresnel on the wave-perturbed
+normal, so the reflection ripples. A few ALU ops on the lake's pixels only. Best view: `?x=110&z=470&yaw=-0.67`
+(add `&weather=sun`).
