@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SUN_DIR, SUN_COLOR } from './atmosphere.js';
+import { SUN_DIR, SUN_COLOR, FOG_POOL_BASE, FOG_POOL_FALLOFF } from './atmosphere.js';
 import { shared } from './materials.js';
 
 /**
@@ -7,9 +7,12 @@ import { shared } from './materials.js';
  * canvas used to (tone mapped, sRGB: see the constructor for why), then
  *  1. bright pass (quarter res): sky and sunlit haze near the sun, plus a
  *     general highlight extract for the glow
- *  2. light shafts: a radial blur of that toward the sun's screen position
- *     (two passes of 16 taps, so the streaks reach far) — the canopy and trunks
- *     cut it into god rays
+ *  2. light shafts: (a) volumetric: march each view ray through the mist (the
+ *     fog's own density: valley pooling + drifting banks) and add sunlight
+ *     scattered toward the eye wherever the canopy lets the sun through (the
+ *     same canopy map and dapple noise as the sunflecks on the ground, so each
+ *     shaft lands on its fleck); (b) a gentle radial blur of the bright sky
+ *     toward the sun for the glare around it
  *  3. glow: a small separable blur of the highlights (bloom, very soft)
  *  4. composite (full res): scene + shafts + glow (screen blend), a gentle grade
  *     (cool shade, warm light in a sun break), a soft vignette and a fine
@@ -47,9 +50,10 @@ export class Post {
     this.renderer = renderer;
     this.enabled = true;
     this.effects = true; // false: just the scene and the composite (bench row '- rays/glow')
+    this.volStrength = 1.25; // light in the mist
     this.size = new THREE.Vector2();
     const rt = (w, h) => new THREE.WebGLRenderTarget(w, h, { depthBuffer: false });
-    this.sceneRT = new THREE.WebGLRenderTarget(4, 4, { samples });
+    this.sceneRT = new THREE.WebGLRenderTarget(4, 4, { samples, depthTexture: new THREE.DepthTexture(4, 4) });
     // three applies fog *after* tone mapping and the sRGB encode, so the fog
     // colours are tuned in display space. Into an ordinary (linear) target the
     // fog would mix before ACES and come out lighter and bluer. Flagged like an
@@ -59,6 +63,8 @@ export class Post {
     this.sceneRT.isXRRenderTarget = true;
     this.sceneRT.texture.colorSpace = THREE.SRGBColorSpace;
     this.sceneRT.texture.internalFormat = 'RGBA8'; // as the MSAA buffer it resolves from (an sRGB format would fail the blit)
+    this.vA = rt(2, 2); // volumetric light (quarter res) + its blur
+    this.vB = rt(2, 2);
     this.qA = rt(2, 2);
     this.qB = rt(2, 2);
     this.gA = rt(2, 2);
@@ -107,6 +113,80 @@ export class Post {
         gl_FragColor = vec4(sum / total, 1.0);
       }`, { tSrc: { value: null }, uSunUv: { value: this.sunUv }, uStep: { value: 0.5 } });
 
+    // 2a. volumetric light in the mist (quarter res)
+    const sunXZ = new THREE.Vector2(SUN_DIR.x / SUN_DIR.y, SUN_DIR.z / SUN_DIR.y); // horizontal drift per metre of climb
+    this.volume = pass(/* glsl */ `
+      uniform sampler2D tDepth;
+      uniform mat4 uInvProj;
+      uniform mat4 uCamWorld;
+      uniform vec3 uCamPos;
+      uniform sampler2D uCanopyMap;
+      uniform vec4 uCanopyRect;
+      uniform sampler2D uGround;
+      uniform vec4 uGroundGrid; // min x, min z, size, -
+      uniform float uDensity;   // the fog's base density
+      uniform float uTime;
+      uniform float uSun;
+      uniform float uFrame;
+      varying vec2 vUv;
+      const vec2 SUN_XZ = vec2(${sunXZ.x.toFixed(4)}, ${sunXZ.y.toFixed(4)});
+      const vec3 SUN = vec3(${SUN_DIR.x.toFixed(4)}, ${SUN_DIR.y.toFixed(4)}, ${SUN_DIR.z.toFixed(4)});
+      float vHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+      float vNoise(vec2 p) {
+        vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(vHash(i), vHash(i + vec2(1, 0)), f.x), mix(vHash(i + vec2(0, 1)), vHash(i + vec2(1, 1)), f.x), f.y);
+      }
+      float canopy(vec2 xz) { return texture2D(uCanopyMap, (xz - uCanopyRect.xy) / uCanopyRect.zw).r; }
+      // is this point in the air sunlit? Same samples as the ground's dappled light
+      // (materials.js sunVisibility), shifted by its height: the ray to the sun
+      // crosses the crowns at the same spots as for the fleck it lands on.
+      float sunlit(vec3 p, float above) {
+        vec2 q = p.xz + SUN_XZ * max(0.0, 7.8 - above);
+        float c1 = canopy(q);
+        float c2 = canopy(p.xz + SUN_XZ * max(0.0, 18.0 - above));
+        float c = 1.0 - (1.0 - min(1.0, c1 * 2.4)) * (1.0 - min(1.0, c2 * 2.4));
+        vec2 dp = q * 0.45 + vec2(uTime * 0.04, uTime * 0.025);
+        float n = vNoise(dp) * 0.6 + vNoise(dp * 2.7 + 7.3) * 0.4;
+        return smoothstep(c - 0.07, c + 0.07, n * 1.15 - 0.08); // crisper than the ground's: beams have edges
+      }
+      void main() {
+        float depth = texture2D(tDepth, vUv).r;
+        vec4 vp = uInvProj * vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+        vec3 viewPos = vp.xyz / vp.w;
+        float dist = depth >= 1.0 ? 1e4 : length(viewPos);
+        vec3 dir = normalize((uCamWorld * vec4(viewPos, 0.0)).xyz);
+        float maxD = min(dist, 55.0);
+        const int N = 16;
+        float stepLen = maxD / float(N);
+        // interleaved gradient noise, rotating per frame: the blur and the eye average it out
+        float jit = fract(52.9829189 * fract(dot(gl_FragCoord.xy + uFrame * 5.588238, vec2(0.06711056, 0.00583715))));
+        float light = 0.0;
+        float trans = 1.0;
+        for (int i = 0; i < N; i++) {
+          vec3 p = uCamPos + dir * ((float(i) + jit) * stepLen);
+          float ground = texture2D(uGround, (p.xz - uGroundGrid.xy) / uGroundGrid.z).r;
+          float above = p.y - ground;
+          // the fog's density (atmosphere.js): pooled low in the valleys, in drifting banks
+          float pool = exp(-max(p.y - ${FOG_POOL_BASE}, 0.0) / ${FOG_POOL_FALLOFF});
+          vec2 fp = p.xz * 0.018 + vec2(uTime * 0.011, uTime * 0.004);
+          float bank = vNoise(fp) * 0.65 + vNoise(fp * 2.7 + 13.1) * 0.35;
+          float d = uDensity * (0.8 + 0.8 * pool) * (0.6 + 0.8 * bank) * (above > 0.0 ? 1.0 : 0.0);
+          // mist hugs the ground: denser in the lowest few metres
+          d *= 1.0 + 1.2 * exp(-max(above, 0.0) / 4.0);
+          light += trans * d * stepLen * sunlit(p, above);
+          trans *= exp(-d * stepLen);
+        }
+        // forward scattering: bright looking toward the sun, faint across it
+        float mu = max(dot(dir, SUN), 0.0);
+        float phase = 0.25 + 1.6 * pow(mu, 5.0) + 2.5 * pow(mu, 24.0);
+        gl_FragColor = vec4(vec3(light * phase * uSun), 1.0);
+      }`, {
+      tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
+      uCamPos: { value: new THREE.Vector3() }, uCanopyMap: shared.uCanopyMap, uCanopyRect: shared.uCanopyRect,
+      uGround: { value: null }, uGroundGrid: { value: new THREE.Vector4() }, uDensity: { value: 0.01 },
+      uTime: { value: 0 }, uSun: { value: 0 }, uFrame: { value: 0 },
+    });
+
     // 3. glow: highlight extract + separable 9-tap blur (quarter res)
     this.glowExtract = pass(/* glsl */ `
       uniform sampler2D tScene;
@@ -132,6 +212,8 @@ export class Post {
       uniform sampler2D tScene;
       uniform sampler2D tRays;
       uniform sampler2D tGlow;
+      uniform sampler2D tVol;
+      uniform float uVol;
       uniform float uRays;
       uniform float uSun;
       uniform float uTime;
@@ -144,7 +226,8 @@ export class Post {
       }
       void main() {
         vec3 s = texture2D(tScene, vUv).rgb; // display space, as the canvas had it
-        vec3 add = texture2D(tRays, vUv).rgb * uSunColor * uRays * 1.6 + texture2D(tGlow, vUv).rgb * 0.22;
+        vec3 add = texture2D(tRays, vUv).rgb * uSunColor * uRays * 0.8 + texture2D(tGlow, vUv).rgb * 0.22
+          + texture2D(tVol, vUv).rgb * uSunColor * uVol;
         s = 1.0 - (1.0 - s) * (1.0 - clamp(add, 0.0, 1.0)); // screen blend: light, never clipped
         float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
         // grade: highlights a little warmer in a sun break, shadows a touch cool (moist air)
@@ -157,7 +240,7 @@ export class Post {
         s += (hash(gl_FragCoord.xy + fract(uTime) * 61.0) - 0.5) / 255.0 * 2.0;
         gl_FragColor = vec4(s, 1.0);
       }`, {
-      tScene: { value: null }, tRays: { value: null }, tGlow: { value: null },
+      tScene: { value: null }, tRays: { value: null }, tGlow: { value: null }, tVol: { value: null }, uVol: { value: 0 },
       uRays: { value: 0 }, uSun: { value: 0 }, uTime: { value: 0 },
       uSunColor: { value: SUN_COLOR.clone() },
     });
@@ -172,7 +255,7 @@ export class Post {
     this.sceneRT.setSize(w, h);
     const qw = Math.max(1, Math.round(w / 4));
     const qh = Math.max(1, Math.round(h / 4));
-    for (const t of [this.qA, this.qB, this.gA, this.gB]) t.setSize(qw, qh);
+    for (const t of [this.qA, this.qB, this.gA, this.gB, this.vA, this.vB]) t.setSize(qw, qh);
     this.blurTexel = [1 / qw, 1 / qh];
   }
 
@@ -213,6 +296,27 @@ export class Post {
       this.radial.uniforms.uStep.value = 0.14;
       blit(this.radial, this.qA);
     }
+    // light in the mist: only in a sun break, from any direction (strongest toward the sun)
+    const sun = forceRays ? 1 : this.effects && this.volume.uniforms.uGround.value ? shared.uSun.value : 0;
+    if (sun > 0.01) {
+      const v = this.volume.uniforms;
+      v.tDepth.value = this.sceneRT.depthTexture;
+      v.uInvProj.value.copy(camera.projectionMatrixInverse);
+      v.uCamWorld.value.copy(camera.matrixWorld);
+      v.uCamPos.value.setFromMatrixPosition(camera.matrixWorld);
+      const fog = scene.fog;
+      v.uDensity.value = fog ? fog.near % 1 : 0.01; // see installHeightFog: fract = density
+      v.uTime.value = fog ? fog.far : 0;
+      v.uSun.value = sun;
+      v.uFrame.value = (v.uFrame.value + 1) % 64;
+      blit(this.volume, this.vA);
+      this.blur.uniforms.tSrc.value = this.vA.texture;
+      this.blur.uniforms.uDir.value.set(this.blurTexel[0] * 0.75, 0);
+      blit(this.blur, this.vB);
+      this.blur.uniforms.tSrc.value = this.vB.texture;
+      this.blur.uniforms.uDir.value.set(0, this.blurTexel[1] * 0.75);
+      blit(this.blur, this.vA);
+    }
     // glow
     if (this.effects || forceRays) {
       this.glowExtract.uniforms.tScene.value = this.sceneRT.texture;
@@ -232,12 +336,31 @@ export class Post {
     u.tScene.value = this.sceneRT.texture;
     u.tRays.value = this.qA.texture;
     u.tGlow.value = this.gA.texture;
+    u.tVol.value = this.vA.texture;
+    u.uVol.value = sun > 0.01 ? this.volStrength : 0;
     u.uRays.value = rays > 0.01 ? rays : 0;
     u.uSun.value = shared.uSun.value;
     u.uTime.value = shared.uTime.value;
     blit(this.composite, null);
     r.info.render.calls = calls;
     r.info.render.triangles = triangles;
+  }
+
+  /**
+   * The terrain's height grid (heights[iz * n + ix], `step` m apart from the world's
+   * min corner), so the mist pass knows how high above the ground each point is.
+   * Half-float so it can be linearly filtered everywhere.
+   */
+  setGround(heights, n, step, min) {
+    const data = new Uint16Array(n * n);
+    for (let i = 0; i < n * n; i++) data[i] = THREE.DataUtils.toHalfFloat(heights[i]);
+    const tex = new THREE.DataTexture(data, n, n, THREE.RedFormat, THREE.HalfFloatType);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    this.volume.uniforms.uGround.value = tex;
+    // texel centres sit on the grid points
+    this.volume.uniforms.uGroundGrid.value.set(min - step / 2, min - step / 2, n * step, 0);
   }
 
   /** Compile every pass during loading (the rays only run in a sun break). */

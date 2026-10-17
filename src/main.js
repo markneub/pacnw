@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { buildTerrain, buildWater, heightAt } from './terrain.js';
+import { buildTerrain, buildWater, heightAt, terrainGrid } from './terrain.js';
 import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors } from './vegetation.js';
 import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
 import { shared } from './materials.js';
-import { SNOWLINE, SPAWN, VIEW_DIST } from './config.js';
+import { SNOWLINE, SPAWN, VIEW_DIST, WORLD_SIZE } from './config.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround } from './bake.js';
@@ -111,6 +111,10 @@ async function init() {
   progress(0.1, 500);
   await nextFrame();
   const terrain = buildTerrain();
+  {
+    const { heights, n, step } = terrainGrid(); // the mist pass needs the ground's height
+    post.setGround(heights, n, step, -WORLD_SIZE / 2);
+  }
   scene.add(terrain);
   scene.add(buildWater());
   step('terrain');

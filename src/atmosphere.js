@@ -9,13 +9,13 @@ import * as THREE from 'three';
 // can look down into it from a ridge. World height is reconstructed from the
 // view-space position, so it works for instanced meshes, points and lines alike.
 
-const FOG_POOL_BASE = '18.0'; // m; fully "pooled" below this
+export const FOG_POOL_BASE = '18.0'; // m; fully "pooled" below this
 
 /** Direction *toward* the sun: low in the west-northwest, so shafts slant across the view. */
 export const SUN_DIR = new THREE.Vector3(-0.78, 0.34, -0.52).normalize();
 export const SUN_COLOR = new THREE.Color(1.0, 0.8, 0.56);
 const v3 = (v) => `vec3(${(v.x ?? v.r).toFixed(4)}, ${(v.y ?? v.g).toFixed(4)}, ${(v.z ?? v.b).toFixed(4)})`;
-const FOG_POOL_FALLOFF = '45.0'; // m; e-folding height above the base
+export const FOG_POOL_FALLOFF = '45.0'; // m; e-folding height above the base
 
 /**
  * The scene uses a plain THREE.Fog purely as a carrier for two numbers, since

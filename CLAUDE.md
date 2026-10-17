@@ -183,8 +183,13 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   along the sun ray (dapples in sun); `?off=dapple`. It defines `SUN_VIS`, which non-snow cards use for **backlight**
   (`patchCards`: + diffuse × light × (−V·L)⁴ × 0.75 × uSun × sunVis), so ferns and sprays glow looking toward the sun. Cards and grass keep only 15% direct specular (grazing Fresnel
   bleached them under a low sun).
-- **Post** (`src/post.js`, `?off=post`): the scene renders into an MSAA target (the canvas then has no antialias), then
-  god rays (quarter-res bright pass + 2× radial blur toward the sun, only when `uSun × facing` > 0.01), glow, and a
+- **Post** (`src/post.js`, `?off=post`): the scene renders into an MSAA target (the canvas then has no antialias) with a
+  depth texture, then **light in the mist** (quarter res, sun breaks only: 16 steps over ≤55 m along each view ray; density
+  = the fog's own formula (`FOG_POOL_*` exported from atmosphere.js, same bank noise) × extra near the ground (height
+  above ground from a half-float terrain-grid texture, `post.setGround`); sunlit = the canopy map + dapple noise sampled where
+  the sun ray crosses 7.8/18 m, shifted by the point's height, i.e. exactly the samples of the sunfleck it lands on;
+  phase 0.25 + 1.6μ⁵ + 2.5μ²⁴; blurred, added × SUN_COLOR × `volStrength` 1.25), god rays (quarter-res bright pass
+  + 2× radial blur toward the sun, only when `uSun × facing` > 0.01, now ×0.8 since the mist carries the shafts), glow, and a
   composite (screen blend, grade, vignette, grain). **The scene target is flagged `isXRRenderTarget` with an sRGB colour
   space and `internalFormat 'RGBA8'`** so three tone-maps/encodes into it like the canvas. three applies fog *after*
   tone mapping, so a linear HDR target changed the fog. The RGBA8 internal format is needed or the MSAA resolve blit
