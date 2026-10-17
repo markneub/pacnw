@@ -66,7 +66,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   >0.92; down = slow reverse). It sets `player.levelPitch`, which eases pitch toward the ground ahead (0.8 × the angle of the mean gradient to points 2, 4, … 10 m ahead along the heading, clamped ±0.55 rad, smoothed), so climbing or descending you look along the slope, not into it. **Hold-to-look:** a first finger that stays within 10 px for
   260 ms enters look mode instead (drag = free look up/down/around, no walking; `#look-cue` vignette while on). Moving
   >10 px before that commits to walking, and the slide so far counts as turning. Releasing a look drag mid-swipe sets
-  `player.spin` (glide, decays at e^-6t). The view stays put until you walk again. An optional second
+  `player.spin` (horizontal glide only, decays at e^-6t). On release `levelPitch` turns on, so the pitch eases back to the slope ahead
+  (the user asked for this); the new heading is kept. An optional second
   finger (only while walking) is free look. No on-screen touch UI apart from that faint look-mode vignette, and no jumping (both at the user's request). Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
   turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, half the
   particles). Override with `?quality=low|high`.

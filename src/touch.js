@@ -9,8 +9,8 @@
  *
  * Hold your thumb still for a moment instead, and the drag becomes a free
  * look (up, down and around) without walking; the screen edges darken
- * slightly while it's on. Let go mid-swipe and the view glides on briefly.
- * The view stays where you left it until you walk again.
+ * slightly while it's on. Let go mid-swipe and the view turns on briefly; on
+ * release the view eases back to looking along the ground ahead.
  *
  * A second finger, if you want one, is also a free look.
  */
@@ -128,14 +128,18 @@ export class TouchControls {
   up(e) {
     if (e.pointerId === this.steerId) {
       clearTimeout(this.holdTimer);
-      if (this.mode === 'look' && performance.now() - this.last.t < 80) {
-        this.player.spin.set(this.vel.x, this.vel.y).clampLength(0, 3); // let go mid-swipe: glide on (≤ ~30°)
+      const wasLook = this.mode === 'look';
+      if (wasLook && performance.now() - this.last.t < 80) {
+        // let go mid-swipe: keep turning briefly (≤ ~30°); up/down doesn't glide,
+        // since the view is about to ease back to the ground ahead anyway
+        this.player.spin.set(this.vel.x, 0).clampLength(0, 3);
       }
       this.steerId = null;
       this.mode = null;
       this.cue.classList.remove('on');
       this.player.stick.set(0, 0);
-      this.player.levelPitch = false;
+      // after a look, ease back to looking along the ground ahead (in the new direction)
+      this.player.levelPitch = wasLook;
     } else if (e.pointerId === this.lookId) {
       this.lookId = null;
       this.player.levelPitch = this.mode === 'walk';
