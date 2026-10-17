@@ -57,3 +57,8 @@ polygon fronds.
   on desktop (from 150). Phone spawn: 0.54 → 0.65M tris (ferns 0.10 → 0.21M), draws unchanged.
   **Measure:** `?bench=ferns` (row "- ferns"). Ferns were ~0 ms on the phone before; the risk is alpha-test fill near
   the camera.
+
+### 5. Old-growth veterans
+About 1 in 8 big conifers in the low, dense forest is now a giant (×1.45–1.85: up to ~60 m tall, trunks ~2 m
+across), as in the misty old-growth photo where huge trunks dominate eye level. ~585 trees. They're chosen by a hash
+of position, so no other tree moved. Budget unchanged (same draws and pools; slightly bigger crowns).

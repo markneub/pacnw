@@ -16,6 +16,13 @@ import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.j
 const KIND = (name) => (name.startsWith('fern') ? 'ferns'
   : /^(boulder|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
 
+/** Deterministic 0..1 hash of a position (for choices that mustn't consume scatter rng). */
+function hash2(x, z) {
+  let h = Math.imul(Math.round(x * 100) | 0, 374761393) ^ Math.imul(Math.round(z * 100) | 0, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
 /** Scanned boulders (blender/build_rocks.py). The same random draw picks one, so the scatter is unchanged. */
 const BOULDERS = ['boulder_a', 'boulder_b', 'boulder_c', 'boulder_d', 'boulder_e', 'boulder_f'];
 
@@ -292,7 +299,16 @@ function scatter(trail) {
       else table = [['fir', 5], ['hemlock', 4], ['sapling', 1.5], ['snag', 0.4]];
       const name = pickWeighted(rng, table);
 
-      const scale = (0.65 + rng() * 0.6) * (1 - alt * 0.35);
+      let scale = (0.65 + rng() * 0.6) * (1 - alt * 0.35);
+      // old-growth veterans: in the low, dense forest about 1 in 8 big conifers is a
+      // giant (up to ~60 m, trunks ~2 m across). From a position hash, not rng, so
+      // nothing else moves.
+      if (name === 'fir' || name === 'hemlock' || name === 'cedar') {
+        const oldGrowth = THREE.MathUtils.smoothstep(f, 0.42, 0.7) * (1 - THREE.MathUtils.smoothstep(h, 50, 95));
+        const share = 0.13 * oldGrowth;
+        const hv = hash2(x, z);
+        if (hv < share) scale *= 1.45 + 0.4 * (hv / share);
+      }
       add(name, { x, y: groundAt(x, z) - 0.3, z, rotY: rng() * Math.PI * 2, scale, tint: rng() });
     }
   }
