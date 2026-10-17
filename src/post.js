@@ -50,7 +50,7 @@ export class Post {
     this.renderer = renderer;
     this.enabled = true;
     this.effects = true; // false: just the scene and the composite (bench row '- rays/glow')
-    this.volStrength = 1.25; // light in the mist
+    this.volStrength = 2.0; // light in the mist (before the saturation curve in the composite)
     this.size = new THREE.Vector2();
     const rt = (w, h) => new THREE.WebGLRenderTarget(w, h, { depthBuffer: false });
     this.sceneRT = new THREE.WebGLRenderTarget(4, 4, { samples, depthTexture: new THREE.DepthTexture(4, 4) });
@@ -189,7 +189,7 @@ export class Post {
         }
         // forward scattering: bright looking toward the sun, faint across it
         float mu = max(dot(dir, SUN), 0.0);
-        float phase = 0.25 + 1.6 * pow(mu, 5.0) + 2.5 * pow(mu, 24.0);
+        float phase = 0.25 + 1.1 * pow(mu, 5.0) + 0.9 * pow(mu, 24.0);
         gl_FragColor = vec4(vec3(light * phase * uSun), 1.0);
       }`, {
       tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
@@ -278,7 +278,9 @@ export class Post {
       void main() {
         vec3 s = texture2D(tScene, vUv).rgb; // display space, as the canvas had it
         vec3 add = texture2D(tRays, vUv).rgb * uSunColor * uRays * 0.8 + texture2D(tGlow, vUv).rgb * 0.22
-          + texture2D(tVol, vUv).rgb * uSunColor * uVol;
+          // mist light saturates (an open, sunlit clearing toward the sun added up to white);
+          // shafts read by contrast with the shade around them, not by raw brightness
+          + (1.0 - exp(-texture2D(tVol, vUv).rgb * uVol)) * uSunColor * 0.55;
         s = 1.0 - (1.0 - s) * (1.0 - clamp(add, 0.0, 1.0)); // screen blend: light, never clipped
         float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
         // grade: highlights a little warmer in a sun break, shadows a touch cool (moist air)
