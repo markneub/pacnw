@@ -97,3 +97,7 @@ normal, so the reflection ripples. A few ALU ops on the lake's pixels only. Best
 ### 9. Mistier overcast forest
 Overcast valley fog density 0.0085 → 0.0106 (+25%), so trunks layer into the mist with depth, as in the misty
 old-growth reference. Sun breaks still thin it to 62%. A one-line change in `weather.js` (`LOW.density`) if it's too much.
+
+## Result (phone bench, sun, full clock)
+Spawn full 6.5 ms (was 6.5–7.5 before the night): trees 2.1, ferns 0.5 ±0.4, rays/glow ~0, motes 0.
+Forest full 5.3 ms: trees 1.4, ferns 0.3. Everything added fits within the previous frame time.
