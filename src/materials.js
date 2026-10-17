@@ -130,7 +130,7 @@ export function addWindSway(material, strength = 0.012, wet = 0.25, lod = null) 
  * `moss` scales the moss (scanned rocks already have their own); `lod` is the
  * near/far tier for models that have both (see patchLod).
  */
-export function addGroundCover(material, { moss = 1, lod = null } = {}) {
+export function addGroundCover(material, { moss = 1, lod = null, snow = 1 } = {}) {
   material.onBeforeCompile = (shader) => {
     patchWet(shader, 1);
     patchLod(shader, lod);
@@ -173,12 +173,12 @@ export function addGroundCover(material, { moss = 1, lod = null } = {}) {
         float speck = fract((sp3.x + sp3.y) * sp3.z);
         vec3 moss = mix(vec3(0.045, 0.085, 0.02), vec3(0.08, 0.13, 0.03), speck);
         float gcMoss = up * (1.0 - snowy) * ${(0.85 * moss).toFixed(3)}; // read by surfacedetail.js
-        float gcSnow = up * snowy;
+        float gcSnow = up * snowy * ${snow.toFixed(2)};
         diffuseColor.rgb = mix(diffuseColor.rgb, moss, gcMoss);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), gcSnow);`,
       );
   };
-  material.customProgramCacheKey = () => `groundcover|${moss}|${lod}|${sunKey()}`;
+  material.customProgramCacheKey = () => `groundcover|${moss}|${lod}|${snow}|${sunKey()}`;
   return material;
 }
 

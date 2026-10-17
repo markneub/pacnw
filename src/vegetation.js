@@ -13,7 +13,7 @@ import { NearPool } from './detail.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
 import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.js';
 
-const KIND = (name) => (/^(fern|salal)/.test(name) ? 'ferns'
+const KIND = (name) => (/^(fern|salal|pebbles)/.test(name) ? 'ferns'
   : /^(boulder|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
 
 /** Deterministic 0..1 hash of a position (for choices that mustn't consume scatter rng). */
@@ -170,6 +170,7 @@ function convertMaterial(src, assetName, lod, cache) {
   const swapXY = assetName.startsWith('log'); // lies along X: run the bark furrows along it
   const scan = src.name.startsWith('ScanRock');
   const cards = src.name.endsWith('Cards');
+  const pebble = assetName.startsWith('pebbles'); // near-pool ground clutter, but stone: no sway, no double-sided
   const key = `${src.name}|${kind}|${lod}|${swapXY}`;
   if (cache.has(key)) return cache.get(key);
 
@@ -182,7 +183,7 @@ function convertMaterial(src, assetName, lod, cache) {
     // bark is smooth so trunks read as round; scans have real smooth surfaces;
     // foliage cards carry their own (outward-pointing) normals
     flatShading: !src.name.endsWith('Bark') && !src.name.endsWith('Soil') && !scan && !cards,
-    side: kind === 'ferns' || cards ? THREE.DoubleSide : THREE.FrontSide,
+    side: (kind === 'ferns' && !pebble) || cards ? THREE.DoubleSide : THREE.FrontSide,
   });
   if (cards) {
     mat.map = src.map; // the needle spray (RGBA, embedded in the GLB)
@@ -194,8 +195,9 @@ function convertMaterial(src, assetName, lod, cache) {
   // needles shed water and scatter light: keep sky reflections off foliage
   if (/Needles|Foliage|Fern|Cards/.test(src.name)) mat.envMapIntensity = 0.35;
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
-  else if (kind === 'ferns') addWindSway(mat, 2.5, undefined, 'fade');
-  else addGroundCover(mat, { lod, moss: scan ? 0.35 : 1 }); // scans have their own moss
+  else if (kind === 'ferns' && !pebble) addWindSway(mat, 2.5, undefined, 'fade');
+  // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
+  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : 1, snow: pebble ? 0 : 1 });
   if (cards) patchCards(mat);
   // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
   if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);
@@ -469,6 +471,33 @@ function scatter(trail) {
         if (what < 0.35) add('sapling', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.2 + rng() * 0.18, tint: rng() });
         else if (what < 0.8) add(rng() < 0.5 ? 'fern_a' : 'fern_b', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.5 + rng() * 0.35, tint: rng() });
       }
+    }
+  }
+
+  // Loose stones: clusters of pebbles, cobbles and gravel (near pool, like the ferns). Kicked
+  // to the trail edges, on stony slopes and high open ground; sparse in deep moss and duff;
+  // none on snow or in water. Last, so nothing above moves.
+  const PEBBLES = ['pebbles_a', 'pebbles_b', 'pebbles_c', 'pebbles_e', 'pebbles_a', 'pebbles_c', 'pebbles_e', 'pebbles_d'];
+  const stoneCell = 2.5;
+  for (let gz = -half; gz < half; gz += stoneCell) {
+    for (let gx = -half; gx < half; gx += stoneCell) {
+      const x = gx + rng() * stoneCell;
+      const z = gz + rng() * stoneCell;
+      const pick = rng();
+      const r = rng();
+      const h = heightAt(x, z);
+      if (h < WATER_LEVEL + 0.3) continue;
+      const slope = slopeAt(x, z);
+      const d = trail.distanceTo(x, z);
+      if (d < TRAIL_WIDTH * 0.5 + 0.2) continue; // off the tread itself
+      const edge = THREE.MathUtils.smoothstep(d, TRAIL_WIDTH * 0.5, TRAIL_WIDTH * 0.5 + 0.8) * (1 - THREE.MathUtils.smoothstep(d, TRAIL_WIDTH + 2, TRAIL_WIDTH + 5));
+      const stony = THREE.MathUtils.smoothstep(slope, 0.12, 0.45);
+      const high = THREE.MathUtils.smoothstep(h, 60, 110);
+      const duff = THREE.MathUtils.smoothstep(nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5, 0.4, 0.7);
+      const p = Math.min(0.95, 0.22 + 0.75 * edge + 0.6 * stony + 0.4 * high) * (1 - 0.5 * duff * (1 - edge));
+      if (r > p) continue;
+      if (snowAmount(x, z, h, slope) > 0.3) continue;
+      add(PEBBLES[Math.floor(pick * PEBBLES.length)], { x, y: groundAt(x, z) - 0.02, z, rotY: pick * 97.3, scale: 0.8 + r * 0.6 / Math.max(p, 0.1), tint: rng() });
     }
   }
 

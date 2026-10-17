@@ -82,6 +82,11 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   seated at the lowest of 5 ground samples, kept off the trail along its length; 12 tries at saplings (scale 0.2–0.38 =
   seedling hemlocks) and ferns along its top; a row of colliders along the trunk + one for the root plate (`it.axis`).
   ~256 logs. Phone spawn +11 draws (3 materials per chunk), +0.01M tris.
+  **Loose stones** (`pebbles_a..e`, kind 'ferns' via `KIND`: near pool + fade, but `pebble` in `convertMaterial` gives them
+  ground cover (moss 0.6, `snow: 0`: the shader's global snowline frosted them white below the local one) instead of sway, and
+  FrontSide): clusters of 3–8 jittered, squashed icosahedra (20 tris each), a third sunk, Rock material (lichen photo up close).
+  Last scatter pass (2.5 m cell): p = 0.22 + 0.75 × trail-edge band + 0.6 × stony slope + 0.4 × high ground, × (1 − 0.5 duff
+  away from the trail); off the tread, water and snow. ~76k clusters. Phone spawn +5 draws, +0.01M tris.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
@@ -238,6 +243,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   cloud noise only runs where sky is visible, and the overcast/sunny halves are skipped by uniform branches when
   `uSun` is ~0/~1. Phone bench: `- sky` saved 1.3 ms at spawn and in the forest before this (full 7.6 / 6.1 ms), 0.1 ms after (full 6.3 / 5.0;
   rays/glow + mist light 0.2).
+  After vine maple + nurse logs: spawn full 6.5 ms (trees 1.8 ±0.2, rocks/logs 0.2), forest 5.1 ms (trees 1.3, rocks/logs 0.2).
 - **Close-up ground detail** (`src/grounddetail.js`): photographic albedo + normal maps for 4 layers (forest
   floor, rock, snow, mud/dirt), weighted by per-vertex `aLayers` (terrain `groundLayers()`, trail tread/banks →
   dirt), within `uGDRange` (20–45 m desktop, 15–32 m phone). The photo *modulates* the existing colour
@@ -336,8 +342,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 
 ## Backlog (agreed with the user)
 
-- More rock variation: more boulder shapes/sizes (outcrops, half-buried slabs, talus on steep slopes) and loose pebbles /
-  small stones on the ground (cheap instanced near-pool clutter, denser on the trail edges, creek-free slopes and below cliffs).
+- More rock variation: more boulder shapes/sizes (outcrops, half-buried slabs, talus on steep slopes). (Loose stones: done.)
 - Wet look in rain (glossier trunks/rocks, drips, puddles reflecting the sky). Sharper god-ray shafts (1 m canopy map).
 - Sound: footsteps by surface, birdsong in sun breaks, drips after rain. Subtle head bob (no option: opinionated).
 - Tree mid-LOD between full detail and impostors if the frame budget gets tight.

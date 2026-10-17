@@ -824,6 +824,42 @@ def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
     return b.build(name)
 
 
+def pebbles(M, name, seed, stones=6, spread=0.8, size=(0.07, 0.28)):
+    """
+    A cluster of loose stones (one instance = several, so the ground gets
+    dense without huge instance counts): jittered, squashed icosahedra
+    (20 faces each), part-sunk into the ground, one or two bigger ones and
+    smaller ones around them. Rock material (lichen photo up close, moss on
+    top from the ground-cover shader).
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    phi = (1 + 5 ** 0.5) / 2
+    ico_v = [(-1, phi, 0), (1, phi, 0), (-1, -phi, 0), (1, -phi, 0), (0, -1, phi), (0, 1, phi), (0, -1, -phi), (0, 1, -phi),
+             (phi, 0, -1), (phi, 0, 1), (-phi, 0, -1), (-phi, 0, 1)]
+    ico_f = [(0, 11, 5), (0, 5, 1), (0, 1, 7), (0, 7, 10), (0, 10, 11), (1, 5, 9), (5, 11, 4), (11, 10, 2), (10, 7, 6), (7, 1, 8),
+             (3, 9, 4), (3, 4, 2), (3, 2, 6), (3, 6, 8), (3, 8, 9), (4, 9, 5), (2, 4, 11), (6, 2, 10), (8, 6, 7), (9, 8, 1)]
+    for k in range(stones):
+        big = k < 2
+        r = rng.uniform(*size) * (1.6 if big else 1.0) * (0.6 + 0.4 * rng.random())
+        a = rng.uniform(0, TAU)
+        d = 0.0 if k == 0 else spread * rng.uniform(0.2, 1.0)
+        cx, cy = math.cos(a) * d, math.sin(a) * d
+        sx, sy, sz = rng.uniform(0.8, 1.25), rng.uniform(0.8, 1.25), rng.uniform(0.45, 0.75)
+        rot = rng.uniform(0, TAU)
+        cz = r * sz * 0.35  # about a third sunk into the ground
+        idx = []
+        for vx, vy, vz in ico_v:
+            l = math.sqrt(vx * vx + vy * vy + vz * vz)
+            j = rng.uniform(0.82, 1.12)
+            x, y, z = vx / l * r * sx * j, vy / l * r * sy * j, vz / l * r * sz * j
+            x, y = x * math.cos(rot) - y * math.sin(rot), x * math.sin(rot) + y * math.cos(rot)
+            idx.append(b.v((cx + x, cy + y, cz + z)))
+        for f in ico_f:
+            b.face((idx[f[0]], idx[f[1]], idx[f[2]]), M["rock"])
+    return b.build(name)
+
+
 def log(M, name, seed, length=9.0, radius=0.55, sides=10):
     """Fallen, slightly bent log lying along X with exposed wood at the ends."""
     rng = random.Random(seed)
@@ -1030,6 +1066,11 @@ def main():
     fern(M, "fern_a", 21)
     fern(M, "fern_b", 22, fronds=24)
     salal(M, "salal", 31)
+    pebbles(M, "pebbles_a", 61)
+    pebbles(M, "pebbles_b", 62, stones=5, spread=0.6)
+    pebbles(M, "pebbles_c", 63, stones=7, spread=1.0, size=(0.05, 0.2))
+    pebbles(M, "pebbles_d", 64, stones=3, spread=0.5, size=(0.16, 0.4))  # a few cobbles
+    pebbles(M, "pebbles_e", 65, stones=8, spread=1.2, size=(0.04, 0.13))  # gravel
     log(M, "log", 31)
     nurse_log(M, "log_nurse")
     stump(M, "stump", 41)
