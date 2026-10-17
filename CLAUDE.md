@@ -192,6 +192,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   numbers (the passes add ≤7 draws). Bench row `post` = "- rays/glow" (`post.effects`).
   **Phone bench after the overnight work** (sun, full clock, DPR 2): spawn full 6.5 ms (trees 2.1, ferns 0.5 ±0.4,
   rays/glow −0.5 ±0.3 i.e. ~free, motes 0.0); forest 5.3 ms (trees 1.4, ferns 0.3). Spawn was 6.5–7.5 ms before that night.
+  After hanging moss, salal, trunk moss and roots (overcast): spawn full 6.2 ms (trees 2.2 ±0.3, ferns+salal 0.6 ±0.1),
+  forest 4.8 ms (trees 1.3, ferns 0.3): all within noise of before.
 - `src/atmosphere.js`: `installHeightFog()` replaces three's fog chunks globally, so it must run before
   any material compiles. **`scene.fog` is a `THREE.Fog` used as a carrier: `near` = density, `far` = time**
   (three refreshes those uniforms on every material). Fog thickens below ~18 m + 45 m falloff, and
