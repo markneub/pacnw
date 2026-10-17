@@ -89,6 +89,7 @@ const skyVertex = /* glsl */ `
   void main() {
     vDir = normalize(position);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_Position.z = gl_Position.w * 0.99999; // on the far plane: only pixels nothing else covered get shaded
   }`;
 
 const skyFragment = /* glsl */ `
@@ -104,6 +105,7 @@ const skyFragment = /* glsl */ `
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(sHash(i), sHash(i + vec2(1, 0)), f.x), mix(sHash(i + vec2(0, 1)), sHash(i + vec2(1, 1)), f.x), f.y);
   }
+  float fbm3(vec2 p) { return sNoise(p) * 0.55 + sNoise(p * 2.03 + 1.7) * 0.3 + sNoise(p * 4.1 + 3.1) * 0.15; }
   float fbm(vec2 p) { return sNoise(p) * 0.5 + sNoise(p * 2.03 + 1.7) * 0.28 + sNoise(p * 4.1 + 3.1) * 0.14 + sNoise(p * 8.3 + 7.7) * 0.08; }
   void main() {
     vec3 d = normalize(vDir);
@@ -113,13 +115,17 @@ const skyFragment = /* glsl */ `
     // --- overcast: a mottled deck of heavier and lighter masses in slow rolls,
     // with a lower, darker layer of ragged scud drifting faster beneath it
     vec2 deck = d.xz / max(d.y, 0.06);
-    vec2 dp = deck * vec2(0.9, 1.6) + vec2(uTime * 0.010, uTime * 0.003); // stretched: rolls
-    float mass = fbm(dp * 0.8);
     vec3 col = mix(uHorizon, uZenith, smoothstep(0.02, 0.55, up));
-    float shadeDeck = mix(0.82, 1.1, smoothstep(0.3, 0.75, mass));
-    float scud = smoothstep(0.55, 0.8, fbm(deck * 1.7 + vec2(uTime * 0.035, uTime * 0.012)));
-    float lowDeck = smoothstep(0.0, 0.35, up); // fades into the fog toward the horizon
-    col *= mix(1.0, shadeDeck * (1.0 - 0.18 * scud), lowDeck);
+    // (uniform branches: the whole screen takes the same path, so skipping is cheap)
+    if (uSun < 0.99) {
+      vec2 dp = deck * vec2(0.9, 1.6) + vec2(uTime * 0.010, uTime * 0.003); // stretched: rolls
+      float mass = fbm(dp * 0.8);
+      float shadeDeck = mix(0.82, 1.1, smoothstep(0.3, 0.75, mass));
+      float scud = smoothstep(0.55, 0.8, fbm3(deck * 1.7 + vec2(uTime * 0.035, uTime * 0.012)));
+      float lowDeck = smoothstep(0.0, 0.35, up); // fades into the fog toward the horizon
+      col *= mix(1.0, shadeDeck * (1.0 - 0.18 * scud), lowDeck);
+    }
+    if (uSun > 0.01) {
 
     // --- sun break: blue sky with a few fair-weather cumulus and the sun itself
     vec3 zen = vec3(0.035, 0.1, 0.27);
@@ -132,7 +138,7 @@ const skyFragment = /* glsl */ `
     float cloud = smoothstep(0.63, 0.7, cd) * smoothstep(0.04, 0.2, up);
     // shading: denser toward the sun = that side is in the cloud's own shadow
     vec2 toSun = normalize(SUN_DIR.xz) * 0.06;
-    float self = clamp((fbm(cp + toSun) - cd) * 6.0, -1.0, 1.0);
+    float self = clamp((fbm3(cp + toSun) - fbm3(cp)) * 6.0, -1.0, 1.0); // low octaves are enough for shading
     vec3 lit = vec3(1.0, 0.96, 0.9) * 0.62; // white after exposure, not blown
     vec3 base = vec3(0.42, 0.46, 0.52);
     vec3 cumulus = mix(lit, base, clamp(0.35 + 0.65 * self, 0.0, 1.0) * smoothstep(0.63, 0.92, cd));
@@ -147,6 +153,7 @@ const skyFragment = /* glsl */ `
     vec3 sunLight = SUN_COLOR * (disk * 14.0 * (1.0 - 0.6 * cloud) + pow(s, 6000.0) * 0.6 + pow(s, 300.0) * 0.12 + pow(s, 8.0) * 0.06);
     col = mix(col, sunny, uSun);
     col += sunLight * uSun;
+    }
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -168,13 +175,15 @@ export function createSky() {
       fragmentShader: skyFragment,
       side: THREE.BackSide,
       depthWrite: false,
-      depthTest: false, // drawn first, behind everything
+      // drawn after the other opaque objects, at the far plane with the depth test on, so its
+      // (fairly heavy) cloud noise only runs where the sky is actually visible
+      depthTest: true,
       fog: false,
     }),
   );
   mesh.name = 'sky';
   mesh.frustumCulled = false;
-  mesh.renderOrder = -10;
+  mesh.renderOrder = 100; // last of the opaques; transparents (lake, rain) still come after
   mesh.onBeforeRender = (renderer, scene, camera) => {
     mesh.position.copy(camera.position);
     mesh.scale.setScalar(camera.far * 0.95);

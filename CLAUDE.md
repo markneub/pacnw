@@ -217,6 +217,9 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   × 14, dimmed 60% behind cloud) with a tight halo (pow 6000/300/8). Sunny fog `SUN_FOG` is blue-grey 0xa7b8c6 to match;
   the fog chunk's forward sun glow was halved (it clipped the brighter haze to cream-white). The god-ray bright pass is
   limited to right around the sun (exp(−5d²), lum 0.75–0.98) so bright clouds don't smear into glare.
+  The sky is drawn **last among the opaques** (`renderOrder` 100, `depthTest` on, vertex z forced to the far plane), so its
+  cloud noise only runs where sky is visible, and the overcast/sunny halves are skipped by uniform branches when
+  `uSun` is ~0/~1. Phone bench before this: `- sky` saved 1.3 ms at spawn and in the forest (full 7.6 / 6.1 ms).
 - **Close-up ground detail** (`src/grounddetail.js`): photographic albedo + normal maps for 4 layers (forest
   floor, rock, snow, mud/dirt), weighted by per-vertex `aLayers` (terrain `groundLayers()`, trail tread/banks →
   dirt), within `uGDRange` (20–45 m desktop, 15–32 m phone). The photo *modulates* the existing colour
