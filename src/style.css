@@ -101,8 +101,6 @@ canvas {
   background: #cfe3c4;
   transform: scaleX(0);
   transform-origin: left;
-  transition-property: transform;
-  transition-timing-function: linear;
   will-change: transform;
 }
 

@@ -73,11 +73,23 @@ function step(label) {
  * Loading bar. Steps block the main thread, so each step animates the bar
  * (a compositor transform, which keeps running while JS is busy) toward
  * where that step should end, over roughly how long it usually takes.
+ *
+ * Each segment starts explicitly from where the bar is now, computed from our
+ * own timeline (segments are linear). A CSS transition would start from the
+ * main thread's last known value, which is stale after a long blocking step,
+ * so the bar jumped backwards. It never goes below where it has been.
  */
 const fill = document.getElementById('progress-fill');
+const bar = { from: 0, to: 0, t0: 0, ms: 1 };
 function progress(to, expectedMs) {
-  fill.style.transitionDuration = `${expectedMs}ms`;
-  fill.style.transform = `scaleX(${to})`;
+  const now = performance.now();
+  const at = bar.from + (bar.to - bar.from) * Math.min(1, (now - bar.t0) / bar.ms);
+  const from = Math.max(at, 0);
+  to = Math.max(to, from);
+  Object.assign(bar, { from, to, t0: now, ms: Math.max(1, expectedMs) });
+  fill.getAnimations().forEach((a) => a.cancel());
+  fill.animate([{ transform: `scaleX(${from})` }, { transform: `scaleX(${to})` }],
+    { duration: bar.ms, easing: 'linear', fill: 'forwards' });
 }
 
 async function init() {

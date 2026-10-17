@@ -216,7 +216,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - Loading screen: one fixed-size box (title + a single slot holding the bar, then "Tap/Click to start"). Keep
   it that simple, with no instructions or flavour text and nothing that changes the box mid-load. A one-line
   controls hint toasts once on start. `progress(to, expectedMs)` in `main.js` animates the bar with a
-  compositor transform, so it keeps moving while a blocking step runs. Re-tune the expected times if
+  compositor transform (Web Animations, linear), so it keeps moving while a blocking step runs. Each segment starts from our own
+  computed position, never lower: CSS transitions restarted from the main thread's stale value and jumped backwards. Re-tune the expected times if
   loading steps change.
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216
