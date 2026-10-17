@@ -92,6 +92,7 @@ export async function loadPrototypes(urls) {
  */
 function patchCards(mat) {
   const snow = mat.name === 'SnowCards';
+  const moss = mat.name === 'MossCards';
   const prev = mat.onBeforeCompile;
   const prevKey = mat.customProgramCacheKey;
   mat.onBeforeCompile = (shader, renderer) => {
@@ -102,8 +103,9 @@ function patchCards(mat) {
         {
           vec2 cardTexel = vMapUv * vec2(textureSize(map, 0));
           float cardMip = max(0.0, 0.5 * log2(max(dot(dFdx(cardTexel), dFdx(cardTexel)), dot(dFdy(cardTexel), dFdy(cardTexel)))));
-          // snow covers little of its card: boosting it would turn distant cards into white slabs
-          diffuseColor.a *= 1.0 + cardMip * ${snow ? '0.12' : '0.3'};
+          // snow and moss strands cover little of their cards: boosting them would turn
+          // distant cards into white slabs / pale paper tags
+          diffuseColor.a *= 1.0 + cardMip * ${snow ? '0.12' : moss ? '0.05' : '0.3'};
         }
         #endif
         #include <alphatest_fragment>`)
@@ -134,7 +136,7 @@ function patchCards(mat) {
         }
         #endif`);
   };
-  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards${snow ? 's' : ''}`;
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards${snow ? 's' : moss ? 'm' : ''}`;
 }
 
 /** Colour multiplier per foliage-card material. */
@@ -147,6 +149,7 @@ const CARD_TINT = {
   HemlockFrostCards: [0.56, 0.66, 0.66],
   SnowCards: [0.95, 0.97, 1.0],
   FernCards: [0.8, 0.85, 0.74],
+  MossCards: [0.55, 0.58, 0.5],
 };
 
 // Scanned-rock materials waiting for their textures (applyRockTextures).

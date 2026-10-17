@@ -23,6 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "public", "textures", "foliage")
 SIZE = 512
 SS = 3  # supersampling
+TAU = 2 * math.pi
 
 
 def box_blur(a, r):
@@ -293,6 +294,56 @@ def fern_frond(seed=17):
     return finish(img, (1024, 256))
 
 
+def moss_strands(seed=23):
+    """
+    Hanging moss and lichen ("old man's beard"), 2:1 (u = down from where it
+    hangs, at u = 0): wavy strands that start in a tuft and fan out as they
+    fall, pale grey-green lichen mixed with yellow-green moss, thinning toward
+    the tips.
+    """
+    rng = random.Random(seed)
+    W, H = 512 * SS, 256 * SS
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    n_locks = rng.randint(6, 8)
+    for li in range(n_locks):
+        # a lock: a wavy rope that hangs from the tuft and fans slightly
+        v0 = H * (0.5 + rng.uniform(-0.05, 0.05))  # pinched together where it hangs from
+        drift = rng.uniform(-0.32, 0.32) * H
+        length = W * rng.uniform(0.45, 0.97)
+        phase, freq, amp = rng.uniform(0, TAU), rng.uniform(3, 7), H * rng.uniform(0.02, 0.05)
+        thick = H * rng.uniform(0.05, 0.1)
+        lichen = rng.random() < 0.5
+        x0 = rng.uniform(0.01, 0.08) * W
+        path = lambda f: (x0 + length * f, v0 + drift * f ** 0.8 + math.sin(phase + f * freq) * amp * f)
+        for _ in range(30):
+            base = (150, 162, 120) if lichen else (112, 132, 58)
+            col = tuple(max(0, min(255, c + rng.randint(-16, 16))) for c in base)
+            off = rng.gauss(0, 0.35) * thick
+            reach = rng.uniform(0.5, 1.0)
+            wob = rng.uniform(0, TAU)
+            pts = []
+            for k in range(31):
+                f = k / 30 * reach
+                x, y = path(f)
+                y += off * (0.15 + 1.0 * f) + math.sin(wob + f * 14) * H * 0.006
+                if y < H * 0.02 or y > H * 0.98:
+                    break  # a strand that leaves the card just ends there
+                pts.append((x, y))
+            w0 = rng.uniform(2.0, 4.0) * SS
+            for k in range(len(pts) - 1):
+                f = k / 30
+                d.line([pts[k], pts[k + 1]], fill=col + (255,), width=max(1, int(w0 * (1 - 0.55 * f))))
+    # the attached tuft: a denser clump at the top
+    for _ in range(25):
+        x = rng.uniform(0.0, 0.08) * W
+        y = H * (0.5 + rng.gauss(0, 0.07))
+        r = rng.uniform(0.008, 0.018) * H
+        col = (128, 145, 80) if rng.random() < 0.5 else (150, 160, 118)
+        d.ellipse([x - r * 2, y - r, x + r * 2, y + r], fill=col + (255,))
+    return finish(img, (512, 256))
+
+
 SPRAYS = {
     # Douglas fir: longer needles, a few stiff side shoots
     "fir_spray": dict(seed=7, old=(34, 64, 36), new=(92, 128, 52)),
@@ -304,6 +355,7 @@ SPRAYS = {
     "cedar_spray": cedar_spray,
     "snow_clumps": snow_clumps,
     "fern_frond": fern_frond,
+    "moss_strands": moss_strands,
 }
 
 

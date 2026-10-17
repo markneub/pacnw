@@ -172,6 +172,7 @@ def mats():
         # snowy variants: the same sprays tinted frostier in the game, plus snow clumps
         "fir_frost_cards": card_material("FirFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
         "hemlock_frost_cards": card_material("HemlockFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
+        "moss_cards": card_material("MossCards", os.path.join(ROOT, "public", "textures", "foliage", "moss_strands.png")),
         "fern_cards": card_material("FernCards", os.path.join(ROOT, "public", "textures", "foliage", "fern_frond.png")),
         "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
     }
@@ -325,7 +326,7 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
 def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
                     elev=(-0.12, 0.35), sag=(0.12, 0.28), card_droop=0.12, whorl=(4, 5, 5, 6),
                     spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35, bark=None,
-                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None, stubs=16, card_scale=1.0):
+                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None, stubs=16, card_scale=1.0, moss=None):
     """
     A conifer up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
     then whorls of branches clothed in needle-spray cards, forming a ragged
@@ -339,8 +340,23 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
       flutes     buttress ridges at the trunk base
       snow       a material: snow clumps lie on top of most sprays (own rng, so
                  the tree's shape matches the snow-free version)
+      moss       a material: hanging moss/lichen from the dead stubs and lower
+                 branches (own rng too)
     """
     srng = random.Random(seed + 991)
+    mrng = random.Random(seed + 517)
+
+    def hang_moss(top, along):
+        """A clump of hanging moss (two crossed vertical cards) from `top`."""
+        L = mrng.uniform(0.8, 1.8)
+        down = Vector((0.0, 0.0, -1.0))
+        side = Vector((-along.y, along.x, 0.0))
+        side = side.normalized() if side.length > 1e-4 else Vector((1.0, 0.0, 0.0))
+        c = top + down * (L * 0.5) + Vector((mrng.uniform(-0.05, 0.05), mrng.uniform(-0.05, 0.05), 0.0))
+        _card(b, moss, c, down, side, L, L * 0.6, 0.0, (0.0, 0.0))
+        side2 = (side * 0.3 + down.cross(side) * 0.95).normalized()
+        _card(b, moss, c, down, side2, L * 0.9, L * 0.55, 0.0, (0.0, 0.0))
+
     bark = bark or M["bark"]
     rng = random.Random(seed)
     b = MeshBuilder()
@@ -357,6 +373,8 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
         base = axis_at(z) + Vector((math.cos(a) * r_at(z) * 0.85, math.sin(a) * r_at(z) * 0.85, z))
         tip = base + Vector((math.cos(a) * L, math.sin(a) * L, -L * rng.uniform(0.1, 0.5)))
         _stick(b, M["snag"], base, tip, rng.uniform(0.03, 0.06))
+        if moss and mrng.random() < 0.85:
+            hang_moss(base.lerp(tip, mrng.uniform(0.5, 0.9)), tip - base)
 
     up = Vector((0.0, 0.0, 1.0))
     # normalise the crown profile so its widest point is max_radius
@@ -384,6 +402,8 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
                 return base + horiz * (L * s) + up * (L * (el * s - sg * s * s))
 
             _stick(b, bark, base, at(0.85), 0.03 + 0.025 * L)
+            if moss and t < 0.5 and mrng.random() < 0.55 * (1.0 - t / 0.5):
+                hang_moss(at(mrng.uniform(0.15, 0.6)), horiz)
             n_cards = max(2, round(L / card_every))
             for k in range(n_cards):
                 s = 0.22 + 0.78 * (k + 0.5) / n_cards
@@ -422,7 +442,8 @@ def branchy_fir(M, name, seed=1, snow=False):
     """Douglas fir: tall, bare for the lower third, narrow ragged crown.
     snow=True: frosted needles with snow clumps on the sprays."""
     return branchy_conifer(M, name, M["fir_frost_cards"] if snow else M["fir_cards"], seed, height=30.0,
-                           crown_base=10.5, max_radius=3.6, r_trunk=0.62, snow=M["snow_cards"] if snow else None)
+                           crown_base=10.5, max_radius=3.6, r_trunk=0.62, snow=M["snow_cards"] if snow else None,
+                           moss=None if snow else M["moss_cards"])
 
 
 def branchy_hemlock(M, name, seed=2, snow=False):
@@ -431,7 +452,7 @@ def branchy_hemlock(M, name, seed=2, snow=False):
     return branchy_conifer(M, name, M["hemlock_frost_cards"] if snow else M["hemlock_cards"], seed, height=26.0,
                            crown_base=4.5, max_radius=4.2, r_trunk=0.5, elev=(-0.3, 0.3), sag=(0.3, 0.5),
                            card_droop=0.3, spacing=(0.42, 0.62), fill=(0.1, 1.15), nod=1.3, flare=1.25,
-                           snow=M["snow_cards"] if snow else None)
+                           snow=M["snow_cards"] if snow else None, moss=None if snow else M["moss_cards"])
 
 
 def branchy_cedar(M, name, seed=3):
@@ -441,7 +462,8 @@ def branchy_cedar(M, name, seed=3):
     return branchy_conifer(M, name, M["cedar_cards"], seed, height=27.0, crown_base=5.0, max_radius=4.4,
                            r_trunk=0.8, elev=(-0.35, 0.25), sag=(-0.32, -0.12), card_droop=0.25,
                            spacing=(0.4, 0.58), fill=(0.15, 0.85), nod=0.9, flare=1.7,
-                           bark=M["cedar_bark"], hang=0.55, flutes=7, card_every=0.6, cross=0.35)
+                           bark=M["cedar_bark"], hang=0.55, flutes=7, card_every=0.6, cross=0.35,
+                           moss=M["moss_cards"])
 
 
 def branchy_sapling(M, name, seed=4, snow=False):
