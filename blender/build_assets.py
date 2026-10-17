@@ -169,6 +169,10 @@ def mats():
         "fir_cards": card_material("FirCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
         "hemlock_cards": card_material("HemlockCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
         "cedar_cards": card_material("CedarCards", os.path.join(ROOT, "public", "textures", "foliage", "cedar_spray.png")),
+        # snowy variants: the same sprays tinted frostier in the game, plus snow clumps
+        "fir_frost_cards": card_material("FirFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
+        "hemlock_frost_cards": card_material("HemlockFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
+        "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
     }
 
 
@@ -297,7 +301,7 @@ def conifer(name, M, seed, height, crown_base, max_radius, tiers, points,
     return b.build(name, bake_colors=M["lod"] if lod else None)
 
 
-def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=False):
+def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=False, up_normal=False):
     """One foliage card (2 tris): u along `fwd`, v along `side`; the tip end droops.
     Shading normals point away from the trunk and up, so the crown shades as a volume."""
     corners = []
@@ -309,7 +313,7 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
     for i, p in zip(idx, corners):
         out = Vector((p.x - trunk_xy[0], p.y - trunk_xy[1], 0.0))
         r = max(out.length, 0.3)
-        n = (out / r + Vector((0.0, 0.0, 0.65))).normalized()
+        n = Vector((0.0, 0.0, 1.0)) if up_normal else (out / r + Vector((0.0, 0.0, 0.65))).normalized()
         b.custom_normals[i] = tuple(n)
     us = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
     if flip_u:
@@ -320,7 +324,7 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
 def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
                     elev=(-0.12, 0.35), sag=(0.12, 0.28), card_droop=0.12, whorl=(4, 5, 5, 6),
                     spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35, bark=None,
-                    hang=0.0, flutes=0, card_every=0.6, cross=0.7):
+                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None):
     """
     A conifer up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
     then whorls of branches clothed in needle-spray cards, forming a ragged
@@ -332,7 +336,10 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
       nod        sideways bend (m) of the top of the trunk: hemlock's nodding leader
       hang       share of sprays hung vertically from the branch (redcedar's curtains)
       flutes     buttress ridges at the trunk base
+      snow       a material: snow clumps lie on top of most sprays (own rng, so
+                 the tree's shape matches the snow-free version)
     """
+    srng = random.Random(seed + 991)
     bark = bark or M["bark"]
     rng = random.Random(seed)
     b = MeshBuilder()
@@ -387,6 +394,11 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
                 side = side0 * math.cos(roll) + fwd.cross(side0).normalized() * math.sin(roll)
                 cl = min(1.6, 0.8 + L * 0.3) * rng.uniform(0.85, 1.1)
                 _card(b, cards, c, fwd, side, cl, cl * 0.9, card_droop * cl, (centre.x, centre.y), flip_u=rng.random() < 0.5)
+                if snow and abs(roll) < 0.9 and srng.random() < 0.85:
+                    # snow settles flat on top of the spray, following its droop
+                    _card(b, snow, c + up * (0.06 + 0.03 * cl), fwd, side0, cl * srng.uniform(0.85, 1.0),
+                          cl * 0.85, card_droop * cl * 0.8, (centre.x, centre.y), flip_u=srng.random() < 0.5,
+                          up_normal=True)
                 if rng.random() < cross:  # a crossed card for volume seen from the side
                     side2 = side0 * math.cos(roll + 1.4) + fwd.cross(side0).normalized() * math.sin(roll + 1.4)
                     _card(b, cards, c, fwd, side2, cl * 0.8, cl * 0.6, card_droop * 0.7 * cl, (centre.x, centre.y))
@@ -399,20 +411,26 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
         horiz = Vector((math.cos(a), math.sin(a), 0.0))
         c = top + Vector((horiz.x * 0.15, horiz.y * 0.15, -0.9))
         _card(b, cards, c, lead, horiz.cross(lead).normalized(), 1.4, 0.7, 0.3 if nod else 0.0, (top.x, top.y))
+    if snow:  # a small cap on the leader
+        _card(b, snow, top + Vector((0.0, 0.0, -0.5)), Vector((1.0, 0.0, 0.0)), Vector((0.0, 1.0, 0.0)),
+              0.9, 0.7, 0.15, (top.x, top.y), up_normal=True)
     return b.build(name)
 
 
-def branchy_fir(M, name, seed=1):
-    """Douglas fir: tall, bare for the lower third, narrow ragged crown."""
-    return branchy_conifer(M, name, M["fir_cards"], seed, height=30.0, crown_base=10.5, max_radius=3.6, r_trunk=0.62)
+def branchy_fir(M, name, seed=1, snow=False):
+    """Douglas fir: tall, bare for the lower third, narrow ragged crown.
+    snow=True: frosted needles with snow clumps on the sprays."""
+    return branchy_conifer(M, name, M["fir_frost_cards"] if snow else M["fir_cards"], seed, height=30.0,
+                           crown_base=10.5, max_radius=3.6, r_trunk=0.62, snow=M["snow_cards"] if snow else None)
 
 
-def branchy_hemlock(M, name, seed=2):
+def branchy_hemlock(M, name, seed=2, snow=False):
     """Western hemlock: shade-tolerant, so the crown starts low; branches sweep
     down with pendulous tips, lacy sprays, and the leader nods over."""
-    return branchy_conifer(M, name, M["hemlock_cards"], seed, height=26.0, crown_base=4.5, max_radius=4.2,
-                           r_trunk=0.5, elev=(-0.3, 0.3), sag=(0.3, 0.5), card_droop=0.3,
-                           spacing=(0.42, 0.62), fill=(0.1, 1.15), nod=1.3, flare=1.25)
+    return branchy_conifer(M, name, M["hemlock_frost_cards"] if snow else M["hemlock_cards"], seed, height=26.0,
+                           crown_base=4.5, max_radius=4.2, r_trunk=0.5, elev=(-0.3, 0.3), sag=(0.3, 0.5),
+                           card_droop=0.3, spacing=(0.42, 0.62), fill=(0.1, 1.15), nod=1.3, flare=1.25,
+                           snow=M["snow_cards"] if snow else None)
 
 
 def branchy_cedar(M, name, seed=3):
@@ -699,9 +717,9 @@ def main():
     M = mats()
 
     branchy_fir(M, "fir")
-    douglas_fir(M, "fir_snow", snow=True)
+    branchy_fir(M, "fir_snow", snow=True)
     branchy_hemlock(M, "hemlock")
-    hemlock(M, "hemlock_snow", snow=True)
+    branchy_hemlock(M, "hemlock_snow", snow=True)
     branchy_cedar(M, "cedar")
     sapling(M, "sapling", snow=False)
     sapling(M, "sapling_snow", snow=True)
@@ -712,12 +730,16 @@ def main():
     conifer("fir_lod", M, 1, height=30.0, crown_base=10.5, max_radius=3.0, tiers=6, points=5,
             foliage=[M["needles"], M["needles_dark"]], trunk_mat=M["bark"], droop=0.3,
             r_trunk=0.62, lod=True)
-    douglas_fir(M, "fir_snow_lod", snow=True, lod=True)
+    conifer("fir_snow_lod", M, 1, height=30.0, crown_base=10.5, max_radius=3.0, tiers=6, points=5,
+            foliage=[M["needles_frost"], M["needles_dark"]], trunk_mat=M["bark"], droop=0.3,
+            r_trunk=0.62, snow=True, lod=True)
     # matches the branchy hemlock (only for ?farTrees=lod)
     conifer("hemlock_lod", M, 2, height=26.0, crown_base=4.5, max_radius=3.8, tiers=8, points=5,
             foliage=[M["needles_dark"], M["needles"]], trunk_mat=M["bark"], droop=0.8, r_trunk=0.5,
             leader_lean=1.3, shape_pow=1.1, lod=True)
-    hemlock(M, "hemlock_snow_lod", snow=True, lod=True)
+    conifer("hemlock_snow_lod", M, 2, height=26.0, crown_base=4.5, max_radius=3.8, tiers=8, points=5,
+            foliage=[M["needles_dark"], M["needles_frost"]], trunk_mat=M["bark"], droop=0.8, r_trunk=0.5,
+            leader_lean=1.3, shape_pow=1.1, snow=True, lod=True)
     # matches the branchy cedar (only for ?farTrees=lod)
     conifer("cedar_lod", M, 3, height=27.0, crown_base=5.0, max_radius=4.0, tiers=8, points=6,
             foliage=[M["cedar"], M["needles"]], trunk_mat=M["cedar_bark"], droop=0.9, r_trunk=0.8,

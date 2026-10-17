@@ -37,7 +37,12 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   CedarBark. `cedar_spray()` paints flat scale-leaf fans (overlapping lobes, not needles). Tint (0.5, 0.56, 0.46). ~3.9k tris.
   `?bench=trees,near40` measured: 40 m vs 60 m saves 1.0 ms at spawn (full 7.5 ms, trees 2.9), 0.0 in the forest, so phones went to 40 m. New `branchy_conifer` options consume no extra rng unless used, so fir/hemlock stay identical. All cards
   are now darkened up to 40% where the visible side faces away from the card normal (crown undersides seen from below
-  were sky-lit and pale). `fir_snow`, `hemlock_snow` and sapling are still the old cone trees. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M (fir) → 0.60M (hemlock) → 0.75M (cedar) → 0.70M (lighter cedar) tris,
+  were sky-lit and pale). **Snowy fir/hemlock done:** `branchy_fir/hemlock(snow=True)` = the same tree
+  (identical shape: the snow uses its own rng `seed + 991`) with `FirFrostCards`/`HemlockFrostCards` (same spray textures,
+  bluer `CARD_TINT`) and `SnowCards` (`snow_clumps.png`: white clumps kept clear of the card edges) laid flat 6–10 cm above
+  85% of the sprays that aren't hung/rolled, with up-facing normals (`_card(up_normal=True)`) plus a cap on the leader.
+  In `patchCards`, snow gets a mip alpha boost of 0.12 (0.3 turned distant snow cards into white slabs) and underside
+  darkening to 0.22 (white from below looked wrong). +~1.25k tris per snowy tree. Only saplings (both) are still cones. Fir near model: ~3.4k tris (2.3k card tris). Phone spawn 0.33M → 0.50M (fir) → 0.60M (hemlock) → 0.75M (cedar) → 0.70M (lighter cedar) tris,
   draws unchanged. CROWN fir 3.3. Phone bench with branchy fir + hemlock (full clock): trees "saves" spawn 0.7 → 2.0 ms,
   forest 0.3 → 1.1 ms; full frame 4.3 / 4.8 ms (still ≲6). Levers if needed: a shorter near radius for card trees on
   phones, fewer crossed cards, a coarser card-tree LOD between near and impostor. Reference photos: `inspo/README.md`. Gotcha: when adding a material patch in

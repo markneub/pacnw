@@ -84,6 +84,7 @@ export async function loadPrototypes(urls) {
  * and vanish with distance (averaged alpha drops below the test threshold).
  */
 function patchCards(mat) {
+  const snow = mat.name === 'SnowCards';
   const prev = mat.onBeforeCompile;
   const prevKey = mat.customProgramCacheKey;
   mat.onBeforeCompile = (shader, renderer) => {
@@ -94,7 +95,8 @@ function patchCards(mat) {
         {
           vec2 cardTexel = vMapUv * vec2(textureSize(map, 0));
           float cardMip = max(0.0, 0.5 * log2(max(dot(dFdx(cardTexel), dFdx(cardTexel)), dot(dFdy(cardTexel), dFdy(cardTexel)))));
-          diffuseColor.a *= 1.0 + cardMip * 0.3;
+          // snow covers little of its card: boosting it would turn distant cards into white slabs
+          diffuseColor.a *= 1.0 + cardMip * ${snow ? '0.12' : '0.3'};
         }
         #endif
         #include <alphatest_fragment>`)
@@ -102,13 +104,22 @@ function patchCards(mat) {
         normal = normalize(vNormal);
         // the side of a spray facing away from its (outward, up) normal is the
         // underside: seen from below, crowns should be darker, not sky-lit
-        diffuseColor.rgb *= mix(0.6, 1.0, smoothstep(-0.35, 0.2, dot(normal, normalize(vViewPosition))));`);
+        // (snow from below: you'd see the dark branch under it, not white)
+        diffuseColor.rgb *= mix(${snow ? '0.22' : '0.6'}, 1.0, smoothstep(-0.35, 0.2, dot(normal, normalize(vViewPosition))));`);
   };
-  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards`;
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards${snow ? 's' : ''}`;
 }
 
 /** Colour multiplier per foliage-card material. */
-const CARD_TINT = { FirCards: [0.55, 0.6, 0.52], HemlockCards: [0.68, 0.72, 0.66], CedarCards: [0.5, 0.56, 0.46] };
+const CARD_TINT = {
+  FirCards: [0.55, 0.6, 0.52],
+  HemlockCards: [0.68, 0.72, 0.66],
+  CedarCards: [0.5, 0.56, 0.46],
+  // up high: frostier, bluer needles under the snow
+  FirFrostCards: [0.46, 0.56, 0.56],
+  HemlockFrostCards: [0.56, 0.66, 0.66],
+  SnowCards: [0.95, 0.97, 1.0],
+};
 
 // Scanned-rock materials waiting for their textures (applyRockTextures).
 const scanMaterials = [];

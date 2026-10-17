@@ -198,6 +198,37 @@ def cedar_spray(seed=13):
     return finish(img)
 
 
+def snow_clumps(seed=17):
+    """
+    Snow lying on a spray: lumpy white clumps, heaviest along the middle
+    (where the branch is) and thinning toward the tip, faintly blue in the
+    hollows. Same card layout as the sprays (u along the branch).
+    """
+    rng = random.Random(seed)
+    W = SIZE * SS
+    img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    for _ in range(220):
+        u = rng.random() ** 1.3  # more near the trunk end
+        spread = 0.3 * (1.0 - 0.5 * u)
+        v = 0.5 + rng.gauss(0, spread * 0.55)
+        if abs(v - 0.5) > spread:
+            continue
+        r = W * rng.uniform(0.03, 0.07) * (1.0 - 0.45 * u)
+        cx, cy = (0.14 + 0.72 * u) * W, v * W  # clear of the card edges (no straight cuts)
+        shade = rng.uniform(0.86, 1.0)
+        col = (int(232 * shade), int(238 * shade), int(248 * shade))
+        d.ellipse([cx - r * 1.3, cy - r, cx + r * 1.3, cy + r], fill=col + (255,))
+    # highlights on the clump tops
+    for _ in range(60):
+        u = rng.random() ** 1.3
+        v = 0.5 + rng.gauss(0, 0.08)
+        r = W * rng.uniform(0.012, 0.03) * (1.0 - 0.5 * u)
+        cx, cy = (0.14 + 0.72 * u) * W, v * W
+        d.ellipse([cx - r * 1.3, cy - r, cx + r * 1.3, cy + r], fill=(250, 252, 255, 255))
+    return finish(img)
+
+
 SPRAYS = {
     # Douglas fir: longer needles, a few stiff side shoots
     "fir_spray": dict(seed=7, old=(34, 64, 36), new=(92, 128, 52)),
@@ -207,6 +238,7 @@ SPRAYS = {
                           n_side=13, side_len=(0.44, 0.26), side_angle=(48, 62), side_spacing=0.0055,
                           sub_shoots=3, needle_angle=(65, 85), width=2),
     "cedar_spray": cedar_spray,
+    "snow_clumps": snow_clumps,
 }
 
 
