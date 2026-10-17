@@ -48,6 +48,10 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   phones, fewer crossed cards, a coarser card-tree LOD between near and impostor. Reference photos: `inspo/README.md`. Gotcha: when adding a material patch in
   `convertMaterial`, don't splice an `if` into the wind-sway/ground-cover if/else chain. It turned every tree into
   moss-speckled rock.
+  **Sword ferns** (`fern_a` 30 fronds / `fern_b` 24): arching frond *cards* (6 segments, 2 tris each, ~360 tris per clump)
+  with `FernCards` = `fern_frond.png` (1024×256, `fern_frond()` in make_foliage.py: stipe + toothed pinnae with auricles).
+  u runs base→tip, card width = length/4 (the texture aspect). Normals point out of the clump and up. Scatter: 2.3 m cell,
+  p = forest noise × clump × 1.45, scale 0.9–1.8. Fern radius 110 m desktop / 60 m phone. Phone spawn tris 0.54 → 0.65M (ferns 0.21M).
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
 - No Blender binary in the container. Use the PyPI module:
   `python3 -m venv <scratch>/bvenv && <scratch>/bvenv/bin/pip install bpy` (bpy 5.x works with Python 3.13),

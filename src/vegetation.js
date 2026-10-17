@@ -130,6 +130,7 @@ const CARD_TINT = {
   FirFrostCards: [0.46, 0.56, 0.56],
   HemlockFrostCards: [0.56, 0.66, 0.66],
   SnowCards: [0.95, 0.97, 1.0],
+  FernCards: [0.8, 0.85, 0.74],
 };
 
 // Scanned-rock materials waiting for their textures (applyRockTextures).
@@ -326,20 +327,20 @@ function scatter(trail) {
   }
 
   // Sword ferns ----------------------------------------------------------------
-  const fernCell = 3.2;
+  const fernCell = 2.3; // misty old growth: a sea of ferns under the big trees
   for (let gz = -half; gz < half; gz += fernCell) {
     for (let gx = -half; gx < half; gx += fernCell) {
       const x = gx + rng() * fernCell;
       const z = gz + rng() * fernCell;
       const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
       const clump = nForest(x * 0.05 + 40, z * 0.05 - 17) * 0.5 + 0.5;
-      if (rng() > f * clump * 0.9) continue;
+      if (rng() > f * clump * 1.45) continue;
       const h = heightAt(x, z);
       if (h < WATER_LEVEL + 1 || h > SNOWLINE - 25) continue;
       if (slopeAt(x, z) > 0.35) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.4) continue;
       add(rng() < 0.5 ? 'fern_a' : 'fern_b', {
-        x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.8, tint: rng(),
+        x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.9 + rng() * 0.9, tint: rng(),
       });
     }
   }

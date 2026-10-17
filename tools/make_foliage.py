@@ -4,7 +4,7 @@ Procedural foliage textures for the branch cards in blender/build_assets.py.
     python3 tools/make_foliage.py
 
 Writes public/textures/foliage/<name>.png for each entry in SPRAYS (Douglas fir,
-western hemlock): a twig with alternating side shoots, needles flattened into
+western hemlock, ...) and the sword fern frond: a twig with alternating side shoots, needles flattened into
 two ranks, lighter new growth at the tips, on a transparent background. Card UVs: u runs along the branch
 (0 = the end nearest the trunk), v across it.
 
@@ -42,9 +42,9 @@ def lerp(a, b, t):
     return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in range(len(a)))
 
 
-def finish(img):
+def finish(img, size=(SIZE, SIZE)):
     """Downsample, and bleed colour into the transparent texels (for mipmaps)."""
-    img = img.resize((SIZE, SIZE), Image.LANCZOS)
+    img = img.resize(size, Image.LANCZOS)
     a = np.asarray(img).astype(np.float32)
     alpha = a[:, :, 3] / 255.0
     hard = (alpha > 0.35).astype(np.float32)
@@ -61,7 +61,7 @@ def finish(img):
         acc_w[fill] = 1.0
     # anything the blurs didn't reach: the average needle colour
     acc_rgb[acc_w < 0.5] = rgb[hard > 0].mean(0)
-    out = np.zeros((SIZE, SIZE, 4), np.uint8)
+    out = np.zeros((size[1], size[0], 4), np.uint8)
     out[:, :, :3] = np.clip(np.where(hard[:, :, None] > 0, a[:, :, :3], acc_rgb), 0, 255)
     out[:, :, 3] = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
     return Image.fromarray(out, "RGBA")
@@ -229,6 +229,70 @@ def snow_clumps(seed=17):
     return finish(img)
 
 
+def fern_frond(seed=17):
+    """
+    A western sword fern frond, 4:1 (u along the frond, base at u = 0): a short
+    scaly stipe, then alternating narrow pinnae, each toothed, with a lighter
+    midrib and a small ear (auricle) on the side facing the tip. The pinnae are
+    longest a third of the way up and shrink to the tip. Dark, slightly glossy
+    green, younger and lighter toward the tip.
+    """
+    rng = random.Random(seed)
+    W, H = 1024 * SS, 256 * SS
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    y_mid = H / 2
+    x0, x1 = 0.01 * W, 0.985 * W
+    stipe_end = 0.14
+    rachis = lambda t: (x0 + (x1 - x0) * t, y_mid + math.sin(t * 5.0 + 1.0) * H * 0.012)
+    old, young = (38, 74, 34), (78, 120, 50)
+    n = 30  # per side
+    for i in range(n * 2):
+        side = 1 if i % 2 else -1
+        t = stipe_end + (0.985 - stipe_end) * (i + 0.5 * rng.random()) / (n * 2)
+        u = (t - stipe_end) / (1 - stipe_end)  # 0 at the first pinna, 1 at the tip
+        bx, by = rachis(t)
+        # lanceolate outline: longest a third of the way up
+        reach = (0.47 * H) * (1 - u) ** 0.8 * (0.6 + 0.4 * min(1.0, u / 0.3)) * rng.uniform(0.9, 1.05)
+        reach = max(reach, 0.035 * H)
+        ang = math.radians(rng.uniform(58, 68) + 14 * u)  # from the rachis, swept toward the tip
+        dx, dy = math.cos(ang), side * math.sin(ang)
+        px, py = -dy, dx  # across the pinna
+        if dx * px < 0:
+            px, py = -px, -py  # +p points toward the frond tip
+        L = reach / math.sin(ang)
+        wid = L * rng.uniform(0.11, 0.14)
+        col = lerp(old, young, u ** 1.5)
+        col = tuple(max(0, min(255, c + rng.randint(-8, 8))) for c in col)
+        # outline: base -> along the tip-facing edge (with the ear) -> pinna tip -> back along the other edge
+        pts_a, pts_b = [], []
+        steps = 14
+        for k in range(steps + 1):
+            f = k / steps
+            half = wid * 0.5 * (math.sin(math.pi * min(1.0, f * 0.9 + 0.1)) ** 0.55) * (1 - f) ** 0.25
+            tooth = wid * 0.09 * (1 if k % 2 else -0.4) if 0 < k < steps else 0.0
+            ear = wid * 0.45 * math.exp(-((f - 0.07) / 0.06) ** 2)
+            cx, cy = bx + dx * L * f, by + dy * L * f
+            pts_a.append((cx + px * (half + tooth + ear), cy + py * (half + tooth + ear)))
+            pts_b.append((cx - px * (half + tooth * 0.6), cy - py * (half + tooth * 0.6)))
+        d.polygon(pts_a + pts_b[::-1], fill=col + (255,))
+        mid = lerp(col, (150, 175, 95), 0.35)
+        d.line([(bx, by), (bx + dx * L * 0.9, by + dy * L * 0.9)], fill=mid + (255,), width=max(2, SS))
+    # rachis + stipe (brown, with a few pale scales)
+    pts = [rachis(k / 40) for k in range(41)]
+    for k in range(40):
+        t = k / 40
+        w = int((0.022 * (1 - t) + 0.006) * H)
+        c = (112, 92, 56) if t < stipe_end else lerp((92, 108, 54), (110, 140, 70), t)
+        d.line([pts[k], pts[k + 1]], fill=c + (255,), width=max(2, w))
+    for _ in range(30):
+        t = rng.uniform(0.0, stipe_end + 0.05)
+        sx, sy = rachis(t)
+        r = H * 0.012
+        d.ellipse([sx - r, sy - r * 0.6 + rng.uniform(-1, 1) * H * 0.012, sx + r, sy + r * 0.6], fill=(150, 128, 92, 255))
+    return finish(img, (1024, 256))
+
+
 SPRAYS = {
     # Douglas fir: longer needles, a few stiff side shoots
     "fir_spray": dict(seed=7, old=(34, 64, 36), new=(92, 128, 52)),
@@ -239,6 +303,7 @@ SPRAYS = {
                           sub_shoots=3, needle_angle=(65, 85), width=2),
     "cedar_spray": cedar_spray,
     "snow_clumps": snow_clumps,
+    "fern_frond": fern_frond,
 }
 
 

@@ -33,7 +33,7 @@ const lowPower = params.get('quality') === 'low' || (params.get('quality') !== '
 if (lowPower) {
   VIEW_DIST.trees = 270;
   VIEW_DIST.rocks = 170;
-  VIEW_DIST.ferns = 80;
+  VIEW_DIST.ferns = 60; // they shrink into the ground before this
   VIEW_DIST.treeDetail = 40; // ?bench near40: saves ~1 ms at cedar-rich spawn on the user's phone vs 60
 }
 if (params.has('near')) VIEW_DIST.treeDetail = parseFloat(params.get('near')); // A/B the full-detail tree radius

@@ -172,6 +172,7 @@ def mats():
         # snowy variants: the same sprays tinted frostier in the game, plus snow clumps
         "fir_frost_cards": card_material("FirFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
         "hemlock_frost_cards": card_material("HemlockFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
+        "fern_cards": card_material("FernCards", os.path.join(ROOT, "public", "textures", "foliage", "fern_frond.png")),
         "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
     }
 
@@ -524,35 +525,47 @@ def _stick(b, mat, p0, p1, r, sides=4):
 # Ground clutter
 # ---------------------------------------------------------------------------
 
-def fern(M, name, seed, fronds=11):
-    """Western sword fern: arching, tapering fronds with serrated edges."""
+def fern(M, name, seed, fronds=30):
+    """
+    Western sword fern clump: arching frond cards (fern_frond.png: pinnae
+    painted on a 4:1 card, u from the base to the tip). Young fronds stand
+    up in the middle, older ones arch outward and their tips droop; a few of
+    the oldest lie almost flat. Shading normals point out of the clump and up.
+    """
     rng = random.Random(seed)
     b = MeshBuilder()
-    segs = 7
+    mat = M["fern_cards"]
+    segs = 6
     for f in range(fronds):
-        a = TAU * f / fronds + rng.uniform(-0.25, 0.25)
-        length = rng.uniform(0.75, 1.15)
-        elev0 = math.radians(rng.uniform(48, 72))
-        width = rng.uniform(0.09, 0.12)
+        a = TAU * f / fronds + rng.uniform(-0.18, 0.18)
+        inner = rng.random()  # 1 = young, upright, in the middle
+        old = f % 10 == 3 or f % 10 == 7
+        length = rng.uniform(0.8, 1.15) * (0.85 if old else 1.0)
+        elev0 = math.radians(rng.uniform(15, 25) if old else 42 + 34 * inner)
+        bend = math.radians(rng.uniform(45, 75) if not old else 25)  # how far the tip arcs over
+        width = length / 4.0  # the texture's aspect
         d = Vector((math.cos(a), math.sin(a), 0.0))
         side = Vector((-math.sin(a), math.cos(a), 0.0))
-        p = Vector((d.x * 0.03, d.y * 0.03, 0.02))
-        spine, left, right = [], [], []
-        for s in range(segs + 1):
-            t = s / segs
-            elev = elev0 - t * (elev0 + math.radians(35))
-            if s > 0:
-                step = length / segs
-                p = p + (d * math.cos(elev) + Vector((0, 0, math.sin(elev)))) * step
-            w = width * math.sin(math.pi * min(1.0, t * 1.15 + 0.08)) ** 0.6
-            w *= 1.25 if s % 2 else 0.8  # serrated leaflets
-            fold = Vector((0, 0, -w * 0.35))
-            spine.append(b.v(p))
-            left.append(b.v(p + side * w + fold))
-            right.append(b.v(p - side * w + fold))
-        for s in range(segs):
-            b.face((spine[s], spine[s + 1], left[s + 1], left[s]), M["fern"])
-            b.face((spine[s], right[s], right[s + 1], spine[s + 1]), M["fern"])
+        roll = rng.uniform(-0.25, 0.25)  # blade tilted a little about its axis
+        side_t = (side * math.cos(roll) + Vector((0, 0, math.sin(roll)))).normalized()
+        p = Vector((d.x * 0.05, d.y * 0.05, 0.0))
+        rows = []
+        for s_ in range(segs + 1):
+            t = s_ / segs
+            if s_ > 0:
+                elev = elev0 - bend * (t - 0.5 / segs) ** 1.3
+                p = p + (d * math.cos(elev) + Vector((0, 0, math.sin(elev)))) * (length / segs)
+            l_ = b.v(p + side_t * (width * 0.5))
+            r_ = b.v(p - side_t * (width * 0.5))
+            for i in (l_, r_):
+                co = Vector(b.verts[i])
+                out = Vector((co.x, co.y, 0.0))
+                n = (out / max(out.length, 0.15) + Vector((0, 0, 1.3))).normalized()
+                b.custom_normals[i] = tuple(n)
+            rows.append((l_, r_, t))
+        for s_ in range(segs):
+            (l0, r0, t0), (l1, r1, t1) = rows[s_], rows[s_ + 1]
+            b.face((r0, r1, l1, l0), mat, uvs=[(t0, 0.0), (t1, 0.0), (t1, 1.0), (t0, 1.0)])
     return b.build(name)
 
 
@@ -758,7 +771,7 @@ def main():
     snag_lod(M, "snag_lod")
 
     fern(M, "fern_a", 21)
-    fern(M, "fern_b", 22, fronds=9)
+    fern(M, "fern_b", 22, fronds=24)
     log(M, "log", 31)
     stump(M, "stump", 41)
 

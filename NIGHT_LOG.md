@@ -44,3 +44,16 @@ The scene now renders into an offscreen target (MSAA moved there from the canvas
   pipeline, including the MSAA move and the full-screen composite, is A/B'd with `?off=post`:
   compare `?bench=trees&views=spawn` with and without `&off=post` (the "full" lines).
 - Best view: `?weather=sun&yaw=1.0&pitch=0.12` (spawn, facing the sun) or `?weather=sun&x=110&z=470&yaw=0.9`.
+
+### 4. Sword ferns, rebuilt and doubled
+The misty old-growth reference has a sea of knee-to-waist sword ferns. Ours were a few small clumps of solid
+polygon fronds.
+- **New fern model:** 24–30 arching frond *cards* per clump with a painted frond texture (scaly stipe, toothed pinnae
+  with ears, lighter midribs, younger and lighter toward the tip). Young fronds stand up in the middle, older ones
+  arch out and droop, and a few lie flat. It uses the tree-card shading (alpha test, darker undersides, matte).
+  ~360 tris per clump (was ~310).
+- **More and bigger:** about 2.5× as many clumps (denser grid, higher probability in the forest), 0.9–1.8× scale.
+- **Budget:** the fern radius drops to 60 m on phones (from 80; they shrink into the ground before the edge) and 110 m
+  on desktop (from 150). Phone spawn: 0.54 → 0.65M tris (ferns 0.10 → 0.21M), draws unchanged.
+  **Measure:** `?bench=ferns` (row "- ferns"). Ferns were ~0 ms on the phone before; the risk is alpha-test fill near
+  the camera.

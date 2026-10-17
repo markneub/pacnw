@@ -14,7 +14,7 @@ export const CHUNK_SIZE = 125;
 export const VIEW_DIST = {
   trees: 520,
   rocks: 320,
-  ferns: 150,
+  ferns: 110,
   treeDetail: 85, // full-detail trees inside this radius, cheap LOD beyond
 };
 
