@@ -32,7 +32,7 @@ const nurseAt = (u) => {
 };
 
 /** Scanned boulders (blender/build_rocks.py). The same random draw picks one, so the scatter is unchanged. */
-const BOULDERS = ['boulder_a', 'boulder_b', 'boulder_c', 'boulder_d', 'boulder_e', 'boulder_f'];
+const BOULDERS = ['boulder_a', 'boulder_b', 'boulder_c', 'boulder_d', 'boulder_e', 'boulder_f', 'boulder_g', 'boulder_h', 'boulder_i'];
 
 /** How far out a near pool must hold instances: trees also cover the crossfade band. */
 const poolRadius = (key) => VIEW_DIST[key] + (key === 'treeDetail' ? shared.uLodBand.value : 0);
@@ -353,7 +353,8 @@ function scatter(trail) {
       if (r < 0.12 + slope * 0.5) {
         const name = BOULDERS[Math.floor(rng() * BOULDERS.length)];
         const rotY = rng() * 6.28;
-        const scale = 0.6 + rng() * rng() * 1.9; // scans are real size, 1.7-3.4 m across
+        // scans are real size, 1.6-3.4 m across; on steep ground some grow into outcrops (no extra rng)
+        const scale = (0.6 + rng() * rng() * 1.9) * (1 + 1.2 * THREE.MathUtils.smoothstep(slope, 0.3, 0.6));
         // seat it on the lowest ground under its footprint, so on a slope the
         // uphill side is buried instead of the downhill side floating
         const rr = 0.8 * scale;
@@ -497,7 +498,10 @@ function scatter(trail) {
       const p = Math.min(0.95, 0.22 + 0.75 * edge + 0.6 * stony + 0.4 * high) * (1 - 0.5 * duff * (1 - edge));
       if (r > p) continue;
       if (snowAmount(x, z, h, slope) > 0.3) continue;
-      add(PEBBLES[Math.floor(pick * PEBBLES.length)], { x, y: groundAt(x, z) - 0.02, z, rotY: pick * 97.3, scale: 0.8 + r * 0.6 / Math.max(p, 0.1), tint: rng() });
+      const kind = PEBBLES[Math.floor(pick * PEBBLES.length)];
+      // on stony slopes the cobbles grow into scree: small talus blocks
+      const talus = kind === 'pebbles_d' ? 1 + 2.5 * stony : 1;
+      add(kind, { x, y: groundAt(x, z) - 0.02 * talus, z, rotY: pick * 97.3, scale: (0.8 + r * 0.6 / Math.max(p, 0.1)) * talus, tint: rng() });
     }
   }
 

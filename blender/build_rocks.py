@@ -54,6 +54,9 @@ ROCKS = [  # (game name, scan set, object in the scan)
     ("boulder_d", "rock_moss_set_02", "rock_moss_set_02_rock07"),
     ("boulder_e", "rock_moss_set_01", "rock_moss_set_01_rock01"),
     ("boulder_f", "rock_moss_set_01", "rock_moss_set_01_rock04"),
+    ("boulder_g", "rock_moss_set_01", "rock_moss_set_01_rock02"),  # a broad, flat slab
+    ("boulder_h", "rock_moss_set_01", "rock_moss_set_01_rock05"),  # a long block
+    ("boulder_i", "rock_moss_set_02", "rock_moss_set_02_rock12"),  # squat basalt
 ]
 NEAR_TRIS = 1600
 FAR_TRIS = 220

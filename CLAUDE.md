@@ -271,7 +271,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   (0.36, 0.28, 0.21). Near-black trunks hid the texture. Three's `flatShading` is off for *Bark materials.
   Budget: draws unchanged, tris +1%. Good close-up spots: fir `x=531.9&z=44.3&yaw=2.36`, snag `x=242.3&z=-78.3&yaw=0.79`,
   rock `x=288.8&z=-100.8&yaw=-3.14&pitch=-0.3`, cairn `x=21.9&z=-179.9&yaw=-3.14&pitch=-0.4`.
-- **Scanned boulders** (`blender/build_rocks.py`): 6 rocks from Poly Haven `rock_moss_set_02` (grey, "scanA") and `_01`
+- **Scanned boulders** (`blender/build_rocks.py`): 9 rocks (g: a broad flat slab, h: a long block, i: squat basalt were added later) from Poly Haven `rock_moss_set_02` (grey, "scanA") and `_01`
   ("scanB", warm sandstone regraded 70% toward scanA's grey). Each is welded (glTF import splits verts at UV seams, and
   decimating unwelded meshes opens cracks), then decimated to near ~1600 / far ~220 tris with the scan UVs kept. The scan's
   shading normals (mesh + its own normal map) are baked (Cycles, selected-to-active, tangent space) into a 2048 atlas in
@@ -284,6 +284,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   (`footprint()`). The script runs in ~25 s. Scans are cached in `.cache/scans` (gitignored). Budget: phone draws
   140 → 152 at spawn (110 → 127 at the ridge), tris +2–5%. Good boulder spots: `x=371.9&z=104.5&yaw=0.79&pitch=-0.15`,
   `x=-128.8&z=8.2&yaw=-0.79&pitch=-0.2`.
+  Boulders on steep ground scale up to ×2.2 (outcrops) and cobble clusters (`pebbles_d`) up to ×3.5 on stony slopes (talus),
+  both without extra rng. 9 variants: phone draws +3–9 (spawn 150 → 153, ridge 126 → 135).
 - **Grass** (`src/grass.js`): one tuft geometry (8 curved, tapered blades of real triangles, no alpha test), drawn by
   instancing in two **rings**, each a square tile that wraps around the camera like the rain (one draw call each):
   dense inner (desktop 22 m tile / 10000 tufts, fading out 6–11 m; phone 16 m / 2800, 4–8 m) and sparse outer (56 m /
@@ -342,7 +344,6 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 
 ## Backlog (agreed with the user)
 
-- More rock variation: more boulder shapes/sizes (outcrops, half-buried slabs, talus on steep slopes). (Loose stones: done.)
 - Wet look in rain (glossier trunks/rocks, drips, puddles reflecting the sky). Sharper god-ray shafts (1 m canopy map).
 - Sound: footsteps by surface, birdsong in sun breaks, drips after rain. Subtle head bob (no option: opinionated).
 - Tree mid-LOD between full detail and impostors if the frame budget gets tight.
