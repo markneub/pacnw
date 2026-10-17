@@ -73,6 +73,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   (the ring turns clockwise about the root's direction). First tries read as blades, then inside-out black fins, then
   splayed tubes ("spider legs"). `addTrunkMoss` also does **ground blending**: the bottom ~0.5 m above the ground
   (`vTmAbove`) fades to damp duff/moss with a ragged edge and the bark photo fades with it. Phone spawn 0.76 → 0.82M tris.
+  Phone bench: trees 1.8 → 2.0 ms at spawn (±0.1), 1.3 in the forest; full frame 6.7 / 5.2 ms.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
