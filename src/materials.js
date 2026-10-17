@@ -206,6 +206,7 @@ export function patchSunlight(shader) {
   shader.uniforms.uTime = shared.uTime;
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
+      #define SUN_VIS
       uniform sampler2D uCanopyMap;
       uniform vec4 uCanopyRect;
       uniform float uSun;

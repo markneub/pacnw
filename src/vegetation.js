@@ -123,7 +123,16 @@ function patchCards(mat) {
       // needles are matte: grazing-angle Fresnel off a low sun made sprays grey-white
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         reflectedLight.directSpecular *= 0.15;
-        reflectedLight.indirectSpecular *= 0.35;`);
+        reflectedLight.indirectSpecular *= 0.35;
+        #if defined(SUN_VIS) && NUM_DIR_LIGHTS > 0 && ${snow ? 0 : 1}
+        {
+          // backlight: thin leaves glow when you look toward the sun through them
+          // (in a sun break, where the canopy lets the sun through)
+          float back = max(dot(-normalize(vViewPosition), directionalLights[0].direction), 0.0);
+          reflectedLight.directDiffuse += diffuseColor.rgb * directionalLights[0].color
+            * vec3(1.0, 1.0, 0.6) * (back * back * back * back * 0.75 * uSun * sunVis);
+        }
+        #endif`);
   };
   mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards${snow ? 's' : ''}`;
 }

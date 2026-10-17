@@ -164,7 +164,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   starts sunny; `?weather=sun` pins it, `rain|snow|still` pin overcast, `?off=sun` stops the cycle). `SUN_DIR`/`SUN_COLOR`
   live in `atmosphere.js`. The fog carrier packs the sun into `fog.near` (`round(sun*255) + density`). Overcast light comes from high
   (`OVERCAST_DIR`) and lerps to the low sun. `patchSunlight` (materials.js) scales direct light by the canopy map
-  along the sun ray (dapples in sun); `?off=dapple`. Cards and grass keep only 15% direct specular (grazing Fresnel
+  along the sun ray (dapples in sun); `?off=dapple`. It defines `SUN_VIS`, which non-snow cards use for **backlight**
+  (`patchCards`: + diffuse × light × (−V·L)⁴ × 0.75 × uSun × sunVis), so ferns and sprays glow looking toward the sun. Cards and grass keep only 15% direct specular (grazing Fresnel
   bleached them under a low sun).
 - **Post** (`src/post.js`, `?off=post`): the scene renders into an MSAA target (the canvas then has no antialias), then
   god rays (quarter-res bright pass + 2× radial blur toward the sun, only when `uSun × facing` > 0.01), glow, and a

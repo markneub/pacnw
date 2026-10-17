@@ -62,3 +62,8 @@ polygon fronds.
 About 1 in 8 big conifers in the low, dense forest is now a giant (×1.45–1.85: up to ~60 m tall, trunks ~2 m
 across), as in the misty old-growth photo where huge trunks dominate eye level. ~585 trees. They're chosen by a hash
 of position, so no other tree moved. Budget unchanged (same draws and pools; slightly bigger crowns).
+
+### 6. Backlit foliage
+In a sun break, needle sprays and fern fronds now glow when you look toward the sun through them (light
+transmitted through thin leaves, as in the god-ray photo). It's gated by the same canopy sun visibility as the dapples,
+so shaded ferns stay dark. A few ALU ops per foliage pixel; `?off=dapple` turns it off together with the dapples.
