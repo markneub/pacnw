@@ -5,9 +5,23 @@ Each change is its own commit, has an `?off=` switch where it adds rendering cos
 
 ## Morning checklist
 
-1. Run the full benchmark once: https://markneub.github.io/pacnw/?bench
-2. Compare rows against the last known numbers (full frame ≈ 6.5–7.5 ms at spawn on the phone).
-3. If something is too expensive, its `?off=` switch confirms it, and its commit can be tuned or reverted alone.
+Benchmarks (phone, full clock, no `&heat`; tap to start, wait ~1 min, paste the table):
+1. **Overall, sunny:** https://markneub.github.io/pacnw/?bench=trees,ferns,post,motes&weather=sun
+   - rows: trees (incl. veterans and backlight), ferns (rebuilt, ~2.5× as many), "- rays/glow" (post passes),
+     "- motes".
+2. **Overall, overcast:** https://markneub.github.io/pacnw/?bench=trees,ferns,post&weather=rain
+3. **Whole post pipeline A/B** (MSAA moved to an offscreen target plus the composite pass): run
+   https://markneub.github.io/pacnw/?bench=empty&views=spawn and the same with `&off=post`, then compare the two
+   "full" lines.
+4. **Dappled sun A/B** (canopy sunlight + backlight): `?bench=trees&views=spawn&weather=sun` vs `&off=dapple`.
+
+Last known phone numbers (before tonight): spawn full ≈ 6.5–7.5 ms. Budget guide: ≲6 ms at full clock.
+If something is too expensive, its `?off=` switch confirms it (post, motes, dapple, sun, ferns), and each change is
+its own commit.
+
+Things to look at: spawn facing the sun `?weather=sun&yaw=1.0&pitch=0.12`; forest in sun
+`?weather=sun&x=-30&z=420&yaw=1.2&pitch=-0.1`; lake `?x=110&z=470&yaw=-0.67` (± `&weather=sun`); the misty old growth
+`?x=0&z=600&yaw=0.5`. The weather cycles on its own: ~6 min, starting in a sun break.
 
 ## Changes
 
