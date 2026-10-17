@@ -139,6 +139,14 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
     share one instanceMatrix buffer, so a re-cull uploads it once. Verified with a culled-vs-all render: 0 px differ for turns
     ≤10°, and the test catches 34°/90° turns. Draws ~37% of candidates. Phone tris at spawn 0.79 → 0.60M (forest 0.69 → 0.47M). The dither uses `discard`, which can cost fill rate on Apple GPUs
     (hidden-surface removal), so re-check phone `?perf` after changing tree materials.
+  - **Mid tier** (between the near pool and the impostors): `<name>_mid` models from the same Blender functions with
+    `mid=True`, which draw exactly the same random numbers (so the model matches the full one for the dither) but emit every
+    other spray at 1.35× size, no crossed cards, branch sticks, stubs, hanging moss or roots, and a 10-sided trunk (fir ~1/3 the
+    tris). `VIEW_DIST.treeNear` (40 m desktop / 20 m phone) is the full-detail radius; mid out to `treeDetail`. Materials: `near3`
+    (fades out over `uMidRadius ± uMidBand`, 6 m), `mid` (fades in there, out over the LOD band; `vLodFade2`), `far` unchanged;
+    `near` stays the two-tier version (boulders). The mid pool skips trees inside the near tier (`NearPool.update(..., inner)`).
+    `?mid=0` / bench row `mid` ("- mid trees") restore the two tiers. Phone spawn 0.82 → 0.66M tris (+8 draws), desktop 2.24 →
+    1.75M; forest 0.46 → 0.44M. A glbcmp check confirmed the full models were unchanged.
   - **Far trees are impostors** (`src/impostors.js`, since the tree-overhaul step 1): at load, every tree type's *near*
     model is rendered from 8 azimuths (ortho, side-on) into a colour atlas (unlit: material colour × baked AO, gamma-2 in
     RGBA8) and a normal atlas (the flat normal in the bake camera's space). Frames are 128×256 on phones and 192×384 on desktop,
@@ -333,7 +341,6 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 
 - Wet look in rain (glossier trunks/rocks, drips, puddles reflecting the sky). Sharper god-ray shafts (1 m canopy map).
 - Sound: footsteps by surface, birdsong in sun breaks, drips after rain. Subtle head bob (no option: opinionated).
-- Tree mid-LOD between full detail and impostors if the frame budget gets tight.
 
 ## Headless screenshots (how to see the scene)
 

@@ -35,9 +35,16 @@ if (lowPower) {
   VIEW_DIST.rocks = 170;
   VIEW_DIST.ferns = 60; // they shrink into the ground before this
   VIEW_DIST.treeDetail = 40; // ?bench near40: saves ~1 ms at cedar-rich spawn on the user's phone vs 60
+  VIEW_DIST.treeNear = 20;
 }
 if (params.has('near')) VIEW_DIST.treeDetail = parseFloat(params.get('near')); // A/B the full-detail tree radius
 shared.uLodRadius.value = VIEW_DIST.treeDetail;
+// three tree tiers: full detail inside treeNear, the mid model out to treeDetail, impostors beyond.
+// ?mid=0 collapses it to the old two tiers (the near tier then reaches treeDetail).
+if (params.get('mid') === '0') VIEW_DIST.treeNear = VIEW_DIST.treeDetail;
+VIEW_DIST.treeNear = Math.min(VIEW_DIST.treeNear, VIEW_DIST.treeDetail);
+shared.uMidRadius.value = VIEW_DIST.treeNear < VIEW_DIST.treeDetail ? VIEW_DIST.treeNear : VIEW_DIST.treeDetail;
+shared.uMidBand.value = VIEW_DIST.treeNear < VIEW_DIST.treeDetail ? 6 : shared.uLodBand.value;
 shared.uFernRadius.value = VIEW_DIST.ferns;
 
 // ?off=a,b,... switches parts off to find what costs the most on a device:

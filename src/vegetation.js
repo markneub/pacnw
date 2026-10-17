@@ -35,7 +35,9 @@ const nurseAt = (u) => {
 const BOULDERS = ['boulder_a', 'boulder_b', 'boulder_c', 'boulder_d', 'boulder_e', 'boulder_f', 'boulder_g', 'boulder_h', 'boulder_i'];
 
 /** How far out a near pool must hold instances: trees also cover the crossfade band. */
-const poolRadius = (key) => VIEW_DIST[key] + (key === 'treeDetail' ? shared.uLodBand.value : 0);
+const poolRadius = (key) => VIEW_DIST[key] + (key === 'treeDetail' ? shared.uLodBand.value : key === 'treeNear' ? shared.uMidBand.value : 0);
+/** Is the mid tree tier in use (the full-detail radius is inside the impostor radius)? */
+const midOn = () => VIEW_DIST.treeNear < VIEW_DIST.treeDetail;
 
 /** Collision radius (m, at scale 1) for a model without a COLLIDE entry: most of its narrower half-width. */
 const footprint = (parts) => {
@@ -77,7 +79,8 @@ export async function loadPrototypes(urls) {
   for (const root of roots) {
     const parts = [];
     const rootInv = root.matrixWorld.clone().invert();
-    const lod = root.name.endsWith('_lod') ? 'far' : names.has(`${root.name}_lod`) ? 'near' : null;
+    const lod = root.name.endsWith('_lod') ? 'far' : root.name.endsWith('_mid') ? 'mid'
+      : names.has(`${root.name}_mid`) ? 'near3' : names.has(`${root.name}_lod`) ? 'near' : null;
     root.traverse((o) => {
       if (!o.isMesh) return;
       const geometry = o.geometry.clone();
@@ -653,8 +656,11 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
     // near tier: full-detail models around the camera
     if (nearParts) {
       const nearColors = nearParts.map((part) => instanceColors(part.material.name, tints, shades, n));
-      const radiusKey = kind === 'ferns' ? 'ferns' : 'treeDetail';
-      const pool = new NearPool(nearParts, matrices, nearColors, xz, poolRadius(radiusKey));
+      const midParts = kind === 'trees' ? protos[`${name}_mid`] : null;
+      const radiusKey = kind === 'ferns' ? 'ferns' : midParts ? 'treeNear' : 'treeDetail';
+      // trees: capacity for the widest the near tier can be (out to treeDetail when the mid tier is off)
+      const capacityRadius = kind === 'ferns' ? poolRadius('ferns') : poolRadius('treeDetail');
+      const pool = new NearPool(nearParts, matrices, nearColors, xz, capacityRadius);
       pool.radiusKey = radiusKey;
       for (const im of pool.meshes) {
         im.name = `${name}:${im.material.name}@near`;
@@ -662,6 +668,19 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
         group.add(im);
       }
       nearPools.push(pool);
+      if (midParts) {
+        // mid tier: the same tree with fewer cards, from the near tier's band out to the impostors
+        const midColors = midParts.map((part) => instanceColors(part.material.name, tints, shades, n));
+        const mid = new NearPool(midParts, matrices, midColors, xz, poolRadius('treeDetail'));
+        mid.radiusKey = 'treeDetail';
+        mid.isMid = true;
+        for (const im of mid.meshes) {
+          im.name = `${name}:${im.material.name}@mid`;
+          im.userData.kind = kind;
+          group.add(im);
+        }
+        nearPools.push(mid);
+      }
     }
   }
 
@@ -765,7 +784,13 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
     const moved = force || camera.position.distanceTo(lastPos) > STEP || dir.dot(lastDir) < Math.cos(TURN);
     let built = false;
     for (const pool of nearPools) {
-      const refilled = pool.update(camera.position, poolRadius(pool.radiusKey), force);
+      if (pool.isMid && !midOn()) {
+        // mid tier switched off (?mid=0, bench row): draw nothing
+        if (pool.meshes[0].count) for (const im of pool.meshes) im.count = 0;
+        continue;
+      }
+      const inner = pool.isMid ? VIEW_DIST.treeNear - shared.uMidBand.value : 0;
+      const refilled = pool.update(camera.position, poolRadius(pool.radiusKey), force, inner);
       if (!refilled && !moved) continue;
       if (!built) {
         wideFrustum(camera);
