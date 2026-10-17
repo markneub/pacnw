@@ -154,7 +154,7 @@ class MeshBuilder:
 def mats():
     return {
         "bark": material("Bark", (0.36, 0.28, 0.21)),  # greyish brown, like Douglas fir
-        "cedar_bark": material("CedarBark", (0.42, 0.24, 0.16)),
+        "cedar_bark": material("CedarBark", (0.33, 0.235, 0.18)),  # weathered grey-brown with a red cast (was a saturated rust)
         "snag": material("SnagBark", (0.48, 0.45, 0.41)),
         "needles": material("Needles", (0.13, 0.27, 0.15), 0.85),
         "needles_dark": material("NeedlesDark", (0.09, 0.2, 0.13), 0.85),
