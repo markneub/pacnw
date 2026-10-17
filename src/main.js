@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildTerrain, buildWater, heightAt } from './terrain.js';
-import { loadPrototypes, buildVegetation, applyRockTextures } from './vegetation.js';
+import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors } from './vegetation.js';
 import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
@@ -99,10 +99,13 @@ async function init() {
   scene.add(trail.mesh);
   step('trail');
 
-  progress(0.5, 1600);
+  progress(0.5, 2200); // models + impostor bake + scatter
   const protos = await loadPrototypes(['forest', 'rocks'].map((m) => `${import.meta.env.BASE_URL}models/${m}.glb`));
   await nextFrame();
-  const veg = buildVegetation(protos, trail);
+  // far trees as billboards (?farTrees=lod: the old 3D far models, for comparison)
+  const impostors = params.get('farTrees') === 'lod' ? null : bakeTreeImpostors(renderer, protos, { lowPower });
+  step('tree impostors');
+  const veg = buildVegetation(protos, trail, { impostors });
   scene.add(veg.group);
   step('vegetation');
 

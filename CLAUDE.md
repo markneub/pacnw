@@ -74,6 +74,18 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
     share one instanceMatrix buffer, so a re-cull uploads it once. Verified with a culled-vs-all render: 0 px differ for turns
     ≤10°, and the test catches 34°/90° turns. Draws ~37% of candidates. Phone tris at spawn 0.79 → 0.60M (forest 0.69 → 0.47M). The dither uses `discard`, which can cost fill rate on Apple GPUs
     (hidden-surface removal), so re-check phone `?perf` after changing tree materials.
+  - **Far trees are impostors** (`src/impostors.js`, since the tree-overhaul step 1): at load, every tree type's *near*
+    model is rendered from 8 azimuths (ortho, side-on) into a colour atlas (unlit: material colour × baked AO, gamma-2 in
+    RGBA8) and a normal atlas (the flat normal in the bake camera's space). Frames are 128×256 on phones and 192×384 on desktop,
+    with one row per type. Readback, edge dilation (frontier BFS, 6 rings), then mipmapped DataTextures. Far chunks get **one**
+    InstancedMesh per chunk for all tree types: a unit quad, with per-instance `aFrame` = [yMin, height, halfWidth, row]. The
+    vertex shader faces the camera (cylindrical) and picks the nearest baked view from (camera angle − instance yaw). It writes
+    `transformed` in instance space (transpose(M)·w/s²), since three applies instanceMatrix after. The fragment shader uses
+    `discard` below alpha 0.4 and rebuilds the world normal from the snapped view's axes, so it's lit like the 3D trees.
+    `patchLod('far')` (now exported) keeps the crossfade. Quad geometry needs a hand-set boundingSphere (largest tree), or
+    chunks get frustum-culled wrongly. `?farTrees=lod` uses the old `*_lod` chunks (kept for A/B). Phone far trees: 279k → 4.6k
+    tris, 68 → 15 draws. Spawn totals: phone 0.60M/182 → 0.33M/129, desktop 1.54M/341 → 0.92M/222. Bake: ~1.8 s in
+    SwiftShader (the GPU is fast). Load step 'tree impostors'. Watch: `discard` on Apple GPUs, and alpha thinning in mips.
   - Ferns: near pool only, and they shrink into the ground at `uFernRadius` ('fade' mode).
   - Boulders: near pool + far chunks like trees (`boulder_x` + `boulder_x_lod`). Logs, stumps and furniture: 125 m chunks only.
     Any node with a `<name>_lod` partner gets two tiers (`loadPrototypes` loads forest.glb and rocks.glb).

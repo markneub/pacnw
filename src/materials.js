@@ -19,7 +19,7 @@ export const shared = {
  * only those outside. A hidden instance's vertices are moved outside the clip
  * volume, so its triangles are discarded before rasterisation.
  */
-function patchLod(shader, mode) {
+export function patchLod(shader, mode) {
   if (!mode) return;
   if (mode === 'fade') {
     // near-only objects (ferns): shrink into the ground over the last 15% of

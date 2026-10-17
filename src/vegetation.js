@@ -11,6 +11,7 @@ import { addWindSway, addGroundCover, shared } from './materials.js';
 import { bakePrototypeAO, bakeCanopy } from './bake.js';
 import { NearPool } from './detail.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
+import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.js';
 
 const KIND = (name) => (name.startsWith('fern') ? 'ferns'
   : /^(boulder|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
@@ -281,11 +282,22 @@ function scatter(trail) {
   return out;
 }
 
+/** Bake the far-tree impostors from every tree type's full-detail model (see impostors.js). */
+export function bakeTreeImpostors(renderer, protos, { lowPower }) {
+  const trees = {};
+  for (const [name, parts] of Object.entries(protos)) {
+    if (KIND(name) === 'trees' && !name.endsWith('_lod') && protos[`${name}_lod`]) trees[name] = parts;
+  }
+  return bakeImpostors(renderer, trees, { frameW: lowPower ? 128 : 192 });
+}
+
 /**
  * Builds the vegetation as per-chunk InstancedMeshes so far-away chunks can be
  * hidden cheaply, and a spatial hash of trunks/rocks for player collisions.
+ * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
+ * chunk for all tree types, instead of the *_lod models per type.
  */
-export function buildVegetation(protos, trail) {
+export function buildVegetation(protos, trail, { impostors = null } = {}) {
   const placements = scatter(trail);
   const canopyAt = bakeCanopy(placements);
   const group = new THREE.Group();
@@ -303,6 +315,7 @@ export function buildVegetation(protos, trail) {
   const counts = {};
 
   const nearPools = [];
+  const impostorBuckets = new Map(); // chunk key -> [{ matrices, idx, colors, frame }]
 
   // Instance colour for one part: foliage/rock parts get the per-instance
   // tint, everything gets the baked canopy shade.
@@ -356,6 +369,8 @@ export function buildVegetation(protos, trail) {
       }
     });
     const farColors = farParts.map((part) => instanceColors(part.material.name, tints, shades, n));
+    const frame = kind === 'trees' && impostors?.info[name];
+    const impColors = frame ? instanceColors('LodVertexColor', tints, shades, n) : null;
 
     // far tier (or the only tier, for non-trees): one InstancedMesh per chunk per part
     const buckets = new Map();
@@ -374,6 +389,12 @@ export function buildVegetation(protos, trail) {
         });
       }
       const chunk = chunks.get(key);
+      if (frame) {
+        // billboards: gathered per chunk across all tree types, built below
+        if (!impostorBuckets.has(key)) impostorBuckets.set(key, []);
+        for (const it of items) impostorBuckets.get(key).push({ matrices, idx: it.idx, colors: impColors, frame });
+        continue;
+      }
       farParts.forEach((part, pi) => {
         const im = new THREE.InstancedMesh(part.geometry, part.material, items.length);
         im.setColorAt(0, col.setRGB(1, 1, 1)); // allocate instanceColor
@@ -403,6 +424,32 @@ export function buildVegetation(protos, trail) {
         group.add(im);
       }
       nearPools.push(pool);
+    }
+  }
+
+  if (impostors) {
+    const tallest = Math.max(...Object.values(impostors.info).map((f) => Math.max(f.height + f.yMin, f.halfWidth * 2)));
+    const geo = impostorGeometry(tallest);
+    const mat = impostorMaterial(impostors);
+    for (const [key, items] of impostorBuckets) {
+      const im = new THREE.InstancedMesh(geo, mat, items.length);
+      im.setColorAt(0, col.setRGB(1, 1, 1)); // allocate instanceColor
+      const frames = new Float32Array(items.length * 4);
+      items.forEach((it, j) => {
+        im.instanceMatrix.array.set(it.matrices.subarray(it.idx * 16, it.idx * 16 + 16), j * 16);
+        im.instanceColor.array.set(it.colors.subarray(it.idx * 3, it.idx * 3 + 3), j * 3);
+        frames.set([it.frame.yMin, it.frame.height, it.frame.halfWidth, it.frame.row], j * 4);
+      });
+      im.geometry = geo.clone(); // own attribute set per chunk (aFrame differs)
+      im.geometry.boundingSphere = geo.boundingSphere;
+      im.geometry.setAttribute('aFrame', new THREE.InstancedBufferAttribute(frames, 4));
+      im.instanceMatrix.needsUpdate = true;
+      im.instanceColor.needsUpdate = true;
+      im.computeBoundingSphere();
+      im.name = `impostors@${key}`;
+      im.userData.kind = 'trees';
+      group.add(im);
+      chunks.get(key).trees.push(im);
     }
   }
 
