@@ -60,6 +60,9 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `MossCards` (`moss_strands.png`, 512×256, u = down: 6–8 ropy locks pinched at the top) 0.8–1.8 m long, from 85% of
   dead stubs and some lower-crown branches (t < 0.5) of fir, hemlock and cedar (not snowy trees or saplings). Tint
   (0.55, 0.58, 0.5) and mip alpha boost 0.05: brighter/boosted, they read as pale paper tags at 15 m. +3 draws, ~+1% tris.
+  **Trunk moss** (`addTrunkMoss` in materials.js, near-tier `Bark`/`CedarBark` trees only, `?off=moss`): a patchy sleeve
+  ~1–4 m up the trunk (higher on the SSW "rain side"), a little on branch tops, faded toward the snowline; defines
+  `GROUND_COVER`/`gcMoss` so the bark photo fades under it. A first try at 2–6 m and brighter green painted whole trunks.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).

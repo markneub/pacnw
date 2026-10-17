@@ -183,6 +183,71 @@ export function addGroundCover(material, { moss = 1, lod = null } = {}) {
 }
 
 /**
+ * Moss on tree trunks (valley rainforest): a green sleeve over the base of
+ * the trunk with a ragged, patchy upper edge ~1-4 m up, climbing higher on the
+ * wet side, plus a little on upward-facing branch tops. Fades out toward the
+ * snowline. Chained after the material's own patches. Defines GROUND_COVER /
+ * gcMoss like addGroundCover, so the bark photo (surfacedetail.js) fades under it.
+ */
+export function addTrunkMoss(material) {
+  if (!addTrunkMoss.enabled) return material;
+  const prev = material.onBeforeCompile;
+  const prevKey = material.customProgramCacheKey;
+  material.onBeforeCompile = (shader, renderer) => {
+    prev?.call(material, shader, renderer);
+    shader.uniforms.uSnowline = shared.uSnowline;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vTmPos;
+        varying vec3 vTmNormal;
+        varying float vTmHeight;`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        {
+          mat4 tmModel = modelMatrix;
+          #ifdef USE_INSTANCING
+            tmModel = modelMatrix * instanceMatrix;
+          #endif
+          vTmPos = (tmModel * vec4(transformed, 1.0)).xyz;
+          vTmNormal = normalize(mat3(tmModel) * objectNormal);
+          vTmHeight = vTmPos.y - tmModel[3].y; // metres above the trunk's base
+        }`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#define GROUND_COVER
+        #include <common>
+        uniform float uSnowline;
+        varying vec3 vTmPos;
+        varying vec3 vTmNormal;
+        varying float vTmHeight;
+        float tmHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float tmNoise(vec2 p) {
+          vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(tmHash(i), tmHash(i + vec2(1, 0)), f.x), mix(tmHash(i + vec2(0, 1)), tmHash(i + vec2(1, 1)), f.x), f.y);
+        }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float gcSnow = 0.0;
+        float gcMoss;
+        {
+          vec3 n = normalize(vTmNormal);
+          // around the trunk (angle) and up it: patchy, so the edge is ragged
+          float around = atan(n.z, n.x);
+          vec2 q = vec2(around * 2.2, vTmHeight * 0.9) + vTmPos.xz * 0.37;
+          float patchy = tmNoise(q) * 0.65 + tmNoise(q * 3.1 + 5.0) * 0.35;
+          float wetSide = 0.5 + 0.5 * dot(n.xz, normalize(vec2(0.55, 0.83))); // south-southwest, the rain side
+          float reach = 0.6 + 2.2 * wetSide + 1.4 * patchy;
+          float sleeve = 1.0 - smoothstep(reach - 0.9, reach + 0.3, vTmHeight);
+          float tops = smoothstep(0.55, 0.9, n.y) * 0.7; // branch tops
+          float dry = smoothstep(uSnowline - 45.0, uSnowline - 15.0, vTmPos.y);
+          gcMoss = clamp(max(sleeve * smoothstep(0.35, 0.6, patchy + 0.1 * wetSide), tops * smoothstep(0.4, 0.7, patchy)), 0.0, 1.0) * (1.0 - dry) * 0.75;
+          vec3 mossCol = mix(vec3(0.03, 0.055, 0.018), vec3(0.075, 0.105, 0.03), tmNoise(vTmPos.xz * 3.0 + vTmHeight * 2.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, mossCol, gcMoss);
+        }`);
+  };
+  material.customProgramCacheKey = () => `${prevKey ? prevKey.call(material) : ''}|trunkmoss`;
+  return material;
+}
+addTrunkMoss.enabled = true; // ?off=moss
+
+/**
  * Sunlight through the canopy, for everything outdoors: the sun's direct light
  * is scaled by how open the canopy is along the line toward the sun (the baked
  * canopy map, sampled where that line crosses the crown layer ~12 m up). In a

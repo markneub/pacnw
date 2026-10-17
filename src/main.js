@@ -11,7 +11,7 @@ import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround } from './bake.js';
 import { PerfOverlay } from './perf.js';
 import { loadGroundDetail } from './grounddetail.js';
-import { patchSunlight } from './materials.js';
+import { patchSunlight, addTrunkMoss } from './materials.js';
 import { loadSurfaceDetail } from './surfacedetail.js';
 import { loadTextureSet } from './textures.js';
 import { runBench } from './bench.js';
@@ -41,10 +41,11 @@ shared.uLodRadius.value = VIEW_DIST.treeDetail;
 shared.uFernRadius.value = VIEW_DIST.ferns;
 
 // ?off=a,b,... switches parts off to find what costs the most on a device:
-// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass, sun, dapple, post, motes.
+// trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass, sun, dapple, post, motes, moss.
 // ?dpr=1 forces the render resolution scale.
 const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
 patchSunlight.enabled = !off.has('dapple'); // sunlight through the canopy
+addTrunkMoss.enabled = !off.has('moss'); // moss sleeves on trunks
 
 const postOn = !off.has('post');
 // with post-processing the scene renders into an MSAA target, so the canvas itself needs no antialiasing

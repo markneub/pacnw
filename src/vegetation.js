@@ -7,7 +7,7 @@ import {
   heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
-import { addWindSway, addGroundCover, shared } from './materials.js';
+import { addWindSway, addGroundCover, addTrunkMoss, shared } from './materials.js';
 import { bakePrototypeAO, bakeCanopy } from './bake.js';
 import { NearPool } from './detail.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
@@ -188,6 +188,8 @@ function convertMaterial(src, assetName, lod, cache) {
   else if (kind === 'ferns') addWindSway(mat, 2.5, undefined, 'fade');
   else addGroundCover(mat, { lod, moss: scan ? 0.35 : 1 }); // scans have their own moss
   if (cards) patchCards(mat);
+  // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
+  if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);
   // close-up bark / rock photos (not on far tiers: they're never close).
   // On scans the tiling lichen is only a fine grain over their own photo.
   const layer = surfaceLayerFor(src.name);
