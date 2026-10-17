@@ -63,6 +63,10 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   **Trunk moss** (`addTrunkMoss` in materials.js, near-tier `Bark`/`CedarBark` trees only, `?off=moss`): a patchy sleeve
   ~1–4 m up the trunk (higher on the SSW "rain side"), a little on branch tops, faded toward the snowline; defines
   `GROUND_COVER`/`gcMoss` so the bark photo fades under it. A first try at 2–6 m and brighter green painted whole trunks.
+  **Roots** (`roots()`, `n_roots` in `branchy_conifer`: fir 6, hemlock 5, cedar 7 along its flutes; own rng `seed + 313`; none
+  on snowy trees or saplings): thick, flattened 6-sided tubes that swell out of the trunk 0.45–0.75 × r_base above the ground
+  (model z 0.3, since trees are planted 0.3 m deep), run out to 1.8–2.8 × r_base and end bluntly underground. Bark material,
+  so the bark photo and trunk moss apply. A first try (thin, high, tapering to points) read as blades. +0.02M tris on phone.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).

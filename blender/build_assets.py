@@ -213,6 +213,54 @@ def trunk(b, mat, height, r_base, r_top, sides=7, flare=1.0, lean=(0.0, 0.0), ri
         b.face((loops[-1][i], loops[-1][j], top), mat)
 
 
+def roots(b, mat, r_base, count, seed, ground=0.3, reach=(1.8, 2.8), flutes=0):
+    """
+    Buttress roots: thick, low, rounded tubes that swell out of the trunk a
+    little above the ground, run out over it and end (bluntly) under it
+    within reach x r_base. `ground` is
+    the ground's height in model space (trees are planted 0.3 m deep).
+    Root angles follow the flutes when there are any.
+    """
+    rng = random.Random(seed)
+    sides, segs = 6, 5
+    a0 = rng.uniform(0, TAU)
+    for k in range(count):
+        a = (TAU * k / flutes) if flutes else a0 + TAU * k / count + rng.uniform(-0.35, 0.35)
+        out = Vector((math.cos(a), math.sin(a), 0.0))
+        lat = Vector((-math.sin(a), math.cos(a), 0.0))
+        L = r_base * rng.uniform(*reach)
+        r0 = r_base * rng.uniform(0.42, 0.55)
+        h0 = ground + r_base * rng.uniform(0.45, 0.75)  # where it swells out of the trunk
+        r_end = r0 * 0.55
+        wig = rng.uniform(-0.2, 0.2) * L
+        pts = []
+        for s_ in range(segs + 1):
+            t = s_ / segs
+            radial = r_base * 0.35 + (L - r_base * 0.35) * t  # starts inside the trunk
+            # falls from the trunk, runs low over the ground, then its blunt end goes under
+            z = ground + (h0 - ground) * (1.0 - t) ** 1.6 - (r_end * 1.3) * t ** 2.5
+            pts.append(out * radial + lat * (wig * t * t) + Vector((0.0, 0.0, z)))
+        loops = []
+        for s_, p in enumerate(pts):
+            t = s_ / segs
+            tan = (pts[min(segs, s_ + 1)] - pts[max(0, s_ - 1)]).normalized()
+            side = tan.cross(Vector((0, 0, 1)))
+            side = side.normalized() if side.length > 1e-4 else lat
+            up = side.cross(tan).normalized()
+            r = r0 + (r_end - r0) * t
+            loop = []
+            for i in range(sides):
+                ang = TAU * i / sides
+                # flattened: wider than tall, like a real root
+                loop.append(b.v(p + side * math.cos(ang) * r * 1.15 + up * math.sin(ang) * r * 0.85))
+            loops.append(loop)
+        for s_ in range(segs):
+            lo, hi = loops[s_], loops[s_ + 1]
+            for i in range(sides):
+                j = (i + 1) % sides
+                b.face((lo[i], lo[j], hi[j], hi[i]), mat)
+
+
 def tier(b, rng, mat, apex, z_bottom, radius, points, droop, inner=0.72, twist=0.0,
          jitter=0.15, snow_mat=None, snow_reach=0.6, offset=(0.0, 0.0)):
     """
@@ -327,7 +375,7 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
 def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
                     elev=(-0.12, 0.35), sag=(0.12, 0.28), card_droop=0.12, whorl=(4, 5, 5, 6),
                     spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35, bark=None,
-                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None, stubs=16, card_scale=1.0, moss=None):
+                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None, stubs=16, card_scale=1.0, moss=None, n_roots=0):
     """
     A conifer up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
     then whorls of branches clothed in needle-spray cards, forming a ragged
@@ -343,6 +391,7 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
                  the tree's shape matches the snow-free version)
       moss       a material: hanging moss/lichen from the dead stubs and lower
                  branches (own rng too)
+      n_roots    buttress roots at the base (own rng; none on snowy trees)
     """
     srng = random.Random(seed + 991)
     mrng = random.Random(seed + 517)
@@ -365,6 +414,8 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
     taper = 0.12
     trunk(b, bark, trunk_h, r_trunk, r_trunk * taper, flare=flare, sides=14 if flutes else 10,
           rings=8 if (nod or flutes) else 6, lean=(nod, 0.0), flutes=flutes, flute_h=height * 0.12)
+    if n_roots and not snow:
+        roots(b, bark, r_trunk * flare * 0.9, n_roots, seed + 313, flutes=flutes if flutes == n_roots else 0)
     r_at = lambda z: r_trunk * (1.0 - (1.0 - taper) * z / trunk_h)
     axis_at = lambda z: Vector((nod * (z / trunk_h) ** 2, 0.0, 0.0))  # the trunk's centre line
     for _ in range(stubs):  # dead stubs on the bare lower trunk
@@ -444,7 +495,7 @@ def branchy_fir(M, name, seed=1, snow=False):
     snow=True: frosted needles with snow clumps on the sprays."""
     return branchy_conifer(M, name, M["fir_frost_cards"] if snow else M["fir_cards"], seed, height=30.0,
                            crown_base=10.5, max_radius=3.6, r_trunk=0.62, snow=M["snow_cards"] if snow else None,
-                           moss=None if snow else M["moss_cards"])
+                           moss=None if snow else M["moss_cards"], n_roots=6)
 
 
 def branchy_hemlock(M, name, seed=2, snow=False):
@@ -453,7 +504,8 @@ def branchy_hemlock(M, name, seed=2, snow=False):
     return branchy_conifer(M, name, M["hemlock_frost_cards"] if snow else M["hemlock_cards"], seed, height=26.0,
                            crown_base=4.5, max_radius=4.2, r_trunk=0.5, elev=(-0.3, 0.3), sag=(0.3, 0.5),
                            card_droop=0.3, spacing=(0.42, 0.62), fill=(0.1, 1.15), nod=1.3, flare=1.25,
-                           snow=M["snow_cards"] if snow else None, moss=None if snow else M["moss_cards"])
+                           snow=M["snow_cards"] if snow else None, moss=None if snow else M["moss_cards"],
+                           n_roots=5)
 
 
 def branchy_cedar(M, name, seed=3):
@@ -464,7 +516,7 @@ def branchy_cedar(M, name, seed=3):
                            r_trunk=0.8, elev=(-0.35, 0.25), sag=(-0.32, -0.12), card_droop=0.25,
                            spacing=(0.4, 0.58), fill=(0.15, 0.85), nod=0.9, flare=1.7,
                            bark=M["cedar_bark"], hang=0.55, flutes=7, card_every=0.6, cross=0.35,
-                           moss=M["moss_cards"])
+                           moss=M["moss_cards"], n_roots=7)
 
 
 def branchy_sapling(M, name, seed=4, snow=False):
