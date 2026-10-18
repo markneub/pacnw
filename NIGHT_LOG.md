@@ -226,3 +226,8 @@ Each signpost's arrows now name where they lead and how far along the trail: e.g
 ahead and "Cascadia Woods Trail" behind; at the lake "Snowfield 1.5 km" and "Trailhead 350 m"; then "High basin 600 m",
 and "End of trail" at the basin. Cream letters routed into the wood, readable from both sides. Easy to change later
 (`src/signs.js`, labels in `TRAIL_STOPS`).
+
+### 27. Ferns and shrubs no longer grow out of the ground
+At the edge of their draw distance, ferns, salal and loose stones used to shrink down into the ground, so walking toward
+them they seemed to sprout up in front of you. Now they keep their full size and fade in as a fine dissolve, each at a
+slightly different distance, the same way trees switch detail levels. Cost: none measurable (same pixels).

@@ -29,16 +29,30 @@ export const shared = {
 export function patchLod(shader, mode) {
   if (!mode) return;
   if (mode === 'fade') {
-    // near-only objects (ferns): shrink into the ground over the last 15% of
-    // the radius instead of popping out
+    // near-only objects (ferns, shrubs, loose stones): dissolve at full size over the outer 30%
+    // of the radius (a screen-space dither, like the tree tiers), each instance at its own
+    // distance so they don't all go at once. They used to shrink into the ground, which read as
+    // plants growing up out of it as you walked toward them.
     shader.uniforms.uFernRadius = shared.uFernRadius;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uFernRadius;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
+      .replace('#include <common>', '#include <common>\nuniform float uFernRadius;\nvarying float vFadeKeep;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vFadeKeep = 1.0;
         #ifdef USE_INSTANCING
-          vec2 fadeD = (modelMatrix * instanceMatrix[3]).xz - cameraPosition.xz;
-          transformed *= smoothstep(uFernRadius, uFernRadius * 0.85, length(fadeD));
+        {
+          vec3 fadeP = (modelMatrix * instanceMatrix[3]).xyz;
+          vec3 fh = fract(fadeP * 0.1031);
+          fh += dot(fh, fh.yzx + 33.33);
+          float jit = fract((fh.x + fh.y) * fh.z); // per instance, 0..1
+          float r = uFernRadius * (0.86 + 0.14 * jit);
+          vFadeKeep = smoothstep(r, r - uFernRadius * 0.16, length(fadeP.xz - cameraPosition.xz));
+          if (vFadeKeep <= 0.0) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+        }
         #endif`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vFadeKeep;')
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        if (vFadeKeep < 1.0 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) >= vFadeKeep) discard;`);
     return;
   }
   // Crossfade band: across uLodRadius ± uLodBand both tiers are drawn and each

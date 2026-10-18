@@ -291,7 +291,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
     SwiftShader (the GPU is fast). Load step 'tree impostors'. Watch: `discard` on Apple GPUs, and alpha thinning in mips.
     Phone A/B (`?bench=trees&views=spawn,forest`, full clock): trees "saves" impostors 0.7 / 0.3 ms vs `farTrees=lod` 1.3 / 1.0 ms
     (spawn / forest). Full frame 4.8 / 3.7 vs 4.8 / 4.5. `discard` is not a problem; the tree cost roughly halved.
-  - Ferns: near pool only, and they shrink into the ground at `uFernRadius` ('fade' mode).
+  - Ferns (and salal, maples... everything in 'fade' mode): near pool only; they **dissolve at full size** (screen-space
+    dither, like the tree tiers) over the outer ~16% of `uFernRadius`, each instance at its own jittered distance (0.86–1.0 R).
+    They used to shrink into the ground, which the user saw as shrubs growing up out of the ground in front of them.
   - Boulders: near pool + far chunks like trees (`boulder_x` + `boulder_x_lod`). Logs, stumps and furniture: 125 m chunks only.
     Any node with a `<name>_lod` partner gets two tiers (`loadPrototypes` loads forest.glb and rocks.glb).
   - Close-up / photoreal assets belong in near pools. Their cost is bounded by the radius, not the
