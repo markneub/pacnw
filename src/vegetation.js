@@ -261,6 +261,71 @@ function addStreamRocks(placements, protos, trail) {
   }
 }
 
+/**
+ * Seat boulders and pebble clusters on the ground they actually cover. The scatter seats them
+ * by a few ground samples near the centre, but the wider scans (slabs, long blocks) and spread
+ * clusters hung off steep slopes by metres. Boulders lean 80% of the way into the slope (as
+ * rocks settle on hillsides; clusters already lie on it), then each sinks until no vertex of
+ * its base (the lowest quarter of the model) is above the rendered ground, but by at most 30%
+ * of its height (round rocks on steep ground otherwise all but vanished). No rng.
+ */
+function seatStones(placements, protos) {
+  const up = new THREE.Vector3(0, 1, 0);
+  const q = new THREE.Quaternion();
+  const tq = new THREE.Quaternion();
+  const n = new THREE.Vector3();
+  const m = new THREE.Matrix4();
+  const s = new THREE.Vector3();
+  const p = new THREE.Vector3();
+  const v = new THREE.Vector3();
+  for (const [name, list] of Object.entries(placements)) {
+    const boulder = name.startsWith('boulder');
+    if (!boulder && !name.startsWith('pebbles')) continue;
+    const parts = protos[name];
+    if (!parts) continue;
+    // the base: vertices in the lowest quarter of the model, thinned to a few dozen
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    let reach = 0;
+    for (const { geometry } of parts) {
+      const a = geometry.attributes.position;
+      for (let i = 0; i < a.count; i++) {
+        y0 = Math.min(y0, a.getY(i));
+        y1 = Math.max(y1, a.getY(i));
+        reach = Math.max(reach, Math.hypot(a.getX(i), a.getZ(i)));
+      }
+    }
+    const base = [];
+    for (const { geometry } of parts) {
+      const a = geometry.attributes.position;
+      for (let i = 0; i < a.count; i++) if (a.getY(i) < y0 + 0.25 * (y1 - y0)) base.push(new THREE.Vector3(a.getX(i), a.getY(i), a.getZ(i)));
+    }
+    const step = Math.max(1, Math.floor(base.length / (boulder ? 48 : 24)));
+    const pts = base.filter((_, i) => i % step === 0);
+    for (const it of list) {
+      if (boulder) {
+        // the slope over the rock's own footprint, leaned into 80%
+        const sp = Math.max(0.5, reach * 0.6 * it.scale);
+        const dx = (groundAt(it.x + sp, it.z) - groundAt(it.x - sp, it.z)) / (2 * sp);
+        const dz = (groundAt(it.x, it.z + sp) - groundAt(it.x, it.z - sp)) / (2 * sp);
+        n.set(-dx, 1, -dz).normalize().lerp(up, 0.2).normalize();
+        // at most 35° (on the rim's near-cliffs a full lean turned rocks into the wall)
+        if (n.y < 0.819) n.set(n.x, 0, n.z).setLength(0.574).setY(0.819);
+        it.normal = [n.x, n.y, n.z];
+      }
+      q.setFromAxisAngle(up, it.rotY);
+      if (it.normal) q.premultiply(tq.setFromUnitVectors(up, n.fromArray(it.normal)));
+      m.compose(p.set(it.x, it.y, it.z), q, s.setScalar(it.scale));
+      let gap = 0;
+      for (const b of pts) {
+        v.copy(b).applyMatrix4(m);
+        gap = Math.max(gap, v.y - groundAt(v.x, v.z));
+      }
+      if (gap > 0) it.y -= Math.min(gap + 0.02 * it.scale, 0.3 * (y1 - y0) * it.scale);
+    }
+  }
+}
+
 /** Signposts at each stop, a bench at the lake, cairns along the snowy section. */
 function placeTrailFurniture(trail, add) {
   const { points, stops } = trail;
@@ -556,7 +621,14 @@ function scatter(trail) {
       const kind = PEBBLES[Math.floor(pick * PEBBLES.length)];
       // on stony slopes the cobbles grow into scree: small talus blocks
       const talus = kind === 'pebbles_d' ? 1 + 2.5 * stony : 1;
-      add(kind, { x, y: groundAt(x, z) - 0.02 * talus, z, rotY: pick * 97.3, scale: (0.8 + r * 0.6 / Math.max(p, 0.1)) * talus, tint: rng() });
+      const scale = (0.8 + r * 0.6 / Math.max(p, 0.1)) * talus;
+      // the cluster lies on the slope (fitted over its own spread, ~0.8 m × scale): level, its
+      // downhill stones floated up to ~2 m over steep ground
+      const sp = 0.8 * scale;
+      const dhx = (groundAt(x + sp, z) - groundAt(x - sp, z)) / (2 * sp);
+      const dhz = (groundAt(x, z + sp) - groundAt(x, z - sp)) / (2 * sp);
+      const nl = Math.hypot(dhx, 1, dhz);
+      add(kind, { x, y: groundAt(x, z) - 0.02 * talus, z, rotY: pick * 97.3, scale, tint: rng(), normal: [-dhx / nl, 1 / nl, -dhz / nl] });
     }
   }
 
@@ -582,6 +654,7 @@ export function bakeTreeImpostors(renderer, protos, { lowPower }) {
 export function buildVegetation(protos, trail, { impostors = null } = {}) {
   const placements = scatter(trail);
   addStreamRocks(placements, protos, trail);
+  seatStones(placements, protos);
   const canopyAt = bakeCanopy(placements);
   const group = new THREE.Group();
   group.name = 'vegetation';
@@ -596,6 +669,7 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
   const up = new THREE.Vector3(0, 1, 0);
   const zAxis = new THREE.Vector3(0, 0, 1);
   const tiltQ = new THREE.Quaternion();
+  const normalV = new THREE.Vector3();
   const col = new THREE.Color();
   const counts = {};
 
@@ -635,6 +709,7 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
     const xz = new Float32Array(n * 2);
     list.forEach((it, i) => {
       q.setFromAxisAngle(up, it.rotY);
+      if (it.normal) q.premultiply(tiltQ.setFromUnitVectors(up, normalV.fromArray(it.normal))); // laid on the slope
       if (it.tilt) q.multiply(tiltQ.setFromAxisAngle(zAxis, it.tilt)); // pitched along local X (footbridges on a grade)
       s.setScalar(it.scale);
       p.set(it.x, it.y, it.z);
@@ -715,6 +790,7 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
       const radiusKey = kind === 'ferns' ? 'ferns' : 'treeDetail';
       const pool = new NearPool(nearParts, matrices, nearColors, xz, poolRadius(radiusKey));
       pool.radiusKey = radiusKey;
+      pool.name = name;
       for (const im of pool.meshes) {
         im.name = `${name}:${im.material.name}@near`;
         im.userData.kind = kind;

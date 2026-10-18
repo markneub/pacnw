@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildTerrain, buildWater, heightAt, terrainGrid } from './terrain.js';
+import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid } from './terrain.js';
 import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors } from './vegetation.js';
 import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
@@ -294,7 +294,7 @@ async function init() {
     }
   });
 
-  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail, veg, grass, post, worldSize: WORLD_SIZE };
+  window.__pacnw = { scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, worldSize: WORLD_SIZE };
 }
 
 let flashTimer;

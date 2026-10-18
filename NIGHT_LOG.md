@@ -197,3 +197,10 @@ The trees are mostly paid for in overlapping needle cards (fill), so nearby tree
 the GPU then skips most needle pixels hidden behind closer ones before shading them. The picture is identical. I can't
 measure the gain here (the container renders in software), so it has a bench row: `?bench=sort,trees` compares it
 with the old order ("unsorted near" should come out as a cost).
+
+### 23. Fix: floating rocks on steep slopes (found by the user)
+Pebble clusters were laid level, so on steep ground their downhill stones hung in the air (by up to 4 m on talus), and
+the wider scanned boulders (slabs, long blocks) floated by up to 9 m because they were seated by a few ground samples
+near their middle. Now clusters lie along the slope, boulders lean into it as rocks settle on a hillside, and every
+stone is sunk just until no part of its base is above the ground. A new checker (`tools/stonecheck.mjs`) measures it:
+inside the map's rim nothing floats by more than 3 cm. Nothing else moved. Cost: ~0.4 s of load.

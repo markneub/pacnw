@@ -384,6 +384,13 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (`footprint()`). The script runs in ~25 s. Scans are cached in `.cache/scans` (gitignored). Budget: phone draws
   140 → 152 at spawn (110 → 127 at the ridge), tris +2–5%. Good boulder spots: `x=371.9&z=104.5&yaw=0.79&pitch=-0.15`,
   `x=-128.8&z=8.2&yaw=-0.79&pitch=-0.2`.
+  **Seating (`seatStones`, after the scatter and creek rocks; no rng):** pebble clusters lie on the slope fitted over their
+  own spread (`normal` placement field → the instance's up; level clusters floated their downhill stones up to 4 m: the
+  user found them), boulders lean 80% into the slope over their footprint (≤ 35°: on the rim's near-cliffs a full lean
+  buried them), then each sinks until no vertex of its base (lowest quarter of the model) is above `groundAt`, by at most
+  30% of its height. The old 0.8 × scale ring left the wide scans (e–h) floating up to 9 m. **`tools/stonecheck.mjs`**
+  (preview server running) reports float and how much shows above ground per model; inside the rim: float ≤ 0.03 m,
+  shown p50 50–67%. Load +0.4 s (container).
   Boulders on steep ground scale up to ×2.2 (outcrops) and cobble clusters (`pebbles_d`) up to ×3.5 on stony slopes (talus),
   both without extra rng. 9 variants: phone draws +3–9 (spawn 150 → 153, ridge 126 → 135).
 - **Grass** (`src/grass.js`): one tuft geometry (8 curved, tapered blades of real triangles, no alpha test), drawn by
