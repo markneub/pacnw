@@ -126,3 +126,10 @@ place follow the view by themselves. Creeks glitter more widely (rougher, faster
 reaches them through the canopy, and not on white water. Fixed along the way: the lake showed rain rings in sunshine.
 Look (sun): from the east shore `?weather=sun&x=279.7&z=416.4&yaw=0.98&pitch=-0.12`.
 Cost: a few dozen shader ops on water pixels only; no draws or triangles.
+
+### 12. Puddles
+When it rains, water now pools in flat hollows of the forest floor and in low spots on the trail. Puddles fill up over
+about 40 seconds of rain, spreading out from the deepest spot, and dry slowly (a few minutes) once the sun comes out, so
+right after a shower you still see them in the sun. They mirror the canopy and sky (dark under trees, grey sky in gaps)
+and show rain rings while it's raining. The lake also no longer shows rain rings in sunshine.
+Look: `?weather=rain&x=-5&z=665&yaw=0&pitch=-0.45` (near spawn). Cost: shader work on ground pixels only.

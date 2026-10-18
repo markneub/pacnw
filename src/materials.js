@@ -9,6 +9,7 @@ export const shared = {
   uSnowline: { value: SNOWLINE },
   uWet: { value: 1 }, // 0 dry .. 1 soaked: darker, glossier surfaces
   uRain: { value: 1 }, // 0 .. 1 rain falling here (weather.js): rings on the water
+  uPuddle: { value: 1 }, // 0 dry .. 1 full: puddles fill in rain and dry slowly after (weather.js)
   uLodRadius: { value: 85 }, // m; full-detail trees inside, far LOD outside
   uLodBand: { value: 12 }, // m either side of uLodRadius over which the tiers crossfade
   uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
@@ -313,6 +314,64 @@ export const GLITTER_GLSL = /* glsl */ `
 export function patchGlitter(shader) {
   shader.uniforms.uGlTime = shared.uTime;
   shader.uniforms.uGlSun = shared.uSun;
+}
+
+/**
+ * Puddles (GLSL, for the terrain and the trail tread). The material's own
+ * shader declares `float puddle` (0..1 cover, set in its color_fragment) and
+ * `vec3 vGroundPos`; this flattens the normal there (plus rain rings while it
+ * rains) and swaps the specular for a still-water mirror of the sky, darkened
+ * by the canopy above the reflected ray (dark banks for low rays), like the creeks. Direct sunlight
+ * glints off it through the material's own roughness (set low in puddles).
+ */
+const PUDDLE_GLSL = /* glsl */ `
+  uniform float uPdTime;
+  uniform float uPdRain;
+  uniform sampler2D uPdCanopy;
+  uniform vec4 uPdCanopyRect;
+  float pdHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+  vec2 pdRing(vec2 p, float t) {
+    vec2 cell = floor(p);
+    vec2 f = fract(p) - 0.5;
+    float h = pdHash(cell);
+    float ph = fract(t * 0.9 + h * 7.0);
+    vec2 c = (vec2(pdHash(cell + 3.1), pdHash(cell + 7.7)) - 0.5) * 0.5;
+    vec2 d = f - c;
+    float r = length(d) + 1e-4;
+    float ring = exp(-pow((r - ph * 0.45) * 22.0, 2.0)) * (1.0 - ph);
+    return d / r * ring;
+  }
+`;
+export function patchPuddles(shader) {
+  shader.uniforms.uPdTime = shared.uTime;
+  shader.uniforms.uPdRain = shared.uRain;
+  shader.uniforms.uPdCanopy = shared.uCanopyMap;
+  shader.uniforms.uPdCanopyRect = shared.uCanopyRect;
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>\n${PUDDLE_GLSL}`)
+    // after every normal patch (ground detail included), before lighting
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      if (puddle > 0.0) {
+        vec2 rg = (pdRing(vGroundPos.xz * 2.2, uPdTime) + pdRing(vGroundPos.xz * 3.1 + 17.0, uPdTime * 1.13)) * 0.45 * uPdRain;
+        vec3 pdN = normalize((viewMatrix * vec4(normalize(vec3(-rg.x, 1.0, -rg.y)), 0.0)).xyz);
+        normal = normalize(mix(normal, pdN, smoothstep(0.0, 0.5, puddle)));
+      }`)
+    .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+      #ifdef USE_FOG
+      if (puddle > 0.0) {
+        vec3 pdV = normalize(vViewPosition);
+        vec3 pdR = (vec4(reflect(-pdV, normal), 0.0) * viewMatrix).xyz;
+        vec3 pdSky = fogColor * (0.85 + 0.3 * smoothstep(0.0, 0.6, pdR.y));
+        float pdCanopy = min(1.0, texture2D(uPdCanopy, (vGroundPos.xz + pdR.xz / max(pdR.y, 0.2) * 8.0 - uPdCanopyRect.xy) / uPdCanopyRect.zw).r * 2.2);
+        pdSky = mix(pdSky, vec3(0.025, 0.04, 0.03), pdCanopy * 0.85);
+        // low reflected rays see the trunks and banks around, not the sky
+        vec3 pdBank = mix(vec3(0.02, 0.03, 0.022), fogColor * 0.4, 0.3);
+        vec3 pdRefl = mix(pdBank, pdSky, smoothstep(0.0, 0.4, pdR.y));
+        float pdFres = 0.02 + 0.8 * pow(1.0 - clamp(dot(normal, pdV), 0.0, 1.0), 5.0);
+        reflectedLight.indirectSpecular = mix(reflectedLight.indirectSpecular, pdRefl * pdFres, puddle);
+        reflectedLight.indirectDiffuse *= 1.0 - 0.45 * puddle;
+      }
+      #endif`);
 }
 
 /**

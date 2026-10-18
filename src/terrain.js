@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED } from './config.js';
-import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter } from './materials.js';
+import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter, patchPuddles } from './materials.js';
 import { SUN_COLOR } from './atmosphere.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 import { buildStreams } from './streams.js';
@@ -348,6 +348,7 @@ function buildTile(tx, tz) {
   const normals = new Float32Array(n * n * 3);
   const colors = new Float32Array(n * n * 3);
   const layers = new Float32Array(n * n * 4);
+  const hollow = new Float32Array(n * n);
   const lw = [0, 0, 0, 0];
   const h = (ix, iz) => g[Math.min(GRID_N - 1, Math.max(0, iz)) * GRID_N + Math.min(GRID_N - 1, Math.max(0, ix))];
   const c = new THREE.Color();
@@ -369,6 +370,10 @@ function buildTile(tx, tz) {
       normals[k + 2] = nv.z;
       groundColor(x, y, z, 1 - nv.y, c);
       layers.set(groundLayers(x, y, z, 1 - nv.y, lw), (j * n + i) * 4);
+      // where rain pools: flat, concave forest floor or mud (not rock, snow, stream beds or the lake)
+      const lap = (h(ix - 1, iz) + h(ix + 1, iz) + h(ix, iz - 1) + h(ix, iz + 1)) / 4 - y;
+      hollow[j * n + i] = smoothstep(0.02, 0.3, lap) * (1 - smoothstep(0.004, 0.012, 1 - nv.y))
+        * (lw[0] + lw[3]) * smoothstep(WATER_LEVEL + 0.3, WATER_LEVEL + 1.2, y);
       colors[k] = c.r;
       colors[k + 1] = c.g;
       colors[k + 2] = c.b;
@@ -389,6 +394,7 @@ function buildTile(tx, tz) {
   geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.setAttribute('aLayers', new THREE.BufferAttribute(layers, 4));
+  geo.setAttribute('aHollow', new THREE.BufferAttribute(hollow, 1));
   geo.setIndex(index);
   geo.computeBoundingSphere();
   return geo;
@@ -408,13 +414,17 @@ export function buildTerrain() {
     Object.assign(shader.uniforms, cutUniforms);
     patchSunlight(shader);
     shader.uniforms.uWet = shared.uWet;
+    shader.uniforms.uPuddle = shared.uPuddle;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vGroundPos;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <common>', '#include <common>\nattribute float aHollow;\nvarying float vHollow;\nvarying vec3 vGroundPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvHollow = aHollow;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         varying vec3 vGroundPos;
+        varying float vHollow;
         uniform float uWet;
+        uniform float uPuddle;
+        float puddle;
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
         float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -431,10 +441,20 @@ export function buildTerrain() {
             && texture2D(uCutMask, cutUv).r > 0.5) discard;
         float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
         diffuseColor.rgb *= 0.78 + gn * 0.44;
-        ${wet.color}`)
+        ${wet.color}
+        // rain pools in hollows, filling from the deepest spot out as uPuddle rises
+        puddle = 0.0;
+        if (vHollow > 0.01 && uPuddle > 0.01) {
+          float pd = vHollow * (0.7 + 0.3 * gNoise(vGroundPos.xz * 0.31 + 5.3)) + (gNoise(vGroundPos.xz * 1.4) - 0.5) * 0.18;
+          float pt = 1.0 - 0.55 * uPuddle;
+          puddle = smoothstep(pt, pt + 0.04, pd);
+          diffuseColor.rgb *= mix(1.0, 0.45, puddle);
+        }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        ${wet.roughness}`);
+        ${wet.roughness}
+        roughnessFactor = mix(roughnessFactor, 0.05, puddle);`);
     patchGroundDetail(shader);
+    patchPuddles(shader);
   };
   mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
 

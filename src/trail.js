@@ -4,7 +4,7 @@ import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
   streams, setWalkModifier,
 } from './terrain.js';
-import { shared, wetChunks, patchSunlight, sunKey } from './materials.js';
+import { shared, wetChunks, patchSunlight, sunKey, patchPuddles } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 
 // The trail runs from the trailhead at the spawn point, down to a viewpoint on
@@ -558,6 +558,8 @@ function buildCorridorMesh(points, distanceTo) {
   mat.onBeforeCompile = (shader) => {
     patchSunlight(shader);
     shader.uniforms.uWet = shared.uWet;
+    shader.uniforms.uPuddle = shared.uPuddle;
+    shader.uniforms.uSnowline = shared.uSnowline;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aTread;\nvarying float vTread;\nvarying vec3 vGroundPos;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTread = aTread;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -566,6 +568,8 @@ function buildCorridorMesh(points, distanceTo) {
         varying float vTread;
         varying vec3 vGroundPos;
         uniform float uWet;
+        uniform float uPuddle;
+        uniform float uSnowline;
         float puddle;
         float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         float gNoise(vec2 p) {
@@ -581,14 +585,16 @@ function buildCorridorMesh(points, distanceTo) {
         float grit = gNoise(vGroundPos.xz * 7.0) * 0.6 + gNoise(vGroundPos.xz * 2.2) * 0.4;
         diffuseColor.rgb *= mix(1.0, 0.82 + grit * 0.36, vTread);
         ${wet.color}
-        // puddles collect in low spots of the tread when it's wet
-        puddle = smoothstep(0.6, 0.7, gNoise(vGroundPos.xz * 0.45 + 3.7) * 0.7 + gNoise(vGroundPos.xz * 1.7) * 0.3)
-          * smoothstep(0.55, 0.9, vTread) * smoothstep(0.5, 0.9, uWet);
+        // puddles collect in low spots of the tread in rain, growing as they fill (not up in the snow)
+        float pt = 0.76 - 0.16 * uPuddle;
+        puddle = smoothstep(pt, pt + 0.05, gNoise(vGroundPos.xz * 0.45 + 3.7) * 0.7 + gNoise(vGroundPos.xz * 1.7) * 0.3)
+          * smoothstep(0.55, 0.9, vTread) * smoothstep(0.03, 0.25, uPuddle) * (1.0 - smoothstep(uSnowline - 35.0, uSnowline - 15.0, vGroundPos.y));
         diffuseColor.rgb *= mix(1.0, 0.5, puddle);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         ${wet.roughness}
         roughnessFactor = mix(roughnessFactor, 0.04, puddle);`);
     patchGroundDetail(shader);
+    patchPuddles(shader);
   };
   mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
   // The faded outer fringe blends over the terrain, so it's transparent, and it must not write

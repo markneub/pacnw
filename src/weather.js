@@ -361,6 +361,12 @@ export class Weather {
     shared.uWet.value += (wetTarget - shared.uWet.value) * (this.wetStarted ? 1 - Math.exp(-dt * 0.3) : 1);
     this.wetStarted = true;
     shared.uRain.value = this.rainAmount;
+    // puddles fill over ~40 s of rain and dry over a few minutes (the first frame starts settled);
+    // it rains in the valley whenever there's no sun break, wherever the player is
+    const fill = this.override === 'clear' || this.override === 'snow' ? 0 : this.override === 'rain' ? 1 : 1 - sun;
+    const pk = fill > shared.uPuddle.value ? 1 / 40 : 1 / 200;
+    shared.uPuddle.value = this.puddleStarted ? shared.uPuddle.value + (fill - shared.uPuddle.value) * Math.min(1, dt * pk) : fill;
+    this.puddleStarted = true;
 
     shared.uWind.value = 0.7 + this.snowAmount * 0.8 + Math.sin(time * 0.13) * 0.3;
 
