@@ -256,24 +256,27 @@ const tmpColor = new THREE.Color();
  */
 function snowCover(x, z, y, slope) {
   const patch = nDetail(x * 0.035, z * 0.035) * 0.15;
-  return smoothstep(0.3, 0.65, snowAmount(x, z, y, slope) + patch);
+  // snow can't hold on steep rock: faces past ~50° shed it and show dark ribs, with snow left in
+  // the gullies (finer noise). Visual only: snowAmount (trees, weather) is unchanged.
+  const ribs = nDetail(x * 0.09 + 17, z * 0.09 - 5) * 0.12 + patch * 0.5;
+  return smoothstep(0.3, 0.65, snowAmount(x, z, y, slope) + patch) * (1 - smoothstep(0.4, 0.56, slope + ribs));
+}
+
+/** The open water's level at (x, z): the lake's, or a pond's where one lies (compare with the ground). */
+export function waterLevelAt(x, z) {
+  return Math.max(WATER_LEVEL, streams().pondLevel(x, z));
+}
+
+/** 0..1: the stream bed and its wet, stony margin (1 in the channel, fading over the lower bank). */
+export function streamBed(x, z) {
+  const c = streams().nearest(x, z);
+  return c.seg ? 1 - smoothstep(c.half + 0.5, c.half + 3.5, c.d) : 0;
 }
 
 /**
  * How much of each ground surface a point is, for close-up detail textures:
  * [forest floor, rock, snow, mud/dirt], summing to 1. Mirrors groundColor().
  */
-/** 0..1: the stream bed and its wet, stony margin (1 in the channel, fading over the lower bank). */
-/** The open water's level at (x, z): the lake's, or a pond's where one lies (compare with the ground). */
-export function waterLevelAt(x, z) {
-  return Math.max(WATER_LEVEL, streams().pondLevel(x, z));
-}
-
-export function streamBed(x, z) {
-  const c = streams().nearest(x, z);
-  return c.seg ? 1 - smoothstep(c.half + 0.5, c.half + 3.5, c.d) : 0;
-}
-
 export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
   const bed = streamBed(x, z);
   const snow = snowCover(x, z, y, slope) * (1 - bed); // running water keeps its bed clear of snow
