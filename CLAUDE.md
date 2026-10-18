@@ -128,6 +128,20 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   6.4 m, scaled to the span, moss 0.2) spans bank to bank, **tilted to the grade** (`tilt` placement field → rotation about
   local Z). `walkAt()` (terrain.js, `setWalkModifier`) puts the player on the deck; player.js uses it. Phone spawn draws
   155 → 173.
+- **Rocks in the creeks** (`streams.js` `rocks`, `streamwater.js` `streamRocks(trail)`, `vegetation.js` `addStreamRocks`):
+  ~420 along the beds, chosen by `hashU(stream, point)` (no scatter rng): chance 0.14 + 5 × bed fall (≤ 0.59), radius
+  0.3–1.15 m (≤ 0.55 × half-width, bigger on steep runs), anywhere across the bed, none within 3.5 m + r of the trail
+  (footbridges). Placed as scanned boulders (not the flat slab g) scaled so their mean half-width = r, seated on the lowest
+  bed under them. The water reads the same list from an RGBA32F texture (a column per 4 m of stream, 2 rows per stream:
+  across, along, r) via `aInfo` (half width, stream index); each fragment loads the ≤6 rocks of its own and the
+  neighbouring 4 m (`swLoadRocks`). Per rock: the flow parts around it (potential-flow sideways shift of the ripple
+  coordinates), a pillow heaped on the upstream face, a trough in the lee and standing waves downstream (`swRockH`, normals
+  by finite differences), a thin broken collar of white water (at ~0.8 R: stones are narrower at the waterline; strongest
+  upstream), and a narrow wake of bubble streaks with a V of thin arms, longer on fast water (`swRockFlow`). Ripples are now
+  in metres (wavelets ~0.1–0.5 m) and steep-run foam is thin streaks. Gotcha: a wake as wide as the stream and ~6 m long
+  turned whole reaches into flat white blotches (found by zeroing the light terms: it was diffuse, i.e. foam). The
+  overcast key light no longer gives water direct specular (× 0.5 uSun). Phone spawn draws 173 → 153 (the pit fill/pond moved
+  things), tris 0.90 → 0.94M. Views: `x=459.5&z=-4.3&yaw=-0.77&pitch=-0.35`, `x=463&z=-12.7&yaw=3.13&pitch=-0.4`.
 - **Sun glitter** (`GLITTER_GLSL` + `patchGlitter` in materials.js, used by the lake and stream shaders): world-anchored
   cells (6 cm, doubling with distance in blended power-of-two LODs, `0.004·dist`), each holding one round facet point at a
   random spot that re-rolls 3–7×/s (staggered, fading in/out). A facet flashes with probability exp(−tan²θh/σ²) × 0.3,

@@ -232,6 +232,38 @@ export function buildStreams(height, { size, waterLevel, lake }) {
     streams.push({ points: pts });
   }
 
+  // Rocks in the beds: more on steep runs, fewer on slow reaches. A hash of the stream and point
+  // picks them (no random stream shared with the scatter, so nothing else moves). Each has its
+  // place in the ribbon's frame too: s = metres along the stream, a = metres across (+ = the
+  // ribbon's +u side), which the water shader uses for the flow around it.
+  const rocks = [];
+  streams.forEach((st, si) => {
+    const pts = st.points;
+    let along = 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (i > 0) along += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+      pts[i].s = along;
+    }
+    for (let i = 3; i < pts.length - 3; i++) {
+      const p = pts[i];
+      const fall = Math.max(0, (pts[i - 1].bed - pts[i + 1].bed) / (2 * SAMPLE));
+      const rnd = (k) => hashU(si * 7919 + i, k);
+      if (rnd(0) > 0.14 + Math.min(0.45, fall * 5)) continue;
+      const half = p.width / 2;
+      const r = Math.min(half * 0.55, 0.3 + 0.6 * rnd(1) * rnd(2) + 0.25 * Math.min(1, fall * 8));
+      const a = (rnd(3) * 2 - 1) * Math.max(0, half - r * 0.6);
+      const ds = (rnd(4) - 0.5) * SAMPLE * 0.8;
+      const dx = pts[i + 1].x - pts[i - 1].x;
+      const dz = pts[i + 1].z - pts[i - 1].z;
+      const l = Math.hypot(dx, dz) || 1;
+      rocks.push({
+        x: p.x + (dx / l) * ds - (dz / l) * a,
+        z: p.z + (dz / l) * ds + (dx / l) * a,
+        r, stream: si, s: p.s + ds, a, pick: rnd(5), rotY: rnd(6) * Math.PI * 2,
+      });
+    }
+  });
+
   // spatial hash of segments
   const hash = new Map();
   const key = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
@@ -305,12 +337,20 @@ export function buildStreams(height, { size, waterLevel, lake }) {
     return nearest(x, z).d;
   }
 
-  return { streams, ponds, carve, distance, nearest, pondLevel, fillAt };
+  return { streams, ponds, rocks, carve, distance, nearest, pondLevel, fillAt };
 }
 
 const BANK = 7; // m from the bed's edge to natural ground (more where the channel runs deep)
 const SINK_AREA = 8e4; // m²: a closed basin bigger than this ends a stream (in a pond) instead of being filled
 const POND_DEPTH = 1.5; // m of water over the basin's low spot
+
+/** A hash of two integers to [0, 1). */
+function hashU(a, b) {
+  let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35);
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
 
 function chaikin(pts) {
   const out = [pts[0]];

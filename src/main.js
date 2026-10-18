@@ -119,13 +119,13 @@ async function init() {
   }
   scene.add(terrain);
   scene.add(buildWater());
-  if (!off.has('water')) scene.add(buildStreamWater());
   step('terrain');
 
   progress(0.22, 700);
   await nextFrame();
   const trail = buildTrail();
   scene.add(trail.mesh);
+  if (!off.has('water')) scene.add(buildStreamWater(trail)); // (the rocks in it skip the footbridges)
   step('trail');
 
   progress(0.5, 2200); // models + impostor bake + scatter

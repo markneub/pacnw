@@ -12,6 +12,7 @@ import { bakePrototypeAO, bakeCanopy } from './bake.js';
 import { NearPool } from './detail.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
 import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.js';
+import { streamRocks } from './streamwater.js';
 
 const KIND = (name) => (/^(fern|salal|pebbles)/.test(name) ? 'ferns'
   : /^(boulder|log|stump|signpost|cairn|bench|footbridge)/.test(name) ? 'rocks' : 'trees');
@@ -235,6 +236,30 @@ export function applyRockTextures(layers) {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Rocks in the creeks (streamwater.js streamRocks: the water flows around the same list). Each is
+ * a scanned boulder scaled so its half-width is the rock's radius, seated on the lowest bed under
+ * it so it stands out of the water. Chunky variants only (the flat slab g would drown).
+ */
+function addStreamRocks(placements, protos, trail) {
+  const kinds = BOULDERS.filter((b) => b !== 'boulder_g' && protos[b]);
+  const half = Object.fromEntries(kinds.map((b) => {
+    const box = new THREE.Box3();
+    for (const { geometry } of protos[b]) {
+      geometry.computeBoundingBox();
+      box.union(geometry.boundingBox);
+    }
+    return [b, 0.25 * (box.max.x - box.min.x + box.max.z - box.min.z)];
+  }));
+  for (const r of streamRocks(trail)) {
+    const name = kinds[Math.floor(r.pick * kinds.length)];
+    const scale = r.r / half[name];
+    let y = groundAt(r.x, r.z);
+    for (let k = 0; k < 6; k++) y = Math.min(y, groundAt(r.x + Math.cos(k * 1.047) * r.r * 0.7, r.z + Math.sin(k * 1.047) * r.r * 0.7));
+    (placements[name] ||= []).push({ x: r.x, y, z: r.z, rotY: r.rotY, scale, tint: r.pick });
+  }
+}
 
 /** Signposts at each stop, a bench at the lake, cairns along the snowy section. */
 function placeTrailFurniture(trail, add) {
@@ -556,6 +581,7 @@ export function bakeTreeImpostors(renderer, protos, { lowPower }) {
  */
 export function buildVegetation(protos, trail, { impostors = null } = {}) {
   const placements = scatter(trail);
+  addStreamRocks(placements, protos, trail);
   const canopyAt = bakeCanopy(placements);
   const group = new THREE.Group();
   group.name = 'vegetation';

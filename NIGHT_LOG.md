@@ -158,3 +158,16 @@ container, ~8 MB of GPU memory; per-frame cost unchanged (same samples).
 Walking now moves your head the way a walk does: a small dip with each footstep (about 2 steps a second), a slight sway
 from side to side with each stride and a tiny roll, a bit stronger when running, settling smoothly when you stop. The old
 bob was a slow, larger up-and-down wave. No option for it, as agreed. (Not visible in still renders: walk around to judge.)
+
+---
+
+# Third session
+
+### 17. Rocks in the creeks
+About 420 rocks now sit in the creek beds, more on the steep runs. The water reacts to each: the current parts around it
+and closes behind, heaps up against the upstream face, dips just behind it, and trails a narrow wake of white bubble
+streaks with a faint V spreading downstream (longer on fast water), with a thin, broken line of white water where the
+current hits the stone. Along the way the creek's ripples became finer (they were metre-sized), steep-run white water
+became thin streaks instead of flat patches, and overcast light no longer puts hard glints on the water.
+Look: `?x=459.5&z=-4.3&yaw=-0.77&pitch=-0.35`, `?x=463&z=-12.7&yaw=3.13&pitch=-0.4`, in sun `?weather=sun&x=233.4&z=-277.5&yaw=2.88&pitch=-0.4`.
+Cost: rocks are instanced boulders (no new draws); the water shader does more work, on creek pixels only.
