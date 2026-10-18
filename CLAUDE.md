@@ -197,6 +197,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   **`tools/holecheck.mjs`** (magenta sky, fog off, looks down along the whole trail and over a 60 m map grid; `trail` for the
   trail only, ~5 min in SwiftShader; exits 1 and lists views) must report no holes after any change to the trail, terrain
   cutout or ground meshes. `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
+- Trail in snow: no flat fill colour (a grey-blue `packed` stripe read as paint). The tread there is the snow's own colour
+  lerped 0.4 + 0.45 × groove (1 − (d/width)², deepest mid-tread) toward `packed`, with an edge 0.3 + 0.5·snow m soft, and
+  `aTread` × (1 − 0.7·snow) so the tread's dark grit stays off trodden snow.
 - Trail QA numbers (cross-slope on tread p50 ≈0, p95 ≈13%; grade p95 ≈26%) come from measuring
   `groundAt` across/along `trail.points` in node. Re-check them after changing the route or widths.
 - `src/touch.js`: one-thumb scheme. The first finger is the steer: its horizontal movement turns (swipe-style, ~130° per

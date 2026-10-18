@@ -480,6 +480,7 @@ function buildCorridorMesh(points, distanceTo) {
   const soil = new THREE.Color(0x5a4430);
   const col = new THREE.Color();
   const tmp = new THREE.Color();
+  const tmpSnow = new THREE.Color();
   const e = 1;
 
   for (let i = 0; i < points.length; i++) {
@@ -513,8 +514,14 @@ function buildCorridorMesh(points, distanceTo) {
       col.lerp(tmp, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - snow * 0.85));
 
       const wobble = Math.sin(x * 0.31 + z * 0.17) * 0.18 + Math.sin(x * 0.07 - z * 0.11) * 0.2;
-      const t = 1 - THREE.MathUtils.smoothstep(d + wobble, TRAIL_WIDTH - 0.3, TRAIL_WIDTH + 0.25);
-      tmp.copy(dirt).lerp(dirtWet, Math.min(1, d / TRAIL_WIDTH) * 0.6).lerp(packed, snow);
+      // (in snow a softer edge and a boot-packed groove down the middle, over the snow's own colour:
+      // a flat grey-blue fill read as a painted stripe)
+      const edge = 0.3 + 0.5 * snow;
+      const t = 1 - THREE.MathUtils.smoothstep(d + wobble, TRAIL_WIDTH - edge, TRAIL_WIDTH + edge);
+      const groove = 1 - Math.min(1, d / TRAIL_WIDTH) ** 2;
+      tmp.copy(dirt).lerp(dirtWet, Math.min(1, d / TRAIL_WIDTH) * 0.6);
+      tmpSnow.copy(col).lerp(packed, 0.4 + 0.45 * groove);
+      tmp.lerp(tmpSnow, snow);
       col.lerp(tmp, t);
 
       // detail layers: exposed soil on the banks and the tread itself read as dirt
@@ -524,7 +531,7 @@ function buildCorridorMesh(points, distanceTo) {
       // fade the strip's outer edge into the terrain beneath
       const alpha = 1 - THREE.MathUtils.smoothstep(Math.abs(u), CUTOUT_HALF + 0.3, CORRIDOR_HALF);
       colors.push(col.r, col.g, col.b, alpha);
-      treadAttr.push(t);
+      treadAttr.push(t * (1 - 0.7 * snow)); // (less dark grit on trodden snow)
     }
     if (i > 0) {
       const r0 = (i - 1) * (across + 1);

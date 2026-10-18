@@ -181,3 +181,7 @@ crisp against the blue instead of fading to white ghosts. Look: `?weather=sun&x=
 In the snow, tree trunks used to end in a hard line where they met the ground. They now rise out of a ragged drift of
 snow banked against them, deeper on some sides than others and lit like the snow around it. Look:
 `?weather=sun&x=90&z=-500&yaw=0.9&pitch=-0.1`. No cost.
+
+### 20. The trail through snow
+The trail across the snowfields was a flat grey-blue stripe that looked painted on. It's now trodden snow: a soft-edged,
+slightly greyer groove, most worn down the middle, still easy to follow. Look: `?weather=sun&x=70&z=-900&yaw=0.1`.
