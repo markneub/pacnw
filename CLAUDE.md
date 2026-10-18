@@ -232,7 +232,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `coastProfile` by s = coastZ − z (inland): sea floor (2.6% for 60 m, then steeper, to −28 m), foreshore 4.2%, a flatter
   berm to ~2 m (the beach widens/narrows ±22% along x), a foredune face rising ~12 m over ~60 m, hummocky back dunes,
   blended into the inland hills over s 170–340. The rim is now only east/west/north (`edge = max(|x|, −z)`); at the coast it
-  runs out into the sea as headlands (rimH × smoothstep(−260, 60, s)). `sandAt` (open sand to ~150 m inland, ragged) drives
+  runs out into the sea as headlands (rimH × smoothstep(−260, 60, s)). `sandAt` (open sand to ~190 m inland, ragged) drives
   the ground colour (pale `sand`, `sandDamp` below ~1.3 m), the detail layer (slot 2, see Ground detail), no
   trees/ferns/salal/maples/logs/pebbles on sand (a rare boulder), the trail tread (churned sand, no grit), dune grass and
   `shared.uSandMap` (R8 on the terrain grid; `unpackAlignment` 1 for its 561-byte rows): `addGroundCover` swaps moss and
@@ -240,7 +240,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   the shore; `openWaterLevel` is the water you'd stand in where water is drawn (lake ellipse, ponds, the sea to the dune
   toe). **Deep water stops you** (player.js): you can't move to where it's > 1.1 m deep (slides along the edge; the camera
   stays above the surf). **Dune grass**: the grass map's density on sand (dunes above 3–7 m, patches, not steep faces),
-  `MARRAM` grey-green to straw, ×2.5 tall (`uGrassSand` in the vertex shader). **Driftwood** (`addDriftwood`, hash, no rng):
+  `MARRAM` grey-green to straw, ×2.5 tall (`uGrassSand` in the vertex shader), in **separate tussocks** with bare sand
+  between (the 5 m map can't hold them: a 1.5 m value noise thins tufts by the sand amount; density × 0.75 so the distant
+  grass tint doesn't paint the dunes green). **Shore pines** (the user's second dune photo: grass tussocks, bushy pines,
+  hummocks): Blender `shore_pine` (`branchy_conifer` with the new `roll` option: sprays twisted up to ±1.3 rad read
+  bushy instead of flat tiers; 7.5 m, foliage from 0.3 m, broad rounded crown pushed over by `nod`, `PineCards` = the fir
+  spray tinted dark yellow-green (0.4, 0.47, 0.32)) + `shore_pine_lod`; a trees kind, so it gets impostors. Scattered on
+  the dunes (sand > 0.3, ground > 5 m: p = 0.16 × sand, scale 0.45–1.15) and the main tree type within 380 m of the
+  shore (with fir, hemlock, saplings: the wind-pruned coastal forest). Sand reaches ~190 m inland (±35); back-dune
+  hummocks are stronger. Sand `0xcfc0a0`, detail strength 1.0 (it read flat white in sun). **Driftwood** (`addDriftwood`, hash, no rng):
   `log_leaning` lying along the drift line (s 40–76), mostly along the shore, some piles, scale 0.4–0.9 (8–18 m), a third sunk,
   skipped where the sand rises into it or falls away, on rock or near the trail (~130). Trail stops now trailhead → **Ocean
   beach** (−60, 942) → along the berm → **Dune trail** (300, 948) → marsh → lake → snowfield → basin (3.95 km); on sand the

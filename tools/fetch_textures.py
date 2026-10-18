@@ -33,7 +33,7 @@ SETS = {
         ("rock", "aerial_rocks_02", 6.0, 0.9),    # broken grey rock with moss in the cracks
         ("snow", "snow_02", 3.0, 0.45),           # clean snow; its dark specks need toning down
         ("dirt", "brown_mud_02", 2.0, 0.9),       # wet trail mud
-        ("sand", "aerial_sand", 5.0, 0.8),        # trampled beach sand; shares snow's slot (grounddetail.js)
+        ("sand", "aerial_sand", 5.0, 1.0),        # trampled beach sand; shares snow's slot (grounddetail.js)
     ],
     "surface": [
         ("bark", "bark_brown_02", 1.6, 1.0),          # fir/hemlock, logs, stumps: furrows, moss

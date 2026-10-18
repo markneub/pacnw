@@ -351,3 +351,9 @@ out, and roll in as lines of whitewater; each one runs up the sand as a thin she
 the sand glossy for a few seconds. Bigger waves come in sets. Driftwood lies along the top of the beach. The trail now
 goes from the trailhead down through the dunes to the beach, along the sand and back up a dune, then on to the marsh.
 You can wade into any water until it's about chest deep, but no further, so the sea is the natural edge of the map.
+
+### 47. Back dunes like the photo
+Behind the beach the dunes now look more like the user's photo: beach grass grows in separate tussocks with bare sand
+between, the ground is lumpier, and short, bushy shore pines with dark rounded crowns are scattered over the sand. They
+thicken into a low coastal forest of pines, hemlock and fir before the tall forest starts. The sand is a warmer beige
+and shows its footprint texture more.

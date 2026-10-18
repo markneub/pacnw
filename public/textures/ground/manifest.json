@@ -53,7 +53,7 @@
       "name": "sand",
       "asset": "aerial_sand",
       "tile": 5.0,
-      "strength": 0.8,
+      "strength": 1.0,
       "avg": [
         0.34694,
         0.25811,

@@ -182,15 +182,16 @@ function coastProfile(x, z, s) {
   let h = Math.min(s, 32) * 0.042 + Math.max(0, Math.min(s, 62) - 32) * 0.02;
   const dn = nDetail(x * 0.012 + 31, z * 0.012 - 9);
   h += smoothstep(60 + dn * 12, 125 + dn * 15, s) * (11 + dn * 3);
-  h += smoothstep(70, 140, s) * (nDetail(x * 0.035, z * 0.035) * 1.8 + nDetail(x * 0.09 + 5, z * 0.09) * 0.5);
+  // hummocks and blowouts in the back dunes
+  h += smoothstep(70, 140, s) * (nDetail(x * 0.035, z * 0.035) * 2.6 + nDetail(x * 0.09 + 5, z * 0.09) * 0.9 + nDetail(x * 0.2 - 3, z * 0.2) * 0.25);
   return h;
 }
 
-/** 0..1 open sand: the beach and the dunes, giving way to the forest ~150 m inland (ragged). */
+/** 0..1 open sand: the beach and the dunes, giving way to the forest ~190 m inland (ragged). */
 export function sandAt(x, z) {
   const s = coastZ(x) - z;
-  if (s > 240) return 0;
-  const edge = 150 + nDetail(x * 0.02 + 3, z * 0.02) * 25 + nDetail(x * 0.07, z * 0.07) * 8;
+  if (s > 300) return 0;
+  const edge = 190 + nDetail(x * 0.02 + 3, z * 0.02) * 35 + nDetail(x * 0.07, z * 0.07) * 8;
   return 1 - smoothstep(edge - 15, edge + 15, s);
 }
 
@@ -332,9 +333,9 @@ const COL = {
   snow: C(0xeef2f6),
   snowShade: C(0xc9d4e0),
   alpine: C(0x6d7055),
-  sand: C(0xd6cbb2), // pale dune sand, like the Oregon coast
+  sand: C(0xcfc0a0), // pale, warm dune sand, like the Oregon coast
   sandDamp: C(0x9b8f78), // below the reach of the waves
-  sandShade: C(0xc2b596),
+  sandShade: C(0xbcab88),
 };
 
 const tmpColor = new THREE.Color();

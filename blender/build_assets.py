@@ -185,6 +185,7 @@ def mats():
         "cedar_cards": card_material("CedarCards", os.path.join(ROOT, "public", "textures", "foliage", "cedar_spray.png")),
         # snowy variants: the same sprays tinted frostier in the game, plus snow clumps
         "fir_frost_cards": card_material("FirFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
+        "pine_cards": card_material("PineCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),  # tinted yellower in the game
         "hemlock_frost_cards": card_material("HemlockFrostCards", os.path.join(ROOT, "public", "textures", "foliage", "hemlock_spray.png")),
         "moss_cards": card_material("MossCards", os.path.join(ROOT, "public", "textures", "foliage", "moss_strands.png")),
         "maple_cards": card_material("MapleCards", os.path.join(ROOT, "public", "textures", "foliage", "maple_spray.png")),
@@ -464,7 +465,8 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
 def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
                     elev=(-0.12, 0.35), sag=(0.12, 0.28), card_droop=0.12, whorl=(4, 5, 5, 6),
                     spacing=(0.38, 0.6), fill=(0.2, 0.9), nod=0.0, flare=1.35, bark=None,
-                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None, stubs=16, card_scale=1.0, moss=None, n_roots=0):
+                    hang=0.0, flutes=0, card_every=0.6, cross=0.7, snow=None, stubs=16, card_scale=1.0, moss=None, n_roots=0,
+                    roll=0.6):
     """
     A conifer up close: a tall trunk, bare (a few dead stubs) up to `crown_base`,
     then whorls of branches clothed in needle-spray cards, forming a ragged
@@ -481,9 +483,11 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
       moss       a material: hanging moss/lichen from the dead stubs and lower
                  branches (own rng too)
       n_roots    buttress roots at the base (own rng; none on snowy trees)
+      roll       how far sprays twist about their branch (rad): more reads bushier
     """
     srng = random.Random(seed + 991)
     mrng = random.Random(seed + 517)
+    roll_max = roll
 
     def hang_moss(top, along):
         """A clump of hanging moss (two crossed vertical cards) from `top`."""
@@ -552,7 +556,7 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
                 s = 0.22 + 0.78 * (k + 0.5) / n_cards
                 c = at(s)
                 fwd = (at(min(1.0, s + 0.05)) - at(max(0.0, s - 0.05))).normalized()
-                roll = rng.uniform(-0.6, 0.6)
+                roll = rng.uniform(-roll_max, roll_max)
                 if hang and rng.random() < hang:  # hang the spray from the branch, like a curtain
                     roll = rng.choice((-1, 1)) * rng.uniform(1.15, 1.45)
                 side = side0 * math.cos(roll) + fwd.cross(side0).normalized() * math.sin(roll)
@@ -617,6 +621,15 @@ def branchy_sapling(M, name, seed=4, snow=False):
                            card_droop=0.06, whorl=(4, 5, 5), spacing=(0.3, 0.42), fill=(0.08, 1.0), flare=1.1,
                            stubs=0, card_scale=0.72, card_every=0.4, cross=0.75,
                            snow=M["snow_cards"] if snow else None)
+
+
+def shore_pine(M, name, seed=7):
+    """Shore pine (Pinus contorta) on the dunes: short and bushy, branches from near the ground
+    angled upward, a broad rounded crown that the sea wind has pushed over to one side."""
+    return branchy_conifer(M, name, M["pine_cards"], seed, height=7.5, crown_base=0.3, max_radius=2.9,
+                           r_trunk=0.2, elev=(0.2, 0.4), sag=(-0.15, 0.05), card_droop=0.0, whorl=(4, 5, 5, 6),
+                           spacing=(0.24, 0.38), fill=(0.4, 0.5), nod=0.9, flare=1.15, stubs=0,
+                           card_scale=1.0, card_every=0.32, cross=0.9, roll=1.3)
 
 
 def douglas_fir(M, name, snow, seed=1, lod=False):
@@ -1343,6 +1356,7 @@ def main():
     branchy_cedar(M, "cedar")
     branchy_sapling(M, "sapling")
     branchy_sapling(M, "sapling_snow", snow=True)
+    shore_pine(M, "shore_pine")
     snag(M, "snag")
     vine_maple(M, "vine_maple")
 
@@ -1366,6 +1380,10 @@ def main():
             foliage=[M["cedar"], M["needles"]], trunk_mat=M["cedar_bark"], droop=0.9, r_trunk=0.8,
             flare=1.7, shape_pow=0.8, top_radius=0.5, leader_lean=0.9, lod=True)
     sapling(M, "sapling_lod", snow=False, lod=True)
+    # matches the shore pine (only for ?farTrees=lod; impostors bake the near model)
+    conifer("shore_pine_lod", M, 7, height=7.5, crown_base=0.9, max_radius=2.5, tiers=5, points=6,
+            foliage=[M["needles"], M["needles_dark"]], trunk_mat=M["bark"], droop=0.1, r_trunk=0.2,
+            flare=1.15, shape_pow=0.6, top_radius=0.8, leader_lean=0.9, lod=True)
     sapling(M, "sapling_snow_lod", snow=True, lod=True)
     snag_lod(M, "snag_lod")
     vine_maple(M, "vine_maple_lod", leafy=0.45)  # only for ?farTrees=lod (impostors bake the near model)

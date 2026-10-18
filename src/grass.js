@@ -148,7 +148,7 @@ function bakeGrassMap(terrain, canopyAt) {
       // the dunes: tussocks of beach grass, thick on the crests and back dunes, none on the beach
       const sand = sandAt(x, z);
       const dune = sand * smooth(y, SEA_LEVEL + 3, SEA_LEVEL + 7) * (1 - smooth(slope, 0.15, 0.4));
-      if (sand > 0.02) density = density * (1 - sand) + dune * smooth(nForest(x * 0.06 + 13, z * 0.06 - 4) * 0.5 + 0.5, 0.3, 0.62);
+      if (sand > 0.02) density = density * (1 - sand) + 0.75 * dune * smooth(nForest(x * 0.06 + 13, z * 0.06 - 4) * 0.5 + 0.5, 0.3, 0.62);
 
       groundColor(x, y, z, slope, col);
       const shade = Math.min(1.2, lum(shaded[k * 3], shaded[k * 3 + 1], shaded[k * 3 + 2]) / Math.max(1e-4, lum(col.r, col.g, col.b)));
@@ -407,7 +407,18 @@ function grassMaterial(baked, ring) {
         }
         float gHeight = mix(0.7, 1.35, gR3) * mix(0.55, 1.0, gMap.a); // sparse grass is shorter
         gHeight *= 1.0 + 2.2 * gMarsh; // marsh sedge: knee high
-        gHeight *= 1.0 + 1.5 * texture2D(uGrassSand, ((gXZ - uGrassGrid.xy) / uGrassGrid.z + 0.5) / uGrassGrid.w).r; // beach grass on the dunes
+        // beach grass on the dunes: tall, and in separate tussocks with bare sand between (a 5 m
+        // map can't hold that, so a ~1.5 m noise thins it here)
+        float gSand = texture2D(uGrassSand, ((gXZ - uGrassGrid.xy) / uGrassGrid.z + 0.5) / uGrassGrid.w).r;
+        gHeight *= 1.0 + 1.5 * gSand;
+        if (gSand > 0.02) {
+          vec2 tp = gXZ * 0.65;
+          vec2 ti = floor(tp);
+          vec2 tf = tp - ti;
+          tf = tf * tf * (3.0 - 2.0 * tf);
+          float tus = mix(mix(gHash(ti), gHash(ti + vec2(1.0, 0.0)), tf.x), mix(gHash(ti + vec2(0.0, 1.0)), gHash(ti + vec2(1.0, 1.0)), tf.x), tf.y);
+          gScale *= mix(1.0, smoothstep(0.5, 0.62, tus), gSand);
+        }
         float gA = gR2 * 6.2831853;
         mat2 gRot = mat2(cos(gA), -sin(gA), sin(gA), cos(gA));
         objectNormal.xz = gRot * objectNormal.xz;

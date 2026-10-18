@@ -61,7 +61,7 @@ const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
 // Trunk radius (m, at scale 1) used for walking collisions.
 const COLLIDE = {
   fir: 0.75, fir_snow: 0.75, hemlock: 0.6, hemlock_snow: 0.6, cedar: 1.1,
-  sapling: 0.25, sapling_snow: 0.25, snag: 0.65, vine_maple: 0.3,
+  sapling: 0.25, sapling_snow: 0.25, snag: 0.65, vine_maple: 0.3, shore_pine: 0.3,
   stump: 1.0, // boulders: from their footprint (buildVegetation)
   signpost: 0.25, cairn: 0.6, bench: 0.9,
 };
@@ -169,6 +169,7 @@ const CARD_TINT = {
   MossCards: [0.55, 0.58, 0.5],
   SalalCards: [0.72, 0.76, 0.68],
   MapleCards: [0.62, 0.7, 0.5],
+  PineCards: [0.4, 0.47, 0.32], // shore pine: dark, a little yellower than the firs
 };
 
 // Scanned-rock materials waiting for their textures (applyRockTextures).
@@ -365,7 +366,7 @@ const leanerR = (t) => LEANER.r0 * (1 - 0.62 * t);
 function addLeaners(placements, trail) {
   // every trunk, on an 8 m grid, to keep leaners from passing through other trees
   const grid = new Map();
-  for (const name of ['fir', 'hemlock', 'cedar', 'snag', 'sapling']) {
+  for (const name of ['fir', 'hemlock', 'cedar', 'snag', 'sapling', 'shore_pine']) {
     for (const p of placements[name] ?? []) {
       const k = cellKey(Math.floor(p.x / 8), Math.floor(p.z / 8));
       if (!grid.has(k)) grid.set(k, []);
@@ -589,12 +590,19 @@ async function scatter(trail) {
       const z = gz + rng() * cell;
       const h = heightAt(x, z);
       if (h < waterLevelAt(x, z) + 1.5) continue;
-      if (sandAt(x, z) > 0.3) continue; // open sand: the beach and dunes
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.3) continue;
       if (offStream(x, z) < 2.5) continue; // trees stand back from the water
       const slope = slopeAt(x, z);
       if (slope > 0.45) continue;
+      // open sand: no forest, but on the dunes (not the beach) the odd bushy shore pine
+      const sand = sandAt(x, z);
+      if (sand > 0.3) {
+        if (h > SEA_LEVEL + 5 && rng() < 0.16 * sand) {
+          add('shore_pine', { x, y: groundAt(x, z) - 0.15, z, rotY: rng() * Math.PI * 2, scale: 0.45 + rng() * 0.7, tint: rng() });
+        }
+        continue;
+      }
 
       // big soft patches of forest with clearings between
       const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
@@ -607,6 +615,7 @@ async function scatter(trail) {
       const alt = THREE.MathUtils.clamp(h / TREELINE, 0, 1);
       let table;
       if (snow) table = [['fir_snow', 5], ['hemlock_snow', 3], ['sapling_snow', 3]];
+      else if (coastZ(x) - z < 380) table = [['shore_pine', 4], ['fir', 2], ['hemlock', 2.5], ['sapling', 1.2]]; // the wind-pruned coastal forest behind the dunes
       else if (h < 45) table = [['fir', 4], ['hemlock', 3], ['cedar', 3], ['sapling', 1], ['snag', 0.35]];
       else table = [['fir', 5], ['hemlock', 4], ['sapling', 1.5], ['snag', 0.4]];
       const name = pickWeighted(rng, table);
