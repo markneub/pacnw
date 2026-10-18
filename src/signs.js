@@ -6,7 +6,9 @@ import { patchSunlight, sunKey } from './materials.js';
  * The face of each trail sign, in the style of a maintained US trail's junction sign: a
  * weathered board of three planks painted brown, the paint peeling to grey wood, two carriage
  * bolts, and white routed capitals: the stop's name across the top, then every other stop
- * with its distance along the trail in miles, names on the left and distances on the right.
+ * with its distance along the trail in miles, names on the left and distances on the right, and an
+ * arrow for the way to go: the boards stand beside the trail facing it, so stops further along
+ * point to one side and those behind to the other.
  *
  * All the faces are one canvas atlas (a block per sign) on one world-space mesh, a quad just in
  * front of each board, so the signs cost a single draw. The board itself is the Blender
@@ -30,12 +32,16 @@ function along(points, i0, i1) {
 const miles = (m) => `${Math.max(0.1, m / 1609.34).toFixed(1)} MI.`;
 const label = (s) => TRAIL_STOPS.find((t) => t.name === s.name)?.label ?? s.name;
 
-/** Each stop's sign: a title and [name, distance] rows for every other stop, in trail order. */
+/**
+ * Each stop's sign: a title and [name, distance, dir] rows for every other stop, in trail order.
+ * The board's local +X runs along the trail (vegetation.js placeTrailFurniture), which is the
+ * reader's left: dir -1 (left) for stops further along, +1 (right) for those behind.
+ */
 export function signTexts(trail) {
   const { points, stops } = trail;
   return stops.map((stop, k) => ({
     title: k === 0 ? 'Cascadia Woods Trail' : label(stop),
-    rows: stops.filter((_, j) => j !== k).map((s) => [label(s), miles(along(points, stop.index, s.index))]),
+    rows: stops.filter((_, j) => j !== k).map((s) => [label(s), miles(along(points, stop.index, s.index)), s.index > stop.index ? -1 : 1]),
   }));
 }
 
@@ -111,16 +117,38 @@ function paintFace(ctx, oy, { title, rows }, seed) {
   ctx.fillRect(0, 0, TW, TH);
 
   // routed white capitals: a dark groove shadow, then the paint, then wear
-  const lines = [{ text: title.toUpperCase(), center: true }, ...rows.map(([n, d]) => ({ text: n.toUpperCase(), right: d }))];
+  const lines = [{ text: title.toUpperCase(), center: true }, ...rows.map(([n, d, dir]) => ({ text: n.toUpperCase(), right: d, dir }))];
   const lh = TH / (lines.length + 0.6);
   const font = (px) => `bold ${px}px "Arial Rounded MT Bold", "Helvetica Neue", Arial, sans-serif`;
   let px = Math.floor(lh * 0.62);
   ctx.font = font(px);
+  ctx.letterSpacing = `${Math.round(px * 0.06)}px`;
   // shrink to fit the longest row (name + gap + distance)
   const widest = Math.max(...lines.map((l) => ctx.measureText(l.text).width + (l.right ? ctx.measureText(l.right).width + px * 1.5 : 0)));
-  if (widest > TW * 0.9) px = Math.floor((px * TW * 0.9) / widest);
+  if (widest > TW * 0.7) px = Math.floor((px * TW * 0.7) / widest);
   ctx.font = font(px);
+  ctx.letterSpacing = `${Math.round(px * 0.06)}px`;
   ctx.textBaseline = 'middle';
+  // a routed arrow: a shaft and a broad head, as tall as the capitals, pointing dir (-1 left)
+  const arrow = (cx, cy, dir) => {
+    const len = px * 1.5;
+    const head = px * 0.62;
+    const half = px * 0.42;
+    const shaft = px * 0.13;
+    const tip = cx + (dir * len) / 2;
+    const neck = tip - dir * head;
+    const tail = cx - (dir * len) / 2;
+    ctx.beginPath();
+    ctx.moveTo(tip, cy);
+    ctx.lineTo(neck, cy - half);
+    ctx.lineTo(neck, cy - shaft);
+    ctx.lineTo(tail, cy - shaft);
+    ctx.lineTo(tail, cy + shaft);
+    ctx.lineTo(neck, cy + shaft);
+    ctx.lineTo(neck, cy + half);
+    ctx.closePath();
+    ctx.fill();
+  };
   const draw = (fill, dx, dy) => {
     ctx.fillStyle = fill;
     lines.forEach((l, i) => {
@@ -129,14 +157,16 @@ function paintFace(ctx, oy, { title, rows }, seed) {
         ctx.textAlign = 'center';
         ctx.fillText(l.text, TW / 2 + dx, y);
       } else {
+        // arrows pointing left stand before the name, those pointing right after the distance
+        if (l.dir < 0) arrow(TW * 0.085 + dx, y, -1);
+        else arrow(TW * 0.915 + dx, y, 1);
         ctx.textAlign = 'left';
-        ctx.fillText(l.text, TW * 0.05 + dx, y);
+        ctx.fillText(l.text, TW * 0.145 + dx, y);
         ctx.textAlign = 'right';
-        ctx.fillText(l.right, TW * 0.95 + dx, y);
+        ctx.fillText(l.right, TW * 0.855 + dx, y);
       }
     });
   };
-  ctx.letterSpacing = `${Math.round(px * 0.06)}px`;
   draw('rgba(10,6,3,0.85)', 1.5, 2.5);
   draw('#e8e3d6', 0, 0);
   // worn paint in the letters: tiny chips knocked out of the white

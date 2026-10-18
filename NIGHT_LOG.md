@@ -289,3 +289,7 @@ so the far shore reads as green trees in a light haze. Overcast and rain are unc
 The two cream-lettered arrow boards became one wide board like a maintained trail's junction sign: three planks painted
 brown with the paint peeling to grey wood, two bolts, and white routed capitals. The stop's name runs across the top
 ("Cascadia Woods Trail" at the trailhead), then every other stop with its distance along the trail in miles.
+
+### 36. Arrows on the trail signs; the post holds the top plank
+Each destination now has an arrow for the way to go: the signs stand beside the trail facing it, so stops further along
+point left and those behind point right. The post now runs up past the board, so from behind the top plank is attached.

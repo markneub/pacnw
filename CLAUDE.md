@@ -266,7 +266,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   a canvas atlas (1024 px across, one block per sign) on a quad 3 mm in front (local −Z; the reader's right is −X, swapped
   the quads get back-face culled): brown paint peeling to grey wood, grain, plank seams, two bolts, and white routed
   capitals: the stop's name on top ("Cascadia Woods Trail" at the trailhead), then every other stop in trail order, name
-  left, distance along the trail right in miles ("0.3 MI.", 0.1 minimum). Texts from `signTexts(trail)`, labels from
+  left, distance along the trail right in miles ("0.3 MI.", 0.1 minimum), and a routed arrow: the board stands beside the
+  trail facing it and its local +X runs along the trail (the reader's left), so stops further along get ← before the name,
+  those behind → after the distance. The post runs up past the board's top (1.72 m; it stopped under the top plank, which
+  hung in the air from behind: the user). Measure text after setting `letterSpacing` or long rows overrun the distances. Texts from `signTexts(trail)`, labels from
   `TRAIL_STOPS`. View: trailhead sign, near spawn.
 - Trail in snow: no flat fill colour (a grey-blue `packed` stripe read as paint). The tread there is the snow's own colour
   lerped 0.4 + 0.45 × groove (1 − (d/width)², deepest mid-tread) toward `packed`, with an edge 0.3 + 0.5·snow m soft, and

@@ -1188,7 +1188,7 @@ def signpost(M, name):
     src/signs.js (BOARD_* there must match these numbers); the model is the wood around it.
     """
     b = MeshBuilder()
-    box(b, M["sign_post"], 0, 0.0, 0.62, 0.13, 0.13, 1.44)  # post, its top just under the board's top
+    box(b, M["sign_post"], 0, 0.0, 0.81, 0.13, 0.13, 1.82)  # post, running up past the board's top
     # three planks, 2 cm thick each (the gaps between them are drawn on the face)
     w, top, h = 1.4, 1.62, 0.66
     for k in range(3):
