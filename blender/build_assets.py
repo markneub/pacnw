@@ -1181,17 +1181,19 @@ def box(b, mat, cx, cy, cz, sx, sy, sz):
 
 
 def signpost(M, name):
-    """Trailhead post with two arrow boards pointing along local +X / -X."""
+    """
+    A trail junction sign like those on maintained US trails: one wide board of three planks bolted
+    to the front of a squared post, facing the trail (local -Y in Blender, i.e. -Z after export).
+    The painted face and its routed lettering are a texture laid over the board's front by
+    src/signs.js (BOARD_* there must match these numbers); the model is the wood around it.
+    """
     b = MeshBuilder()
-    box(b, M["sign_post"], 0, 0, 1.15, 0.14, 0.14, 2.3)
-    prism(b, M["sign_post"], [(-0.07, 0), (0.07, 0), (0, 0.1)], -0.07, 0.07, (0, 0, 2.3))
-    for z, d, length in ((1.85, 1, 0.95), (1.55, -1, 0.8)):
-        h = 0.22
-        tip = 0.16
-        pts = [(0.0, -h / 2), (length, -h / 2), (length + tip, 0.0), (length, h / 2), (0.0, h / 2)]
-        if d < 0:
-            pts = [(-x, zz) for x, zz in reversed(pts)]
-        prism(b, M["wood"], pts, 0.075, 0.115, (d * -0.05, 0, z))
+    box(b, M["sign_post"], 0, 0.0, 0.62, 0.13, 0.13, 1.44)  # post, its top just under the board's top
+    # three planks, 2 cm thick each (the gaps between them are drawn on the face)
+    w, top, h = 1.4, 1.62, 0.66
+    for k in range(3):
+        ph = h / 3
+        box(b, M["sign_post"], 0, 0.09, top - ph * (k + 0.5), w, 0.05, ph - 0.006)  # front at y = 0.115
     return recalc_normals(b.build(name))
 
 

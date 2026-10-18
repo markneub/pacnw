@@ -261,12 +261,13 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   **`tools/holecheck.mjs`** (magenta sky, fog off, looks down along the whole trail and over a 60 m map grid; `trail` for the
   trail only, ~5 min in SwiftShader; exits 1 and lists views) must report no holes after any change to the trail, terrain
   cutout or ground meshes. `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
-- **Sign lettering** (`src/signs.js`, one draw): a canvas atlas (a 128 px row per board, cream serif letters with a dark
-  routed edge) on world-space quads 2.5 mm off both faces of each signpost's two arrow boards (Blender `signpost`: boards
-  along local ±X at 1.85/1.55 m, faces at local z −0.115/−0.075). Upper board (points ahead, +X) = next stop + distance
-  along the trail, lower (back) = previous stop; trailhead back board "Cascadia Woods Trail", last stop "End of trail".
-  Distances round to 50 m, km past 950 m. Texts from `signTexts(trail)`; labels from `TRAIL_STOPS`. Gotcha: on the front
-  face (normal −Z) the reader's right is −X; swapped, every quad was back-face culled.
+- **Trail signs** (`src/signs.js`, one draw; styled on a US trail junction sign, the user's reference photo): Blender
+  `signpost` = a post plus one wide board of three planks (1.4 × 0.66 m, top 1.62 m, front at local z −0.115). Its face is
+  a canvas atlas (1024 px across, one block per sign) on a quad 3 mm in front (local −Z; the reader's right is −X, swapped
+  the quads get back-face culled): brown paint peeling to grey wood, grain, plank seams, two bolts, and white routed
+  capitals: the stop's name on top ("Cascadia Woods Trail" at the trailhead), then every other stop in trail order, name
+  left, distance along the trail right in miles ("0.3 MI.", 0.1 minimum). Texts from `signTexts(trail)`, labels from
+  `TRAIL_STOPS`. View: trailhead sign, near spawn.
 - Trail in snow: no flat fill colour (a grey-blue `packed` stripe read as paint). The tread there is the snow's own colour
   lerped 0.4 + 0.45 × groove (1 − (d/width)², deepest mid-tread) toward `packed`, with an edge 0.3 + 0.5·snow m soft, and
   `aTread` × (1 − 0.7·snow) so the tread's dark grit stays off trodden snow.

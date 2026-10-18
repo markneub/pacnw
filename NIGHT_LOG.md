@@ -284,3 +284,8 @@ The sparkles on the water are now smaller points (about half the size). Looking 
 shore's trees used to wash out to white, as if snowy: the low valley mist was nearly opaque at 200 m and glowed white
 toward the sun. In a sun break the mist now burns off (thinner valley pool, clearer air, a smaller glow around the sun),
 so the far shore reads as green trees in a light haze. Overcast and rain are unchanged.
+
+### 35. Realistic trail signs (the user's reference photo)
+The two cream-lettered arrow boards became one wide board like a maintained trail's junction sign: three planks painted
+brown with the paint peeling to grey wood, two bolts, and white routed capitals. The stop's name runs across the top
+("Cascadia Woods Trail" at the trailhead), then every other stop with its distance along the trail in miles.
