@@ -176,3 +176,8 @@ Cost: rocks are instanced boulders (no new draws); the water shader does more wo
 Snow no longer covers the steepest faces: past about 50° the peaks show dark rock ribs with snow left in the gullies, as
 real alpine faces do. In sun the high-altitude haze is also much thinner, so the peaks around the high basin stand out
 crisp against the blue instead of fading to white ghosts. Look: `?weather=sun&x=70&z=-900&yaw=0.1`. No cost.
+
+### 19. Snow banked against trunks
+In the snow, tree trunks used to end in a hard line where they met the ground. They now rise out of a ragged drift of
+snow banked against them, deeper on some sides than others and lit like the snow around it. Look:
+`?weather=sun&x=90&z=-500&yaw=0.9&pitch=-0.1`. No cost.

@@ -73,7 +73,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   trunk, tapering to 0.35 r0, reach 1.5–2.4 r_base, the tip diving underground. Faces wind (lo[i], hi[i], hi[j], lo[j])
   (the ring turns clockwise about the root's direction). First tries read as blades, then inside-out black fins, then
   splayed tubes ("spider legs"). `addTrunkMoss` also does **ground blending**: the bottom ~0.5 m above the ground
-  (`vTmAbove`) fades to damp duff/moss with a ragged edge and the bark photo fades with it. In rain, **rivulets**: vertical noise
+  (`vTmAbove`) fades to damp duff/moss with a ragged edge and the bark photo fades with it. Above the snowline the duff
+  gives way to a **snow drift** banked against the trunk (`tmDrift`: 0.08–0.56 m, varying around it, sets `gcSnow`, and its
+  normal is tilted 75% to up at `emissivemap_fragment` so it lights like the ground snow: a level white band read as a sock). In rain, **rivulets**: vertical noise
   bands (most on the rain side) × `uWet` darken bark 35% and drop roughness toward 0.22. Wet cards keep 0.35 + 0.45·uWet
   of their indirect specular (a soft sky sheen). Phone spawn 0.76 → 0.82M tris.
   Phone bench: trees 1.8 → 2.0 ms at spawn (±0.1), 1.3 in the forest; full frame 6.7 / 5.2 ms.

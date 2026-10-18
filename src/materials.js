@@ -234,6 +234,7 @@ export function addTrunkMoss(material) {
         varying vec3 vTmNormal;
         varying float vTmHeight;
         varying float vTmAbove;
+        float tmDrift = 0.0;
         float tmHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         float tmNoise(vec2 p) {
           vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -260,17 +261,28 @@ export function addTrunkMoss(material) {
           // ground blend (as AAA terrain blending): the bottom of the trunk and its roots take on
           // the damp forest floor's colour, with a ragged edge, so they grow out of the ground
           // instead of standing on it
-          float soil = 1.0 - smoothstep(0.0, 0.5, vTmAbove + (patchy - 0.5) * 0.35);
+          float snowy = smoothstep(uSnowline - 10.0, uSnowline + 6.0, vTmPos.y);
+          float soil = (1.0 - smoothstep(0.0, 0.5, vTmAbove + (patchy - 0.5) * 0.35)) * (1.0 - snowy);
           vec3 duff = mix(vec3(0.07, 0.052, 0.035), vec3(0.045, 0.06, 0.028), tmNoise(vTmPos.xz * 2.3 + 11.0));
           diffuseColor.rgb = mix(diffuseColor.rgb, duff, soil * 0.85);
           gcMoss = max(gcMoss, soil * 0.85); // the bark photo fades under it too
+          // in the snow, a ragged drift banked against the trunk instead (a bare cut line read as
+          // a trunk stood on the snow)
+          float deep = 0.08 + 0.4 * tmNoise(vec2(around * 1.3, 0.0) + vTmPos.xz * 0.5) + 0.08 * tmNoise(vec2(around * 7.0, vTmHeight * 4.0));
+          tmDrift = (1.0 - smoothstep(-0.04, 0.06, vTmAbove - deep)) * snowy;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.95), tmDrift);
+          gcSnow = tmDrift;
           // rain runs down the trunks in rivulets: darker, glossy vertical streaks, most on the rain side
           float rivulet = tmNoise(vec2(around * 9.0 + vTmPos.x * 0.7, vTmHeight * 0.22));
           tmWet = smoothstep(0.5, 0.78, rivulet) * (0.35 + 0.65 * wetSide) * uWet * (1.0 - dry) * (1.0 - soil);
           diffuseColor.rgb *= 1.0 - 0.35 * tmWet;
         }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.22, tmWet);`);
+        roughnessFactor = mix(roughnessFactor, 0.22, tmWet);`)
+      // the drift's surface faces up like the snow it rises from, so it lights the same (after
+      // every normal patch, the bark photo's included)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        normal = normalize(mix(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz), tmDrift * 0.75));`);
   };
   material.customProgramCacheKey = () => `${prevKey ? prevKey.call(material) : ''}|trunkmoss`;
   return material;
