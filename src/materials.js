@@ -16,6 +16,8 @@ export const shared = {
   uSun: { value: 0 }, // 0 overcast .. 1 sun break (weather.js)
   uCanopyMap: { value: null }, // R8, 0 open sky .. 1 deep shade (bake.js bakeCanopy)
   uSunMap: { value: null }, // the same at 1 m, barely blurred: sunlight only (bake.js bakeSunMap)
+  uGroundH: { value: null }, // R32F terrain grid heights (main.js), for blending objects into the ground
+  uGroundGrid: { value: new THREE.Vector4() }, // min x, min z, step, n
   uCanopyRect: { value: new THREE.Vector4(-1000, -1000, 2000, 2000) }, // minX, minZ, sizeX, sizeZ
 };
 
@@ -149,10 +151,14 @@ export function addWindSway(material, strength = 0.012, wet = 0.25, lod = null) 
  */
 export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film = 0 } = {}) {
   material.onBeforeCompile = (shader) => {
-    patchWet(shader, 1);
+    // (stone gets its rain gloss from the film below: the general damp gloss gave dry rocks a
+    // glassy sheen)
+    patchWet(shader, film > 0 ? 0.35 : 1);
     patchLod(shader, lod);
     patchSunlight(shader);
     shader.uniforms.uSnowline = shared.uSnowline;
+    shader.uniforms.uGcGround = shared.uGroundH;
+    shader.uniforms.uGcGrid = shared.uGroundGrid;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -176,8 +182,22 @@ export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film 
         `#define GROUND_COVER
         #include <common>
         uniform float uSnowline;
+        uniform highp sampler2D uGcGround;
+        uniform vec4 uGcGrid; // min x, min z, step, n
         varying vec3 vCoverPos;
-        varying vec3 vCoverNormal;`,
+        varying vec3 vCoverNormal;
+        // the rendered terrain's height (same grid and triangulation as groundAt)
+        float gcGroundAt(vec2 xz) {
+          vec2 g = clamp((xz - uGcGrid.xy) / uGcGrid.z, vec2(0.0), vec2(uGcGrid.w - 1.0001));
+          ivec2 i = ivec2(floor(g));
+          vec2 f = g - vec2(i);
+          float ha = texelFetch(uGcGround, i, 0).r;
+          float hb = texelFetch(uGcGround, i + ivec2(0, 1), 0).r;
+          float hc = texelFetch(uGcGround, i + ivec2(1, 1), 0).r;
+          float hd = texelFetch(uGcGround, i + ivec2(1, 0), 0).r;
+          return f.x + f.y <= 1.0 ? ha + (hd - ha) * f.x + (hb - ha) * f.y
+            : hc + (hb - hc) * (1.0 - f.x) + (hd - hc) * (1.0 - f.y);
+        }`,
       )
       .replace(
         '#include <color_fragment>',
@@ -193,8 +213,24 @@ export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film 
         float gcSnow = up * snowy * ${snow.toFixed(2)};
         diffuseColor.rgb = mix(diffuseColor.rgb, moss, gcMoss);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), gcSnow);
+        // Ground blend (terrain-aware, as AAA games seat rocks): where the surface meets the
+        // ground, soil and moss have built up against it, with a ragged edge, so it sits in the
+        // ground instead of on it. In the snow, a drift instead.
+        float gcAbove = vCoverPos.y - gcGroundAt(vCoverPos.xz);
+        float gcBase = 0.0;
+        if (gcAbove < 0.6) {
+          vec3 bp3 = fract(vec3(floor(vCoverPos.xz * 7.0 + vCoverPos.y * 3.0).xyx) * 0.1031);
+          bp3 += dot(bp3, bp3.yzx + 33.33);
+          float rag = (sin(vCoverPos.x * 5.3 + sin(vCoverPos.z * 4.1) * 2.0) * sin(vCoverPos.z * 4.7 + vCoverPos.x * 1.3)) * 0.12
+                    + (fract((bp3.x + bp3.y) * bp3.z) - 0.5) * 0.06;
+          gcBase = 1.0 - smoothstep(0.02, 0.38, gcAbove + rag);
+          vec3 duff = mix(vec3(0.075, 0.056, 0.036), vec3(0.05, 0.075, 0.028), speck);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(duff, vec3(0.85, 0.89, 0.94), snowy * ${snow.toFixed(2)}), gcBase * 0.9);
+          gcMoss = max(gcMoss, gcBase * (1.0 - snowy)); // the surface photo fades under it
+          gcSnow = max(gcSnow, gcBase * snowy * ${snow.toFixed(2)});
+        }
         // stone in rain: a film of water, patchy as it runs off, glosses the bare rock (not moss or snow)
-        float gcFilm = ${film.toFixed(2)} * smoothstep(0.6, 0.95, uWet) * (1.0 - gcMoss) * (1.0 - gcSnow)
+        float gcFilm = ${film.toFixed(2)} * smoothstep(0.6, 0.95, uWet) * (1.0 - gcMoss) * (1.0 - gcSnow) * (1.0 - gcBase)
           * smoothstep(0.25, 0.55, 0.5 + 0.35 * sin(vCoverPos.x * 1.7 + sin(vCoverPos.z * 1.3) * 2.0) * sin(vCoverPos.y * 2.1 + vCoverPos.z * 0.9)
                                    + 0.25 * normalize(vCoverNormal).y);
         diffuseColor.rgb *= 1.0 - 0.18 * gcFilm;`,
@@ -202,7 +238,7 @@ export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film 
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.14, gcFilm);`,
+        roughnessFactor = mix(roughnessFactor, 0.3, gcFilm); // (0.14 read as wet plastic)`,
       );
   };
   material.customProgramCacheKey = () => `groundcover|${moss}|${lod}|${snow}|${film}|${sunKey()}`;

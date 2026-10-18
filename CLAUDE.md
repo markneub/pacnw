@@ -457,6 +457,12 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (`footprint()`). The script runs in ~25 s. Scans are cached in `.cache/scans` (gitignored). Budget: phone draws
   140 → 152 at spawn (110 → 127 at the ridge), tris +2–5%. Good boulder spots: `x=371.9&z=104.5&yaw=0.79&pitch=-0.15`,
   `x=-128.8&z=8.2&yaw=-0.79&pitch=-0.2`.
+  **Matte + ground blend (the user: "still don't look very realistic"):** an A/B found the plastic sheen came from the
+  baked normal map's fine crinkles, not reflections: scans now use normalScale 0.45, roughness 1, envMapIntensity 0.6, and
+  general wetness only 0.35 on stone (rain gloss comes from the film, roughness → 0.3). `addGroundCover` blends every
+  rock/log/stump/furniture surface into the **terrain** (AAA-style terrain-aware blending): `shared.uGroundH` (R32F terrain
+  grid, set in main.js) + `gcGroundAt` (same triangulation as groundAt); within ~0.4 m above the ground (ragged edge)
+  the surface takes damp duff/moss (snow above the snowline), and the photo fades under it.
   **Seating (`seatStones`, after the scatter and creek rocks; no rng):** pebble clusters lie on the slope fitted over their
   own spread (`normal` placement field → the instance's up; level clusters floated their downhill stones up to 4 m: the
   user found them), boulders lean 80% into the slope over their footprint (≤ 35°: on the rim's near-cliffs a full lean

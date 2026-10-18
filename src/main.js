@@ -119,6 +119,11 @@ async function init() {
   {
     const { heights, n, step } = terrainGrid(); // the mist pass needs the ground's height
     post.setGround(heights, n, step, -WORLD_SIZE / 2);
+    // and objects blend into it (materials.js addGroundCover); read with texelFetch only
+    const ht = new THREE.DataTexture(heights, n, n, THREE.RedFormat, THREE.FloatType);
+    ht.needsUpdate = true;
+    shared.uGroundH.value = ht;
+    shared.uGroundGrid.value.set(-WORLD_SIZE / 2, -WORLD_SIZE / 2, step, n);
   }
   scene.add(terrain);
   scene.add(buildWater());

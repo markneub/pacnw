@@ -231,6 +231,11 @@ export function applyRockTextures(layers) {
     mat.color.setRGB(1, 1, 1);
     mat.map = tex.alb;
     if (near) mat.normalMap = tex.nrm; // tangent-space, with the GLB's tangents
+    // matte stone: at full strength the baked normals' fine crinkles caught the light as a plastic
+    // sheen (found by A/B: the sheen went with the normal map, not the reflections)
+    mat.normalScale.set(0.45, 0.45);
+    mat.roughness = 1;
+    mat.envMapIntensity = 0.6;
     mat.needsUpdate = true;
   }
 }

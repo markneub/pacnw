@@ -263,3 +263,11 @@ olive-to-straw sedge growing up out of it, and dead snags standing in it. The tr
 between the trailhead and the lake viewpoint, and crosses the marsh on a 75 m raised plank boardwalk on posts, about
 0.4 m above the water, rising gently onto the shore at each end. The signs now include it. From spawn it's 350 m along
 the trail. Look: `?x=187&z=465&yaw=1.3` (on the boardwalk).
+
+### 32. Boulders: matte stone, grounded
+I tracked down what made the scanned boulders look fake: their fine baked surface detail caught the light like plastic.
+At half strength, fully matte, they read as weathered stone and keep their shape. Rocks, logs and stumps also now blend
+into the ground the way AAA games seat props: within ~40 cm of the terrain their surface takes on the forest floor's
+damp duff and moss (snow up high) with a ragged edge, instead of a hard line. If you still want more, the next step
+would be different source scans (more angular, lichen-covered basalt typical of the Cascades) or proper decals of moss
+caps and debris; tell me which bothers you more.
