@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
+  streams, setWalkModifier,
 } from './terrain.js';
 import { shared, wetChunks, patchSunlight, sunKey } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
@@ -331,7 +332,13 @@ export function buildTrail() {
       acc += w * (hc - g) * (1 - keep);
       wsum += w;
     }
-    return wsum > 0 ? g + acc / wsum : g;
+    const h = wsum > 0 ? g + acc / wsum : g;
+    // where the trail crosses a stream, the stream's channel cuts through the tread (a footbridge
+    // spans it) instead of the tread damming it like a culvert
+    const c = streams().nearest(x, z);
+    if (!c.seg || h <= g) return h;
+    const cut = 1 - THREE.MathUtils.smoothstep(c.d, c.half + 0.4, c.half + 2.2);
+    return h + (g - h) * cut;
   }
   setGroundModifier(benchHeight);
 
@@ -339,7 +346,45 @@ export function buildTrail() {
   setTerrainCutout(...buildCutoutMask(mesh.userData.cover));
   delete mesh.userData.cover;
 
-  return { points, stops, distanceTo, guide, mesh };
+  // footbridges where the trail crosses a stream: deck level with the tread on both banks
+  const crossings = [];
+  for (let i = 0, wet = false; i < points.length; i++) {
+    const c = streams().nearest(points[i].x, points[i].y);
+    const now = !!c.seg && c.d < c.half + 0.5;
+    if (now && !wet) {
+      // the middle of the wet run
+      let j = i;
+      while (j + 1 < points.length) {
+        const cj = streams().nearest(points[j + 1].x, points[j + 1].y);
+        if (!cj.seg || cj.d >= cj.half + 0.5) break;
+        j++;
+      }
+      const m = Math.round((i + j) / 2);
+      const a = points[Math.max(0, m - 2)];
+      const b = points[Math.min(points.length - 1, m + 2)];
+      const l = Math.hypot(b.x - a.x, b.y - a.y);
+      const dx = (b.x - a.x) / l;
+      const dz = (b.y - a.y) / l;
+      const cm = streams().nearest(points[m].x, points[m].y);
+      const span = 2 * (cm.half + 2.4);
+      const ends = [-1, 1].map((k) => groundAt(points[m].x + dx * k * span / 2, points[m].y + dz * k * span / 2));
+      // the deck follows the trail's grade from bank to bank
+      crossings.push({ x: points[m].x, z: points[m].y, dx, dz, span, deck: (ends[0] + ends[1]) / 2 + 0.06, rise: ends[1] - ends[0] });
+    }
+    wet = now;
+  }
+  setWalkModifier((x, z, g) => {
+    for (const b of crossings) {
+      const ox = x - b.x;
+      const oz = z - b.z;
+      const along = ox * b.dx + oz * b.dz;
+      const across = -ox * b.dz + oz * b.dx;
+      if (Math.abs(along) < b.span / 2 && Math.abs(across) < 0.85) return Math.max(g, b.deck + (b.rise * along) / b.span);
+    }
+    return g;
+  });
+
+  return { points, stops, distanceTo, guide, mesh, crossings };
 }
 
 /**

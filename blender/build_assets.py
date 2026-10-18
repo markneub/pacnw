@@ -165,6 +165,7 @@ def mats():
         "fern": material("Fern", (0.2, 0.38, 0.12), 0.8),
         "wood": material("Wood", (0.62, 0.47, 0.3)),
         "soil": material("RootSoil", (0.4, 0.31, 0.22)),
+        "plank": material("Plank", (0.4, 0.36, 0.3)),  # weathered boards
         "log_end": material("LogEnd", (0.42, 0.37, 0.31)),  # weathered, greyed end grain (fresh "Wood" read as orange)
         "sign_post": material("SignPost", (0.33, 0.23, 0.15)),
         "lod": material("LodVertexColor", (1.0, 1.0, 1.0), 0.85),
@@ -905,6 +906,32 @@ def pebbles(M, name, seed, stones=6, spread=0.8, size=(0.07, 0.28)):
     return b.build(name)
 
 
+def footbridge(M, name, seed=71, length=6.4):
+    """
+    A plank footbridge for a creek crossing, along local X, the deck's top at
+    z = 0: two log stringers, planks across them (slightly uneven, a few
+    missing), and a rustic handrail of a pole on posts along one side.
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    half = length / 2
+    for y in (-0.55, 0.55):  # stringers: logs lying along X, under the planks
+        _stub(b, M["bark"], Vector((-half, y, -0.2)), Vector((half, y, -0.2)), 0.17, 0.15, sides=8)
+    x = -half + 0.2
+    while x < half - 0.15:
+        if rng.random() > 0.04:
+            w = rng.uniform(0.2, 0.27)
+            z = rng.uniform(-0.015, 0.01)
+            box(b, M["plank"], x + w / 2, rng.uniform(-0.03, 0.03), z - 0.03, w - 0.02, rng.uniform(1.45, 1.6), 0.06)
+            x += w
+        else:
+            x += 0.22
+    for px in (-half + 0.3, 0.0, half - 0.3):  # handrail posts and pole along +Y
+        box(b, M["bark"], px, 0.72, 0.45, 0.1, 0.1, 1.0)
+    _stub(b, M["bark"], Vector((-half + 0.2, 0.72, 0.95)), Vector((half - 0.2, 0.72, 0.97)), 0.055, 0.05, sides=6)
+    return b.build(name)
+
+
 def log(M, name, seed, length=9.0, radius=0.55, sides=10):
     """Fallen, slightly bent log lying along X with exposed wood at the ends."""
     rng = random.Random(seed)
@@ -1124,6 +1151,7 @@ def main():
     signpost(M, "signpost")
     cairn(M, "cairn")
     bench(M, "bench")
+    footbridge(M, "footbridge")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     bpy.ops.object.select_all(action="SELECT")

@@ -101,3 +101,19 @@ old-growth reference. Sun breaks still thin it to 62%. A one-line change in `wea
 ## Result (phone bench, sun, full clock)
 Spawn full 6.5 ms (was 6.5–7.5 before the night): trees 2.1, ferns 0.5 ±0.4, rays/glow ~0, motes 0.
 Forest full 5.3 ms: trees 1.4, ferns 0.3. Everything added fits within the previous frame time.
+
+---
+
+# Second night (landscape done in the evening; then the list)
+
+### 10. Streams
+Snowmelt creeks now run from the high basin and the foothills down to the lake. Their paths come from a drainage
+calculation over the terrain (water routed downhill to the lake), so they follow natural valleys; tributaries merge and
+grow wider downstream (≈2 m at the spring, ≈5 m at the lake). The channels are carved into the ground with stony,
+snow-free beds and banks easing back to the forest floor; trees stand back from the water and stones line the beds.
+The water ripples and flows downstream at a speed set by the slope, breaks into soft white water on steep runs, and
+reflects the canopy (dark under trees, sky in the open). Where the trail crosses a creek there's a small plank
+footbridge, tilted to the grade where needed, and you walk across on the deck.
+Look: a creek near the lake `?x=163&z=66.6&yaw=-1.81&pitch=-0.3`, a snowmelt creek on the snowfield
+`?weather=sun&x=-30&z=-432&yaw=-2.25&pitch=-0.3`, a footbridge `?weather=sun&x=246.6&z=-187.1&yaw=-0.64&pitch=-0.2`.
+Cost: 4 stream meshes + bridges (phone spawn draws 155 → 173, tris unchanged). `?off=water` hides them.

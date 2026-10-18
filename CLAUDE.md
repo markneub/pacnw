@@ -104,6 +104,23 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   2.5 km, 1.2 km in snow, grade p50 10% / p95 24%, cross-slope p95 7%. Load (container): vegetation 4.3 → ~9.9 s (twice the
   area). Changing `heightAt`/scatter moved every tree. Views: snowfield `x=90&z=-500&yaw=0.2`, basin `x=70&z=-900&yaw=0.1`,
   looking back down `x=110&z=-640&yaw=3.0` (bench `views=snow` is now the snowfield). Old coordinates north of z ≈ 0 are stale.
+- **Streams** (`src/streams.js` paths + carve, `src/streamwater.js` water): a priority flood from the lake over an 8 m grid
+  of the *uncarved* terrain (`baseHeight`) gives each cell a downhill route (pits flooded over); 5 `SOURCES` (basin, basin
+  walls, foothills) trace down until they meet a traced stream (4 survive: main 1.9 km basin → lake, 2 tributaries + a west
+  creek that passes between spawn and the lake). Chaikin ×3, resampled every 4 m; width 1.8 → ~5 m with drained length; bed
+  level forced to fall downstream. `heightAt` = `streams().carve(baseHeight)`: a flat bed, banks easing back over 7 m
+  (`BANK`), never raising ground. `streamBed()` gives stony, snow-free beds (groundColor/groundLayers → rock layer, grass
+  gone); scatter keeps trees 2.5 m, ferns/salal 0.6–1 m, logs 5 m off the water; pebbles cluster in beds. Water: a ribbon
+  per stream, 6 verts across, level = rendered ground + ~0.15 m, falling downstream; half-width = bed + 0.7 m (searching for
+  the banks spread it over flat valley floors: the 5 m grid only roughly holds the channel). Shader: 3-octave ripples
+  stretched along and scrolling with the flow (speed from the fall), soft white-water streaks on steep runs, faint bank
+  foam, alpha clearer at the edges; reflection like the lake but the **canopy map darkens the reflected sky** (forest
+  creeks mirror the dark canopy) and Fresnel max 0.6. (`uSwTime`, since patchSunlight declares `uTime`.) `?off=water` drops it.
+  **Footbridges** at trail crossings (`trail.crossings`): the bench cut lets the channel through the tread (`cut` near the
+  stream) instead of damming it like a culvert; a Blender `footbridge` (log stringers, uneven `Plank` deck, a pole rail;
+  6.4 m, scaled to the span, moss 0.2) spans bank to bank, **tilted to the grade** (`tilt` placement field → rotation about
+  local Z). `walkAt()` (terrain.js, `setWalkModifier`) puts the player on the deck; player.js uses it. Phone spawn draws
+  155 → 173.
 - `src/terrain.js`: `heightAt(x,z)` is the smooth noise height that drives terrain generation and scatter
   decisions. `groundAt(x,z)` is the height of the *rendered* triangulated mesh. Use it for anything that
   must sit on the ground (instances, player feet, trail ribbon). `snowlineAt`/`snowAmount` keep ground snow, snowy-tree choice and rain→snow consistent.
@@ -371,7 +388,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 - Subtle head bob while walking (no option: opinionated).
 - **Next (the user's plan, in order):**
   1. (Done: landscape rework, see Map.)
-  2. Streams of running water cutting through the landscape, natural in look and behaviour.
+  2. (Done: streams, see Streams.)
   3. Sun glitter on water (streams and the lake): realistic sparkle where the sun's reflection is visible. The user can
      share reference photos.
 - Deferred by the user (they test with the sound off): sound — footsteps by surface, birdsong in sun breaks, drips after rain.

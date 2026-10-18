@@ -17,6 +17,7 @@ import { loadTextureSet } from './textures.js';
 import { runBench } from './bench.js';
 import { AutoResolution } from './autores.js';
 import { buildGrass } from './grass.js';
+import { buildStreamWater } from './streamwater.js';
 import { Post } from './post.js';
 
 installHeightFog(); // must run before any material compiles
@@ -118,6 +119,7 @@ async function init() {
   }
   scene.add(terrain);
   scene.add(buildWater());
+  if (!off.has('water')) scene.add(buildStreamWater());
   step('terrain');
 
   progress(0.22, 700);

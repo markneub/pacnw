@@ -4,7 +4,7 @@ import {
   WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, WATER_LEVEL, SNOWLINE, TREELINE, SEED, SPAWN,
 } from './config.js';
 import {
-  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32,
+  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover, addTrunkMoss, shared } from './materials.js';
@@ -14,7 +14,13 @@ import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
 import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.js';
 
 const KIND = (name) => (/^(fern|salal|pebbles)/.test(name) ? 'ferns'
-  : /^(boulder|log|stump|signpost|cairn|bench)/.test(name) ? 'rocks' : 'trees');
+  : /^(boulder|log|stump|signpost|cairn|bench|footbridge)/.test(name) ? 'rocks' : 'trees');
+
+/** Metres from the edge of the nearest stream's water (negative in it). */
+const offStream = (x, z) => {
+  const c = streams().nearest(x, z);
+  return c.seg ? c.d - c.half : Infinity;
+};
 
 /** Deterministic 0..1 hash of a position (for choices that mustn't consume scatter rng). */
 function hash2(x, z) {
@@ -198,7 +204,7 @@ function convertMaterial(src, assetName, lod, cache) {
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns' && !pebble) addWindSway(mat, 2.5, undefined, 'fade');
   // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
-  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : 1, snow: pebble ? 0 : 1 });
+  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' ? 0.2 : 1, snow: pebble ? 0 : 1 });
   if (cards) patchCards(mat);
   // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
   if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);
@@ -250,6 +256,11 @@ function placeTrailFurniture(trail, add) {
     const i = Math.min(stop.index + 3, points.length - 3);
     const { x, z, t } = beside(i, TRAIL_WIDTH + 0.6);
     put('signpost', x, z, Math.atan2(-t.y, t.x));
+  }
+
+  // footbridges over the creeks (the model is 6.4 m long, along local X)
+  for (const c of trail.crossings ?? []) {
+    add('footbridge', { x: c.x, y: c.deck, z: c.z, rotY: Math.atan2(-c.dz, c.dx), tilt: Math.atan2(c.rise, c.span), scale: Math.max(1, c.span / 6.2), tint: 0.5 });
   }
 
   const lake = stops.find((s) => s.name === 'lake');
@@ -308,6 +319,7 @@ function scatter(trail) {
       if (h < WATER_LEVEL + 1.5) continue;
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.3) continue;
+      if (offStream(x, z) < 2.5) continue; // trees stand back from the water
       const slope = slopeAt(x, z);
       if (slope > 0.45) continue;
 
@@ -362,7 +374,7 @@ function scatter(trail) {
         let y = groundAt(x, z);
         for (let k = 0; k < 6; k++) y = Math.min(y, groundAt(x + Math.cos(k * 1.047) * rr, z + Math.sin(k * 1.047) * rr));
         add(name, { x, y: y - 0.12 * scale, z, rotY, scale, tint: rng() });
-      } else if (r < 0.2 && h < SNOWLINE + 30 && slope < 0.25) {
+      } else if (r < 0.2 && h < SNOWLINE + 30 && slope < 0.25 && offStream(x, z) > 5) {
         // fallen logs lie across the slope (a random heading poked one end up into the air on hillsides),
         // seated at the lowest ground along them; the same three draws as before, so nothing else moves
         const rv = rng();
@@ -377,7 +389,7 @@ function scatter(trail) {
         let y = 0;
         for (let k = -2; k <= 2; k++) y += groundAt(x + dx * 2.2 * k * scale, z + dz * 2.2 * k * scale) / 5;
         add('log', { x, y: y - 0.12 * scale, z, rotY: Math.atan2(-dz, dx), scale, tint });
-      } else if (r < 0.24 && h < SNOWLINE && slope < 0.3) {
+      } else if (r < 0.24 && h < SNOWLINE && slope < 0.3 && offStream(x, z) > 2) {
         add('stump', { x, y: groundAt(x, z) - 0.1, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.6, tint: rng() });
       }
     }
@@ -396,6 +408,7 @@ function scatter(trail) {
       if (h < WATER_LEVEL + 1 || h > SNOWLINE - 25) continue;
       if (slopeAt(x, z) > 0.35) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.4) continue;
+      if (offStream(x, z) < 0.6) continue;
       add(rng() < 0.5 ? 'fern_a' : 'fern_b', {
         x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.9 + rng() * 0.9, tint: rng(),
       });
@@ -415,6 +428,7 @@ function scatter(trail) {
       if (h < WATER_LEVEL + 1.5 || h > SNOWLINE - 40) continue;
       if (slopeAt(x, z) > 0.4) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.6) continue;
+      if (offStream(x, z) < 1) continue;
       add('salal', { x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.7, tint: rng() });
     }
   }
@@ -434,6 +448,7 @@ function scatter(trail) {
       if (h < WATER_LEVEL + 2 || h > 85) continue;
       if (slopeAt(x, z) > 0.4) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 1.5) continue;
+      if (offStream(x, z) < 2) continue;
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 6) continue;
       add('vine_maple', { x, y: groundAt(x, z) - 0.25, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.45, tint: rng() });
     }
@@ -467,7 +482,7 @@ function scatter(trail) {
       for (let k = -2; k <= 2; k++) {
         const px = x + dx * half_ * k * 0.5;
         const pz = z + dz * half_ * k * 0.5;
-        if (trail.distanceTo(px, pz) < TRAIL_WIDTH + 2.5 || Math.hypot(px - SPAWN.x, pz - SPAWN.z) < 12) ok = false;
+        if (trail.distanceTo(px, pz) < TRAIL_WIDTH + 2.5 || Math.hypot(px - SPAWN.x, pz - SPAWN.z) < 12 || offStream(px, pz) < 3) ok = false;
         y = Math.min(y, groundAt(px, pz));
       }
       if (!ok) continue;
@@ -509,7 +524,8 @@ function scatter(trail) {
       const stony = THREE.MathUtils.smoothstep(slope, 0.12, 0.45);
       const high = THREE.MathUtils.smoothstep(h, 60, 110);
       const duff = THREE.MathUtils.smoothstep(nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5, 0.4, 0.7);
-      const p = Math.min(0.95, 0.22 + 0.75 * edge + 0.6 * stony + 0.4 * high) * (1 - 0.5 * duff * (1 - edge));
+      const bed = streamBed(x, z); // cobbles and gravel line the streams
+      const p = Math.min(0.95, 0.22 + 0.75 * edge + 0.6 * stony + 0.4 * high + 0.7 * bed) * (1 - 0.5 * duff * (1 - edge) * (1 - bed));
       if (r > p) continue;
       if (snowAmount(x, z, h, slope) > 0.3) continue;
       const kind = PEBBLES[Math.floor(pick * PEBBLES.length)];
@@ -552,6 +568,8 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
   const s = new THREE.Vector3();
   const p = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const tiltQ = new THREE.Quaternion();
   const col = new THREE.Color();
   const counts = {};
 
@@ -591,6 +609,7 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
     const xz = new Float32Array(n * 2);
     list.forEach((it, i) => {
       q.setFromAxisAngle(up, it.rotY);
+      if (it.tilt) q.multiply(tiltQ.setFromAxisAngle(zAxis, it.tilt)); // pitched along local X (footbridges on a grade)
       s.setScalar(it.scale);
       p.set(it.x, it.y, it.z);
       m.compose(p, q, s).toArray(matrices, i * 16);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PLAYER, WORLD_SIZE, WATER_LEVEL } from './config.js';
-import { groundAt } from './terrain.js';
+import { walkAt as groundAt } from './terrain.js'; // (footbridges included)
 
 /**
  * First-person walker: mouse look via pointer lock, WASD/arrows to move,

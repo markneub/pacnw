@@ -3,6 +3,7 @@ import { createNoise2D } from 'simplex-noise';
 import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED } from './config.js';
 import { shared, wetChunks, patchSunlight, sunKey } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
+import { buildStreams } from './streams.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -96,13 +97,28 @@ function highCountry(x, z) {
   return stair + peaks + relief;
 }
 
+let streamNet = null;
+/** The streams (streams.js), built on first use from the uncarved terrain. */
+export function streams() {
+  if (!streamNet) streamNet = buildStreams(baseHeight, { size: WORLD_SIZE, waterLevel: WATER_LEVEL, lake: LAKE });
+  return streamNet;
+}
+
 /**
- * Terrain height at world (x, z). Layout: a low, rolling forested valley in the
+ * Terrain height at world (x, z): the landscape (baseHeight) with the stream
+ * channels cut into it.
+ */
+export function heightAt(x, z) {
+  return streams().carve(x, z, baseHeight(x, z));
+}
+
+/**
+ * The landscape before the streams: a low, rolling forested valley in the
  * south (+z) climbing north through a staircase of snowy benches to a pass,
  * between ridged peaks, with the whole map rimmed by mountains so the edges
  * feel natural.
  */
-export function heightAt(x, z) {
+function baseHeight(x, z) {
   const hills = fbm(nBase, x * 0.0016, z * 0.0016, 5) * 32 + 22;
   const detail = nDetail(x * 0.02, z * 0.02) * 1.2;
 
@@ -184,6 +200,17 @@ export function groundAt(x, z) {
   return groundModifier ? groundModifier(x, z, g) : g;
 }
 
+// What you stand on: the ground, or a structure over it (the trail's footbridges).
+let walkModifier = null;
+export function setWalkModifier(fn) {
+  walkModifier = fn;
+}
+/** Height the player stands at: groundAt, raised onto any footbridge deck. */
+export function walkAt(x, z) {
+  const g = groundAt(x, z);
+  return walkModifier ? walkModifier(x, z, g) : g;
+}
+
 /** Local snowline altitude; wanders ±18 m so the snow edge isn't a contour line. */
 export function snowlineAt(x, z) {
   return SNOWLINE + nSnow(x * 0.006, z * 0.006) * 18;
@@ -235,9 +262,16 @@ function snowCover(x, z, y, slope) {
  * How much of each ground surface a point is, for close-up detail textures:
  * [forest floor, rock, snow, mud/dirt], summing to 1. Mirrors groundColor().
  */
+/** 0..1: the stream bed and its wet, stony margin (1 in the channel, fading over the lower bank). */
+export function streamBed(x, z) {
+  const c = streams().nearest(x, z);
+  return c.seg ? 1 - smoothstep(c.half + 0.5, c.half + 3.5, c.d) : 0;
+}
+
 export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
-  const snow = snowCover(x, z, y, slope);
-  const rock = smoothstep(0.22, 0.42, slope) * (1 - snow);
+  const bed = streamBed(x, z);
+  const snow = snowCover(x, z, y, slope) * (1 - bed); // running water keeps its bed clear of snow
+  const rock = Math.max(smoothstep(0.22, 0.42, slope), bed) * (1 - snow);
   const mud = (1 - smoothstep(WATER_LEVEL - 1, WATER_LEVEL + 2.5, y)) * (1 - rock) * (1 - snow);
   out[0] = Math.max(0, 1 - snow - rock - mud);
   out[1] = rock;
@@ -270,8 +304,13 @@ export function groundColor(x, y, z, slope, target = new THREE.Color()) {
   tmp.copy(COL.rock).lerp(COL.rockDark, n1);
   c.lerp(tmp, smoothstep(0.22, 0.42, slope));
 
+  // stream beds: wet, dark cobbles, no snow
+  const bed = streamBed(x, z);
+  tmp.copy(COL.rockDark).lerp(COL.mud, 0.35 + 0.3 * n1).multiplyScalar(0.8);
+  c.lerp(tmp, bed);
+
   // snow
-  const s = snowCover(x, z, y, slope);
+  const s = snowCover(x, z, y, slope) * (1 - bed);
   tmp.copy(COL.snow).lerp(COL.snowShade, n1 * 0.5 + slope);
   c.lerp(tmp, s);
   return c;
