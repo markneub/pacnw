@@ -363,7 +363,20 @@ function scatter(trail) {
         for (let k = 0; k < 6; k++) y = Math.min(y, groundAt(x + Math.cos(k * 1.047) * rr, z + Math.sin(k * 1.047) * rr));
         add(name, { x, y: y - 0.12 * scale, z, rotY, scale, tint: rng() });
       } else if (r < 0.2 && h < SNOWLINE + 30 && slope < 0.25) {
-        add('log', { x, y: groundAt(x, z) - 0.25, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.5, tint: rng() });
+        // fallen logs lie across the slope (a random heading poked one end up into the air on hillsides),
+        // seated at the lowest ground along them; the same three draws as before, so nothing else moves
+        const rv = rng();
+        const scale = 0.7 + rng() * 0.5;
+        const tint = rng();
+        const gxH = heightAt(x + 2, z) - heightAt(x - 2, z);
+        const gzH = heightAt(x, z + 2) - heightAt(x, z - 2);
+        const ang = Math.atan2(gxH, -gzH) + (rv < 0.5 ? 0 : Math.PI) + (rv * 2 % 1 - 0.5) * 0.5;
+        const dx = Math.cos(ang);
+        const dz = Math.sin(ang);
+        // the log's axis sits ~0.8 r above its origin and r = 0.55: seat it on the mean ground along it
+        let y = 0;
+        for (let k = -2; k <= 2; k++) y += groundAt(x + dx * 2.2 * k * scale, z + dz * 2.2 * k * scale) / 5;
+        add('log', { x, y: y - 0.12 * scale, z, rotY: Math.atan2(-dz, dx), scale, tint });
       } else if (r < 0.24 && h < SNOWLINE && slope < 0.3) {
         add('stump', { x, y: groundAt(x, z) - 0.1, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.6, tint: rng() });
       }

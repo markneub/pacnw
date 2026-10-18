@@ -165,6 +165,7 @@ def mats():
         "fern": material("Fern", (0.2, 0.38, 0.12), 0.8),
         "wood": material("Wood", (0.62, 0.47, 0.3)),
         "soil": material("RootSoil", (0.4, 0.31, 0.22)),
+        "log_end": material("LogEnd", (0.42, 0.37, 0.31)),  # weathered, greyed end grain (fresh "Wood" read as orange)
         "sign_post": material("SignPost", (0.33, 0.23, 0.15)),
         "lod": material("LodVertexColor", (1.0, 1.0, 1.0), 0.85),
         "fir_cards": card_material("FirCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
@@ -607,6 +608,23 @@ def snag(M, name, seed=5):
     return b.build(name)
 
 
+def _stub(b, mat, p0, p1, r0, r1, sides=6):
+    """A blunt broken-off stub: a truncated cone with a flat end (not a pointed stick)."""
+    axis = (p1 - p0).normalized()
+    side = axis.cross(Vector((0, 0, 1)))
+    if side.length < 1e-3:
+        side = Vector((1, 0, 0))
+    side.normalize()
+    up = side.cross(axis).normalized()
+    ring = lambda p, r: [b.v(p + (side * math.cos(TAU * i / sides) + up * math.sin(TAU * i / sides)) * r) for i in range(sides)]
+    a, c = ring(p0, r0), ring(p1, r1)
+    end = b.v(p1 + axis * r1 * 0.2)
+    for i in range(sides):
+        j = (i + 1) % sides
+        b.face((a[i], a[j], c[j], c[i]), mat)
+        b.face((c[i], c[j], end), mat)
+
+
 def _stick(b, mat, p0, p1, r, sides=4):
     axis = (p1 - p0).normalized()
     side = axis.cross(Vector((0, 0, 1)))
@@ -809,7 +827,7 @@ def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
         j = (i + 1) % sides
         tip = b.v((x + rng.uniform(0.2, 1.4) * (1.0 if i % 3 else 0.4), bend + math.cos(TAU * (i + 0.5) / sides) * r * 0.45,
                    zc + math.sin(TAU * (i + 0.5) / sides) * r * 0.45))
-        b.face((loop[j], loop[i], tip), M["wood"])
+        b.face((loop[j], loop[i], tip), M["log_end"])
     # root wad at the root end: a ragged vertical plate of soil, both faces
     loop, x, r, bend, zc = loops[0]
     R = r0 * 2.5
@@ -833,7 +851,7 @@ def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
     # close the trunk end against the plate
     for i in range(sides):
         j = (i + 1) % sides
-        b.face((fc, loop[i], loop[j]), M["wood"])
+        b.face((fc, loop[i], loop[j]), M["log_end"])
     # roots: torn ends sticking out of the plate's back face and its rim
     for i in range(16):
         a = TAU * i / 16 + rng.uniform(-0.15, 0.15)
@@ -843,8 +861,11 @@ def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
         out = Vector((rng.uniform(-1.0, -0.3), math.cos(a) * (1.0 if rim else 0.4), math.sin(a) * (1.0 if rim else 0.4))).normalized()
         L = rng.uniform(0.5, 1.3)
         mid = base + out * (L * 0.5) + Vector((0.0, 0.0, -0.1 * L))
-        _stick(b, bark, base, mid, rng.uniform(0.07, 0.13), sides=5)
-        _stick(b, bark, mid - out * 0.05, mid + (out + Vector((0.0, 0.0, -0.3))).normalized() * (L * 0.5), rng.uniform(0.04, 0.07), sides=4)
+        r_root = rng.uniform(0.07, 0.13)
+        r_tip = rng.uniform(0.04, 0.07)
+        # torn-off root ends: blunt, not pointed
+        _stub(b, bark, base, mid, r_root, r_root * 0.8)
+        _stub(b, bark, mid - out * 0.05, mid + (out + Vector((0.0, 0.0, -0.3))).normalized() * (L * 0.35), r_root * 0.8, r_tip)
     return b.build(name)
 
 
@@ -911,14 +932,15 @@ def log(M, name, seed, length=9.0, radius=0.55, sides=10):
         c = b.v((cx + (-0.1 if flip else 0.1), cy, cz))
         for i in range(sides):
             j = (i + 1) % sides
-            b.face((c, loop[j], loop[i]) if flip else (c, loop[i], loop[j]), M["wood"])
+            b.face((c, loop[j], loop[i]) if flip else (c, loop[i], loop[j]), M["log_end"])
     # a couple of broken branch stubs
     for _ in range(4):
         x = rng.uniform(-length * 0.35, length * 0.35)
         a = rng.uniform(0.3, math.pi - 0.3)
         base = Vector((x, math.cos(a) * radius * 0.8, math.sin(a) * radius * 0.8 + radius * 0.82))
         tip = base + Vector((rng.uniform(-0.3, 0.3), math.cos(a) * 1.1, math.sin(a) * 1.1))
-        _stick(b, M["bark"], base, tip, 0.08)
+        # short, blunt and broken off (long pointed sticks read as thorns)
+        _stub(b, M["bark"], base - (tip - base) * 0.1, base + (tip - base) * 0.38, 0.11, 0.08)
     return b.build(name)
 
 

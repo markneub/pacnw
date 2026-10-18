@@ -77,6 +77,10 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   bands (most on the rain side) × `uWet` darken bark 35% and drop roughness toward 0.22. Wet cards keep 0.35 + 0.45·uWet
   of their indirect specular (a soft sky sheen). Phone spawn 0.76 → 0.82M tris.
   Phone bench: trees 1.8 → 2.0 ms at spawn (±0.1), 1.3 in the forest; full frame 6.7 / 5.2 ms.
+  **Fallen logs** (`log`): lie across the slope (heading from the gradient ± 0.25 rad, flipped by the same draw that was
+  their random rotation), seated on the mean ground along them minus 0.12 × scale. Random headings poked one end up into
+  the air on hillsides (seen by the user). Branch stubs and the nurse logs' torn roots use `_stub` (blunt truncated cones);
+  pointed `_stick`s read as thorns. Log ends use `LogEnd` (0.42, 0.37, 0.31): the fresh `Wood` colour read as an orange blob.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
