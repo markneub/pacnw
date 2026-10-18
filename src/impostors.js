@@ -119,10 +119,10 @@ function dilate(maps, alphaFrom, w, h, passes) {
  * Render every tree type from VIEWS directions into colour + normal atlases.
  * protoParts: { name: [{geometry, material}] } (the full-detail models).
  */
-export async function bakeImpostors(renderer, protoParts, { frameW = 128 } = {}) {
+export async function bakeImpostors(renderer, protoParts, { frameW = 128, aspect = 2 } = {}) {
   const names = Object.keys(protoParts);
   const fw = frameW;
-  const fh = frameW * 2;
+  const fh = frameW * aspect; // (trees are tall: 2; shrubs are wide: 1)
   const aw = fw * VIEWS;
   const ah = fh * names.length;
   const targets = ['albedo', 'normal'].map(() => new THREE.WebGLRenderTarget(aw, ah, { depthBuffer: true }));
@@ -214,12 +214,17 @@ export function impostorGeometry(maxSize) {
   return geo;
 }
 
-/** Billboard material; aFrame (per instance) = [yMin, height, halfWidth, atlas row]. */
-export function impostorMaterial(baked) {
+/**
+ * Billboard material; aFrame (per instance) = [yMin, height, halfWidth, atlas row].
+ * shrubs: the far tier of the near-only plants (ferns, salal): it takes over from them across
+ * their dissolve band and dissolves away itself near uShrubFar (patchLod 'shrubFar'). Their
+ * thin fronds thin out in the mips, so it keeps more of the alpha.
+ */
+export function impostorMaterial(baked, { shrubs = false } = {}) {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
   mat.envMapIntensity = 0.35; // foliage, like the near trees
   mat.onBeforeCompile = (shader) => {
-    patchLod(shader, 'far');
+    patchLod(shader, shrubs ? 'shrubFar' : 'far');
     patchSunlight(shader);
     shader.uniforms.uImpAlbedo = { value: baked.albedo };
     shader.uniforms.uImpNormal = { value: baked.normal };
@@ -259,7 +264,7 @@ export function impostorMaterial(baked) {
         varying vec3 vImpToward;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec4 iAlb = texture2D(uImpAlbedo, vImpUv);
-        if (iAlb.a < 0.4) discard;
+        if (iAlb.a < ${shrubs ? '0.22' : '0.4'}) discard;
         diffuseColor.rgb *= iAlb.rgb * iAlb.rgb; // stored gamma-2`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
         {
@@ -268,6 +273,6 @@ export function impostorMaterial(baked) {
           normal = normalize((viewMatrix * vec4(iW, 0.0)).xyz);
         }`);
   };
-  mat.customProgramCacheKey = () => `impostor|${sunKey()}`;
+  mat.customProgramCacheKey = () => `impostor|${shrubs}|${sunKey()}`;
   return mat;
 }

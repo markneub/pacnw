@@ -13,11 +13,14 @@ export const shared = {
   uLodRadius: { value: 85 }, // m; full-detail trees inside, far LOD outside
   uLodBand: { value: 12 }, // m either side of uLodRadius over which the tiers crossfade
   uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
+  uShrubFar: { value: 260 }, // m; their billboards (impostors.js) dissolve away by this radius
   uSun: { value: 0 }, // 0 overcast .. 1 sun break (weather.js)
   uCanopyMap: { value: null }, // R8, 0 open sky .. 1 deep shade (bake.js bakeCanopy)
   uSunMap: { value: null }, // the same at 1 m, barely blurred: sunlight only (bake.js bakeSunMap)
   uGroundH: { value: null }, // R32F terrain grid heights (main.js), for blending objects into the ground
   uGroundGrid: { value: new THREE.Vector4() }, // min x, min z, step, n
+  uGrassMap: { value: null }, // grass.js: density (a) and colour (rgb) per terrain vertex, for the ground's distant tint
+  uGrassTint: { value: new THREE.Vector2(16, 28) }, // m: where the grass tufts fade out (the tint fades in)
   uCanopyRect: { value: new THREE.Vector4(-1000, -1000, 2000, 2000) }, // minX, minZ, sizeX, sizeZ
 };
 
@@ -55,6 +58,37 @@ export function patchLod(shader, mode) {
       .replace('#include <common>', '#include <common>\nvarying float vFadeKeep;')
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
         if (vFadeKeep < 1.0 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) >= vFadeKeep) discard;`);
+    return;
+  }
+  if (mode === 'shrubFar') {
+    // The shrubs' billboards: each pixel the near plant gives up across its dissolve band (the
+    // same per-instance distance and screen-space dither as 'fade' above, so the two are exact
+    // complements) is drawn by its billboard instead; far out, the billboard dissolves away in
+    // turn, where it's a few pixels across.
+    shader.uniforms.uFernRadius = shared.uFernRadius;
+    shader.uniforms.uShrubFar = shared.uShrubFar;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uFernRadius;\nuniform float uShrubFar;\nvarying float vNearKeep;\nvarying float vFarKeep;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        {
+          vec3 fadeP = (modelMatrix * instanceMatrix[3]).xyz;
+          vec3 fh = fract(fadeP * 0.1031);
+          fh += dot(fh, fh.yzx + 33.33);
+          float jit = fract((fh.x + fh.y) * fh.z);
+          float d = length(fadeP.xz - cameraPosition.xz);
+          float r = uFernRadius * (0.86 + 0.14 * jit);
+          vNearKeep = smoothstep(r, r - uFernRadius * 0.16, d);
+          float rf = uShrubFar * (0.8 + 0.2 * fract(jit * 7.31));
+          vFarKeep = smoothstep(rf, rf - uShrubFar * 0.12, d);
+          if (vNearKeep >= 1.0 || vFarKeep <= 0.0) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+        }`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vNearKeep;\nvarying float vFarKeep;')
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        {
+          float lodDither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+          if (lodDither < vNearKeep || lodDither >= vFarKeep) discard;
+        }`);
     return;
   }
   // Crossfade band: across uLodRadius ± uLodBand both tiers are drawn and each

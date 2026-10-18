@@ -187,6 +187,11 @@ function bakeGrassMap(terrain, canopyAt) {
  */
 export function buildGrass(terrain, canopyAt, { lowPower, density = 1 }) {
   const baked = bakeGrassMap(terrain, canopyAt);
+  // past the tufts the ground itself takes on the grass's colour (terrain.js), so where they
+  // fade out they fade into grassy ground instead of bare earth
+  const outer = (lowPower ? RINGS.phone : RINGS.desktop).at(-1).fade;
+  shared.uGrassMap.value = baked.map;
+  shared.uGrassTint.value.set(outer[2], outer[3]);
   const tuft = tuftGeometry();
   const group = new THREE.Group();
   group.name = 'grass';

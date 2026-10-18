@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain } from './terrain.js';
 import { onLoadProgress, loadTick, loadTickNow, loadYielded, longestStall } from './loadprogress.js';
-import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors } from './vegetation.js';
+import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors, bakeShrubImpostors } from './vegetation.js';
 import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
@@ -44,6 +44,8 @@ if (lowPower) {
 if (params.has('near')) VIEW_DIST.treeDetail = parseFloat(params.get('near')); // A/B the full-detail tree radius
 shared.uLodRadius.value = VIEW_DIST.treeDetail;
 shared.uFernRadius.value = VIEW_DIST.ferns;
+// the shrubs' billboards carry on to here, where a fern is a few pixels across (impostors.js)
+shared.uShrubFar.value = VIEW_DIST.ferns * (lowPower ? 2.4 : 2.2);
 
 // ?off=a,b,... switches parts off to find what costs the most on a device:
 // trees, ferns, rocks, terrain, trail, water, sky, weather, env, fog, aa, detail, grass, sun, dapple, post, motes, moss.
@@ -177,9 +179,12 @@ async function init() {
   await loadTickNow(0.1);
   // far trees as billboards (?farTrees=lod: the old 3D far models, for comparison)
   const impostors = params.get('farTrees') === 'lod' ? null : await bakeTreeImpostors(renderer, protos, { lowPower });
+  // and the ferns and salal, as a far tier past where the full-detail ones dissolve
+  const shrubImpostors = await bakeShrubImpostors(renderer, protos, { lowPower });
+  await loadTickNow(1);
   step('tree impostors');
   progress('vegetation'); // the scatter and the instanced chunks
-  const veg = await buildVegetation(protos, trail, { impostors });
+  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors });
   scene.add(veg.group);
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
   step('vegetation');

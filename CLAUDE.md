@@ -388,6 +388,13 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   - Ferns (and salal, maples... everything in 'fade' mode): near pool only; they **dissolve at full size** (screen-space
     dither, like the tree tiers) over the outer ~16% of `uFernRadius`, each instance at its own jittered distance (0.86–1.0 R).
     They used to shrink into the ground, which the user saw as shrubs growing up out of the ground in front of them.
+    **Shrub billboards** (the user: "grass and shrubs popping into place"): ferns and salal (`SHRUB`; not pebbles; vine
+    maple is a 'trees' kind with its own impostors) get a far tier like the trees: `bakeShrubImpostors` (same bake, square
+    frames `aspect: 1`, 64/96 px) and one InstancedMesh per chunk (`chunk.shrubs`), `impostorMaterial(baked, { shrubs })`
+    with `patchLod('shrubFar')`: across the near plants' dissolve band it draws exactly the pixels they give up (same
+    per-instance jitter and screen dither as 'fade'), then dissolves itself by `shared.uShrubFar` (VIEW_DIST.ferns × 2.4
+    phone = 144 m, × 2.2 desktop = 242 m; jittered 0.8–1.0, 12% band), where a fern is a few pixels. Alpha cut 0.22 (thin
+    fronds thin out in the mips). Chunks shown between ~0.86 × uFernRadius and uShrubFar. Off with the ferns (`?off=ferns`).
   - Boulders: near pool + far chunks like trees (`boulder_x` + `boulder_x_lod`). Logs, stumps and furniture: 125 m chunks only.
     Any node with a `<name>_lod` partner gets two tiers (`loadPrototypes` loads forest.glb and rocks.glb).
   - Close-up / photoreal assets belong in near pools. Their cost is bounded by the radius, not the
@@ -550,6 +557,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   height/cut lookups, and `grassNear` hides a ring when no 16 m cell in its reach has density >2% (`cellMax`, a few
   lookups per frame). Good grass views: spawn `pitch=-0.12`,
   lake `x=110&z=470&yaw=-0.67&pitch=-0.12`.
+  **Distant grass tint:** past the outer ring's fade-out (`shared.uGrassTint` = its fade z..w: 16–28 m desktop, 10–18 m
+  phone) the terrain shader mixes toward the grass map's colour × 0.68–0.88 by density × 0.85 (`shared.uGrassMap`, set
+  in `buildGrass`), so tufts shrink into ground that already looks grassy instead of bare earth. One texture fetch on
+  terrain pixels beyond 16/10 m.
 - Shader noise: use the sine-free hash (`fract(p.xyx * .1031)`, Hoskins). `fract(sin(x)*43758)` is
   unreliable on mobile GPUs.
 - `src/bake.js`: prototype vertex AO (vertex colours × instance colours), `bakeCanopy` (2 m grid) feeds

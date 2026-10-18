@@ -811,13 +811,23 @@ export async function bakeTreeImpostors(renderer, protos, { lowPower }) {
   return bakeImpostors(renderer, trees, { frameW: lowPower ? 128 : 192 });
 }
 
+/** Shrubs (ferns, salal) that get a billboard far tier (see impostorMaterial's `shrubs`). */
+const SHRUB = (name) => KIND(name) === 'ferns' && !name.startsWith('pebbles');
+
+/** The same bake for the shrubs: low and wide, so square frames. */
+export async function bakeShrubImpostors(renderer, protos, { lowPower }) {
+  const shrubs = {};
+  for (const [name, parts] of Object.entries(protos)) if (SHRUB(name) && !name.endsWith('_lod')) shrubs[name] = parts;
+  return bakeImpostors(renderer, shrubs, { frameW: lowPower ? 64 : 96, aspect: 1 });
+}
+
 /**
  * Builds the vegetation as per-chunk InstancedMeshes so far-away chunks can be
  * hidden cheaply, and a spatial hash of trunks/rocks for player collisions.
  * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
  * chunk for all tree types, instead of the *_lod models per type.
  */
-export async function buildVegetation(protos, trail, { impostors = null } = {}) {
+export async function buildVegetation(protos, trail, { impostors = null, shrubImpostors = null } = {}) {
   const placements = await scatter(trail);
   addStreamRocks(placements, protos, trail);
   addMarshSnags(placements, trail);
@@ -853,6 +863,7 @@ export async function buildVegetation(protos, trail, { impostors = null } = {}) 
 
   const nearPools = [];
   const impostorBuckets = new Map(); // chunk key -> [{ matrices, idx, colors, frame }]
+  const shrubBuckets = new Map(); // the same for the shrubs' billboards
 
   // Instance colour for one part: foliage/rock parts get the per-instance
   // tint, everything gets the baked canopy shade.
@@ -930,7 +941,8 @@ export async function buildVegetation(protos, trail, { impostors = null } = {}) 
     });
     const farColors = farParts.map((part) => instanceColors(part.material.name, tints, shades, n));
     const frame = kind === 'trees' && impostors?.info[name];
-    const impColors = frame ? instanceColors('LodVertexColor', tints, shades, n) : null;
+    const shrubFrame = SHRUB(name) && shrubImpostors?.info[name];
+    const impColors = frame || shrubFrame ? instanceColors('LodVertexColor', tints, shades, n) : null;
 
     // far tier (or the only tier, for non-trees): one InstancedMesh per chunk per part
     const buckets = new Map();
@@ -945,10 +957,14 @@ export async function buildVegetation(protos, trail, { impostors = null } = {}) 
       if (!chunks.has(key)) {
         chunks.set(key, {
           center: new THREE.Vector2((cx + 0.5) * CHUNK_SIZE, (cz + 0.5) * CHUNK_SIZE),
-          trees: [], rocks: [], ferns: [],
+          trees: [], rocks: [], ferns: [], shrubs: [],
         });
       }
       const chunk = chunks.get(key);
+      if (shrubFrame) {
+        if (!shrubBuckets.has(key)) shrubBuckets.set(key, []);
+        for (const it of items) shrubBuckets.get(key).push({ matrices, idx: it.idx, colors: impColors, frame: shrubFrame });
+      }
       if (frame) {
         // billboards: gathered per chunk across all tree types, built below
         if (!impostorBuckets.has(key)) impostorBuckets.set(key, []);
@@ -988,11 +1004,12 @@ export async function buildVegetation(protos, trail, { impostors = null } = {}) 
     }
   }
 
-  if (impostors) {
-    const tallest = Math.max(...Object.values(impostors.info).map((f) => Math.max(f.height + f.yMin, f.halfWidth * 2)));
-    const geo = impostorGeometry(tallest);
-    const mat = impostorMaterial(impostors);
-    for (const [key, items] of impostorBuckets) {
+  for (const [baked, buckets, shrubs] of [[impostors, impostorBuckets, false], [shrubImpostors, shrubBuckets, true]]) {
+    if (!baked) continue;
+    const tallest = Math.max(...Object.values(baked.info).map((f) => Math.max(f.height + f.yMin, f.halfWidth * 2)));
+    const geo = impostorGeometry(tallest * (shrubs ? 1.8 : 1)); // (shrubs are scaled up to ~1.8)
+    const mat = impostorMaterial(baked, { shrubs });
+    for (const [key, items] of buckets) {
       const im = new THREE.InstancedMesh(geo, mat, items.length);
       im.setColorAt(0, col.setRGB(1, 1, 1)); // allocate instanceColor
       const frames = new Float32Array(items.length * 4);
@@ -1007,10 +1024,10 @@ export async function buildVegetation(protos, trail, { impostors = null } = {}) 
       im.instanceMatrix.needsUpdate = true;
       im.instanceColor.needsUpdate = true;
       im.computeBoundingSphere();
-      im.name = `impostors@${key}`;
-      im.userData.kind = 'trees';
+      im.name = `${shrubs ? 'shrub ' : ''}impostors@${key}`;
+      im.userData.kind = shrubs ? 'ferns' : 'trees';
       group.add(im);
-      chunks.get(key).trees.push(im);
+      chunks.get(key)[shrubs ? 'shrubs' : 'trees'].push(im);
     }
   }
 
@@ -1026,6 +1043,10 @@ export async function buildVegetation(protos, trail, { impostors = null } = {}) 
         const vis = !disabled.has(kind) && d < VIEW_DIST[kind];
         for (const mesh of chunk[kind]) mesh.visible = vis;
       }
+      // the shrubs' billboards: from where the near shrubs give way out to where they dissolve
+      const far = shared.uShrubFar.value;
+      const showShrubs = !disabled.has('ferns') && d < far && d + 2 * halfDiag > shared.uFernRadius.value * 0.86;
+      for (const mesh of chunk.shrubs) mesh.visible = showShrubs;
     }
   }
 

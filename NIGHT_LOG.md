@@ -336,3 +336,9 @@ the nurse logs. The marsh edge looked natural close up after the lake shore chan
 About 120 grey dead trunks now lean against big trees in the valley forest: the base on the ground a few metres out,
 the trunk resting against the side of a living tree's trunk 5-11 m up and running on into its crown, with broken ends
 and branch stubs. They keep clear of the trail, the creeks and other trunks, and you can't walk through their low end.
+
+### 45. No more ferns and grass popping in (the user's request)
+Ferns and salal now have billboard stand-ins, like the far trees: past where the full-detail plants used to dissolve
+in (60 m on a phone) the billboards take over pixel by pixel, and they themselves fade out much further away (about
+140 m on a phone, 240 m on desktop) where a fern is only a few pixels. And grassy ground now takes on the grass's
+colour in the distance, so the 3D tufts fade into green ground instead of bare earth.

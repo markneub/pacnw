@@ -455,6 +455,9 @@ export function buildTerrain() {
     patchSunlight(shader);
     shader.uniforms.uWet = shared.uWet;
     shader.uniforms.uPuddle = shared.uPuddle;
+    shader.uniforms.uGrassMap = shared.uGrassMap;
+    shader.uniforms.uGrassTint = shared.uGrassTint;
+    shader.uniforms.uGrassGrid = shared.uGroundGrid;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aHollow;\nvarying float vHollow;\nvarying vec3 vGroundPos;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvHollow = aHollow;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -467,6 +470,9 @@ export function buildTerrain() {
         float puddle;
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
+        uniform sampler2D uGrassMap;
+        uniform vec2 uGrassTint;
+        uniform vec4 uGrassGrid;
         float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         float gNoise(vec2 p) {
           vec2 i = floor(p);
@@ -481,6 +487,15 @@ export function buildTerrain() {
             && texture2D(uCutMask, cutUv).r > 0.5) discard;
         float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
         diffuseColor.rgb *= 0.78 + gn * 0.44;
+        {
+          // distant grass: as the tufts (grass.js) shrink away with distance, the ground takes on
+          // their colour by their density, so grassy places stay grassy instead of popping
+          float gFar = smoothstep(uGrassTint.x, uGrassTint.y, distance(vGroundPos.xz, cameraPosition.xz));
+          if (gFar > 0.0) {
+            vec4 gm = texture2D(uGrassMap, ((vGroundPos.xz - uGrassGrid.xy) / uGrassGrid.z + 0.5) / uGrassGrid.w);
+            diffuseColor.rgb = mix(diffuseColor.rgb, gm.rgb * (0.68 + 0.2 * gn), gm.a * 0.85 * gFar);
+          }
+        }
         ${wet.color}
         // rain pools in hollows, filling from the deepest spot out as uPuddle rises
         puddle = 0.0;
