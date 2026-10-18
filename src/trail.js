@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
+import { loadTick } from './loadprogress.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
   streams, setWalkModifier, streamBed, marshAt,
@@ -232,7 +233,7 @@ function resample(pts, spacing) {
  * Build the trail: route it, then expose the centreline, a mesh draped on the
  * terrain, and distanceTo(x, z) for keeping vegetation off the tread.
  */
-export function buildTrail() {
+export async function buildTrail() {
   const heights = new Float32Array(NX * NZ);
   const side = new Float32Array(NX * NZ);
   const wet = new Float32Array(NX * NZ);
@@ -250,12 +251,14 @@ export function buildTrail() {
       // (the rapids, streams.js, are where the trail is meant to cross the main creek: cheap there)
       if (c.seg && c.d < c.half + 4) wet[iz * NX + ix] = c.seg.a.rapid > 0.3 ? 0.1 : 1;
     }
+    await loadTick((0.25 * iz) / NZ);
   }
 
   let coarse = [];
   for (let i = 0; i < TRAIL_STOPS.length - 1; i++) {
     const leg = route(heights, side, wet, marsh, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
     coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
+    await loadTick(0.25 + (0.4 * (i + 1)) / (TRAIL_STOPS.length - 1));
   }
   const points = resample(chaikin(coarse, 3), STEP);
 

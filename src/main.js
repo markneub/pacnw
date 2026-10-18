@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid } from './terrain.js';
+import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain } from './terrain.js';
+import { onLoadProgress, loadTick, loadTickNow, loadYielded, longestStall } from './loadprogress.js';
 import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors } from './vegetation.js';
 import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
@@ -85,67 +86,56 @@ function step(label) {
 }
 
 /**
- * Loading bar. Steps block the main thread, so each step animates the bar (a compositor
- * transform, which keeps running while JS is busy) across that step's share of the bar.
+ * Loading bar. Each loading step has a fixed share of the bar, and the long loops inside the
+ * steps report how far along they are (loadprogress.js loadTick), yielding every ~40 ms so the
+ * bar can paint. Each report glides the bar to the new spot over 0.2 s and then lets it creep a
+ * little further toward the step's end, so even a block that can't report keeps it moving.
  *
- * Shares and timing come from how long each step took on this device last time (localStorage),
- * with rough defaults on a first visit, so the bar fills at an even pace instead of racing
- * through quick steps and stalling on slow ones. A segment covers 85% of its share in the
- * expected time and then creeps on over the next 2x that, so a slow step never stops the bar
- * dead. Each segment starts explicitly from where the bar is now (our own timeline: a CSS
- * transition would start from the main thread's stale value and jump backwards), never lower.
+ * The bar is a compositor animation (it keeps running while JS is busy). Each move starts from
+ * where the bar is now by our own timeline (a CSS transition would start from the main thread's
+ * stale value and jump backwards), and it never goes back.
  */
-const LOAD_STEPS = { terrain: 700, trail: 1500, vegetation: 4500, shading: 700, textures: 200, warmup: 1500 };
-const LOAD_KEY = 'pacnw.loadTimes';
-const loadMs = { ...LOAD_STEPS };
-try {
-  const saved = JSON.parse(localStorage.getItem(LOAD_KEY) ?? '{}');
-  for (const k in loadMs) if (saved[k] > 0) loadMs[k] = saved[k];
-} catch { /* no storage: the defaults */ }
-const loadEnd = {}; // where each step's share of the bar ends (the last 3% is the finish)
+const LOAD_SHARE = { terrain: 0.08, trail: 0.1, impostors: 0.15, vegetation: 0.35, shading: 0.06, textures: 0.01, warmup: 0.22 };
+const loadSpan = {}; // [start, end] of each step's share (the last 3% is the finish)
 {
-  const total = Object.values(loadMs).reduce((a, b) => a + b, 0);
   let acc = 0;
-  for (const k in loadMs) loadEnd[k] = 0.97 * (acc += loadMs[k]) / total;
+  for (const [k, w] of Object.entries(LOAD_SHARE)) loadSpan[k] = [acc, (acc += w)];
 }
 const fill = document.getElementById('progress-fill');
-const bar = { from: 0, to: 0, t0: 0, ms: 1 };
-const loadTook = {};
-let segment = null;
-let segmentStart = 0;
-// the bar's position t ms into the current segment: 85% of the way at bar.ms, all of it at 3x
-function barAt(t) {
-  const d = bar.to - bar.from;
-  const u = t / bar.ms;
-  return bar.from + d * (u < 1 ? 0.85 * u : Math.min(1, 0.85 + 0.15 * (u - 1) / 2));
+const bar = { t0: 0, ms: 1, pts: [[0, 0]] }; // the running animation: [offset, scaleX] points
+let span = [0, 0];
+// where the bar is now, from our own copy of the running animation
+function barNow() {
+  const u = Math.min(1, (performance.now() - bar.t0) / bar.ms);
+  const { pts } = bar;
+  for (let i = 1; i < pts.length; i++) {
+    if (u <= pts[i][0]) return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * ((u - pts[i - 1][0]) / Math.max(1e-6, pts[i][0] - pts[i - 1][0]));
+  }
+  return pts[pts.length - 1][1];
 }
-function animateBar(from, to, ms, keyframes) {
-  Object.assign(bar, { from, to, t0: performance.now(), ms: Math.max(1, ms) });
+function animateBar(ms, pts) {
+  Object.assign(bar, { t0: performance.now(), ms, pts });
   fill.getAnimations().forEach((a) => a.cancel());
-  return fill.animate(keyframes, { duration: keyframes.length > 2 ? bar.ms * 3 : bar.ms, easing: 'linear', fill: 'forwards' });
+  return fill.animate(pts.map(([offset, x]) => ({ offset, transform: `scaleX(${x})` })), { duration: ms, easing: 'linear', fill: 'forwards' });
 }
-/** Start the named loading step (ending the one before), or the finish with name null. */
+/** Move the bar to f (0..1) of the current step: glide there, then creep on a little. */
+function barTo(f) {
+  const from = barNow();
+  const to = Math.max(from, span[0] + (span[1] - span[0]) * f);
+  const creep = to + 0.25 * (span[1] - to);
+  animateBar(4200, [[0, from], [200 / 4200, to], [1, creep]]);
+}
+onLoadProgress(barTo);
+/** Start the named loading step, or with null fill the rest of the bar (resolves when shown). */
 function progress(name) {
-  const now = performance.now();
-  if (segment) loadTook[segment] = now - segmentStart;
-  segment = name;
-  segmentStart = now;
-  const from = Math.max(0, barAt(now - bar.t0));
+  loadYielded();
   if (!name) {
-    try {
-      localStorage.setItem(LOAD_KEY, JSON.stringify(Object.fromEntries(Object.entries(loadTook).map(([k, v]) => [k, Math.round(v)]))));
-    } catch { /* not remembered */ }
-    const a = animateBar(from, 1, 350, [{ transform: `scaleX(${from})` }, { transform: 'scaleX(1)' }]);
+    const a = animateBar(350, [[0, barNow()], [1, 1]]);
     // (don't wait on a busy compositor: the start prompt comes after at most 0.5 s)
     return Promise.race([a.finished.catch(() => {}), new Promise((r) => setTimeout(r, 500))]);
   }
-  const to = Math.max(loadEnd[name], from);
-  const mid = from + 0.85 * (to - from);
-  animateBar(from, to, loadMs[name], [
-    { transform: `scaleX(${from})`, offset: 0 },
-    { transform: `scaleX(${mid})`, offset: 1 / 3 },
-    { transform: `scaleX(${to})`, offset: 1 },
-  ]);
+  span = loadSpan[name].map((v) => v * 0.97);
+  barTo(0);
   return null;
 }
 
@@ -157,6 +147,7 @@ async function init() {
   const rockTexReady = loadTextureSet(renderer, 'rocks', { lowPower, flipY: false });
   progress('terrain');
   await nextFrame();
+  await prepareTerrain();
   const terrain = buildTerrain();
   {
     const { heights, n, step } = terrainGrid(); // the mist pass needs the ground's height
@@ -170,21 +161,24 @@ async function init() {
   scene.add(terrain);
   scene.add(buildWater());
   step('terrain');
+  await loadTickNow(1);
 
   progress('trail');
   await nextFrame();
-  const trail = buildTrail();
+  const trail = await buildTrail();
+  await loadTickNow(0.75);
   scene.add(trail.mesh);
   if (!off.has('water')) scene.add(buildStreamWater(trail)); // (the rocks in it skip the footbridges)
   step('trail');
 
-  progress('vegetation'); // models + impostor bake + scatter
+  progress('impostors'); // models + impostor bake
   const protos = await loadPrototypes(['forest', 'rocks'].map((m) => `${import.meta.env.BASE_URL}models/${m}.glb`));
-  await nextFrame();
+  await loadTickNow(0.1);
   // far trees as billboards (?farTrees=lod: the old 3D far models, for comparison)
-  const impostors = params.get('farTrees') === 'lod' ? null : bakeTreeImpostors(renderer, protos, { lowPower });
+  const impostors = params.get('farTrees') === 'lod' ? null : await bakeTreeImpostors(renderer, protos, { lowPower });
   step('tree impostors');
-  const veg = buildVegetation(protos, trail, { impostors });
+  progress('vegetation'); // the scatter and the instanced chunks
+  const veg = await buildVegetation(protos, trail, { impostors });
   scene.add(veg.group);
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
   step('vegetation');
@@ -192,14 +186,17 @@ async function init() {
   progress('shading'); // and grass
   await nextFrame();
   shadeGround(terrain, veg.canopyAt);
+  await loadTickNow(0.4);
   shadeGround(trail.mesh, veg.canopyAt);
   step('ground shading');
+  await loadTickNow(0.55);
 
   // grass reads the ground's baked shade, so it comes after shading. ?grass=50 = half the tufts.
   const grass = off.has('grass') ? null
     : buildGrass(terrain, veg.canopyAt, { lowPower, density: params.has('grass') ? parseFloat(params.get('grass')) / 100 : 1 });
   if (grass) scene.add(grass.mesh);
   step('grass');
+  await loadTickNow(0.85);
 
   const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1 });
   const player = new Player(camera, renderer.domElement, veg.collide);
@@ -237,9 +234,9 @@ async function init() {
 
   progress('warmup');
   await nextFrame();
-  warmUp();
+  await warmUp();
   step('warm-up');
-  if (params.has('perf')) console.info('load:', timings.join(' · '));
+  if (params.has('perf')) console.info('load:', timings.join(' · '), `· longest stall ${longestStall().toFixed(0)} ms`);
 
   await progress(null); // fill the rest where it can be seen, then offer the start
   status.textContent = touch ? 'Tap to start' : 'Click to start';
@@ -361,27 +358,66 @@ function flash(msg, ms = 1500) {
  * and uploads every buffer (including far-away instance chunks) so nothing
  * hitches the first time it comes into view.
  */
-function warmUp() {
+async function warmUp() {
   const restore = [];
   scene.traverse((o) => {
     restore.push([o, o.visible, o.frustumCulled]);
     o.visible = true;
     o.frustumCulled = false;
   });
-  renderer.compile(scene, camera);
+  // Queue the shader builds in batches of objects (without KHR_parallel_shader_compile each
+  // build blocks right here)
+  const drawn = [];
+  scene.traverse((o) => { if (o.isMesh || o.isPoints || o.isLine) drawn.push(o); });
+  const COMPILE_BATCH = 8;
+  for (let i = 0; i < drawn.length; i += COMPILE_BATCH) {
+    for (const o of drawn.slice(i, i + COMPILE_BATCH)) renderer.compile(o, camera, scene);
+    await loadTick((0.3 * (i + COMPILE_BATCH)) / drawn.length);
+  }
+  renderer.compile(scene, camera); // (anything left: the scene's own state)
+  // Link the shaders one at a time (the slow part), so the loading bar can follow along. With
+  // KHR_parallel_shader_compile they build in the background and we wait on each in turn;
+  // without it, getUniforms() is where the driver blocks to finish linking.
+  const programs = renderer.info.programs ?? [];
+  for (const [i, prog] of programs.entries()) {
+    while (!prog.isReady()) await new Promise((r) => setTimeout(r, 4));
+    prog.getUniforms();
+    await loadTick(0.3 + (0.3 * (i + 1)) / programs.length);
+  }
+  // Then draw everything once in batches: reading a pixel back blocks until the GPU has really
+  // finished (buffer and texture uploads included), so that cost lands in loading, not play.
   const target = new THREE.WebGLRenderTarget(16, 16);
-  renderer.setRenderTarget(target);
-  renderer.render(scene, camera);
-  // reading a pixel back blocks until the GPU has really finished (shader
-  // linking and buffer uploads included), so that cost lands in loading, not play
-  renderer.readRenderTargetPixels(target, 0, 0, 1, 1, new Uint8Array(4));
-  renderer.setRenderTarget(null);
+  const px = new Uint8Array(4);
+  // batches of roughly equal work: vertices x instances (a far-chunk mesh is tiny, a near pool
+  // or the grass is not)
+  const cost = drawn.map((o) => {
+    const g = o.geometry;
+    const verts = g?.index ? g.index.count : g?.attributes.position?.count ?? 0;
+    return 1000 + verts * (o.isInstancedMesh ? o.count : g?.isInstancedBufferGeometry ? g.instanceCount : 1);
+  });
+  const total = cost.reduce((a, b) => a + b, 0);
+  const BATCHES = 24;
+  let done = 0;
+  for (let i = 0; i < drawn.length;) {
+    let j = i;
+    let c = 0;
+    while (j < drawn.length && (j === i || c + cost[j] <= total / BATCHES)) c += cost[j++];
+    drawn.forEach((o, k) => { o.visible = k >= i && k < j; });
+    renderer.setRenderTarget(target);
+    renderer.render(scene, camera);
+    renderer.readRenderTargetPixels(target, 0, 0, 1, 1, px);
+    renderer.setRenderTarget(null);
+    done += c;
+    i = j;
+    await loadTick(0.6 + (0.35 * done) / total);
+  }
   target.dispose();
-  post.warmUp(scene, camera);
   for (const [o, visible, culled] of restore) {
     o.visible = visible;
     o.frustumCulled = culled;
   }
+  // and the post passes once, with the normal (culled) view: the scene's shaders are ready
+  post.warmUp(scene, camera);
 }
 
 function nextFrame() {

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED } from './config.js';
+import { loadTick } from './loadprogress.js';
 import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter, patchPuddles } from './materials.js';
 import { SUN_COLOR } from './atmosphere.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
@@ -174,6 +175,19 @@ function heightGrid() {
     }
   }
   return grid;
+}
+
+/** Fill the height grid ahead of buildTerrain, a row at a time, reporting progress (loadprogress.js). */
+export async function prepareTerrain() {
+  if (grid) return;
+  const g = new Float32Array(GRID_N * GRID_N);
+  for (let iz = 0; iz < GRID_N; iz++) {
+    for (let ix = 0; ix < GRID_N; ix++) {
+      g[iz * GRID_N + ix] = heightAt(ix * GRID_STEP - WORLD_SIZE / 2, iz * GRID_STEP - WORLD_SIZE / 2);
+    }
+    await loadTick((0.7 * iz) / GRID_N);
+  }
+  grid = g;
 }
 
 /**

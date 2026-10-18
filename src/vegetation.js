@@ -13,6 +13,7 @@ import { NearPool } from './detail.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
 import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.js';
 import { streamRocks } from './streamwater.js';
+import { loadTick } from './loadprogress.js';
 
 const KIND = (name) => (/^(fern|salal|pebbles)/.test(name) ? 'ferns'
   : /^(boulder|log|stump|signpost|cairn|bench|footbridge|boardwalk)/.test(name) ? 'rocks' : 'trees');
@@ -426,11 +427,19 @@ function pickWeighted(rng, table) {
  * clear. Returns placements grouped by prototype name:
  * [{x, y, z, rotY, scale, tint}].
  */
-function scatter(trail) {
+async function scatter(trail) {
   const rng = mulberry32(SEED * 7 + 3);
   const out = {};
   const add = (name, p) => (out[name] ||= []).push(p);
   const half = WORLD_SIZE / 2 - 20;
+  // progress through the passes below (trees, rocks, ferns, salal, maples, logs, stones),
+  // roughly weighted by how long each takes
+  const SHARE = [0.15, 0.03, 0.25, 0.25, 0.04, 0.03, 0.25];
+  const row = (k, gz) => {
+    let f = 0;
+    for (let i = 0; i < k; i++) f += SHARE[i];
+    return loadTick(0.75 * (f + (SHARE[k] * (gz + half)) / (2 * half)));
+  };
 
   // Trees -----------------------------------------------------------------
   const cell = 7.5;
@@ -473,6 +482,7 @@ function scatter(trail) {
       }
       add(name, { x, y: groundAt(x, z) - 0.3, z, rotY: rng() * Math.PI * 2, scale, tint: rng() });
     }
+    await row(0, gz);
   }
 
   // Rocks, logs, stumps ------------------------------------------------------
@@ -516,6 +526,7 @@ function scatter(trail) {
         add('stump', { x, y: groundAt(x, z) - 0.1, z, rotY: rng() * 6.28, scale: 0.7 + rng() * 0.6, tint: rng() });
       }
     }
+    await row(1, gz);
   }
 
   // Sword ferns ----------------------------------------------------------------
@@ -536,6 +547,7 @@ function scatter(trail) {
         x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.9 + rng() * 0.9, tint: rng(),
       });
     }
+    await row(2, gz);
   }
 
   // Salal: dense patches of low leathery shrubs (after the ferns, so nothing above moves)
@@ -554,6 +566,7 @@ function scatter(trail) {
       if (offStream(x, z) < 1) continue;
       add('salal', { x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.7, tint: rng() });
     }
+    await row(3, gz);
   }
 
   // Vine maple: arching understory trees in loose groves, mostly at forest edges and in
@@ -575,6 +588,7 @@ function scatter(trail) {
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 6) continue;
       add('vine_maple', { x, y: groundAt(x, z) - 0.25, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.45, tint: rng() });
     }
+    await row(4, gz);
   }
 
   // Nurse logs: fallen giants in the old growth, lying along the contour, with an upturned root
@@ -625,6 +639,7 @@ function scatter(trail) {
         else if (what < 0.8) add(rng() < 0.5 ? 'fern_a' : 'fern_b', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.5 + rng() * 0.35, tint: rng() });
       }
     }
+    await row(5, gz);
   }
 
   // Loose stones: clusters of pebbles, cobbles and gravel (near pool, like the ferns). Kicked
@@ -663,6 +678,7 @@ function scatter(trail) {
       const nl = Math.hypot(dhx, 1, dhz);
       add(kind, { x, y: groundAt(x, z) - 0.02 * talus, z, rotY: pick * 97.3, scale, tint: rng(), normal: [-dhx / nl, 1 / nl, -dhz / nl] });
     }
+    await row(6, gz);
   }
 
   placeTrailFurniture(trail, add);
@@ -670,7 +686,7 @@ function scatter(trail) {
 }
 
 /** Bake the far-tree impostors from every tree type's full-detail model (see impostors.js). */
-export function bakeTreeImpostors(renderer, protos, { lowPower }) {
+export async function bakeTreeImpostors(renderer, protos, { lowPower }) {
   const trees = {};
   for (const [name, parts] of Object.entries(protos)) {
     if (KIND(name) === 'trees' && !name.endsWith('_lod') && protos[`${name}_lod`]) trees[name] = parts;
@@ -684,8 +700,8 @@ export function bakeTreeImpostors(renderer, protos, { lowPower }) {
  * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
  * chunk for all tree types, instead of the *_lod models per type.
  */
-export function buildVegetation(protos, trail, { impostors = null } = {}) {
-  const placements = scatter(trail);
+export async function buildVegetation(protos, trail, { impostors = null } = {}) {
+  const placements = await scatter(trail);
   addStreamRocks(placements, protos, trail);
   addMarshSnags(placements, trail);
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
@@ -693,8 +709,13 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
     if (!name.startsWith('pebbles')) continue;
     placements[name] = placements[name].filter((q) => !trail.crossings.some((b) => Math.hypot(q.x - b.x, q.z - b.z) < b.reach + 8));
   }
+  await loadTick(0.77);
   seatStones(placements, protos);
+  await loadTick(0.8);
   const canopyAt = bakeCanopy(placements);
+  await loadTick(0.82);
+  const nPlaced = Object.keys(placements).length;
+  let placed = 0;
   const group = new THREE.Group();
   group.name = 'vegetation';
   const chunks = new Map(); // key -> { cx, cz, kind -> Object3D[] }
@@ -728,6 +749,7 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
   };
 
   for (const [name, list] of Object.entries(placements)) {
+    await loadTick(0.82 + (0.18 * placed++) / nPlaced);
     const kind = KIND(name);
     // trees: far LOD chunks + full-detail near pool; ferns: near pool only
     // (they're invisible past a short radius); everything else: chunks only

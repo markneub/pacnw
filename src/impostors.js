@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadTick } from './loadprogress.js';
 import { patchLod, patchSunlight, sunKey } from './materials.js';
 
 /**
@@ -118,7 +119,7 @@ function dilate(maps, alphaFrom, w, h, passes) {
  * Render every tree type from VIEWS directions into colour + normal atlases.
  * protoParts: { name: [{geometry, material}] } (the full-detail models).
  */
-export function bakeImpostors(renderer, protoParts, { frameW = 128 } = {}) {
+export async function bakeImpostors(renderer, protoParts, { frameW = 128 } = {}) {
   const names = Object.keys(protoParts);
   const fw = frameW;
   const fh = frameW * 2;
@@ -134,7 +135,8 @@ export function bakeImpostors(renderer, protoParts, { frameW = 128 } = {}) {
   const prevAlpha = renderer.getClearAlpha();
   renderer.setClearColor(0x000000, 0);
 
-  names.forEach((name, row) => {
+  const px = new Uint8Array(4);
+  for (const [row, name] of names.entries()) {
     const parts = protoParts[name];
     // extent: height range and the widest reach around the trunk (any rotation)
     let yMin = Infinity;
@@ -150,7 +152,7 @@ export function bakeImpostors(renderer, protoParts, { frameW = 128 } = {}) {
     }
     info[name] = { row, yMin, height: yMax - yMin, halfWidth: reach };
 
-    ['albedo', 'normal'].forEach((kind, t) => {
+    for (const [t, kind] of ['albedo', 'normal'].entries()) {
       scene.clear();
       for (const { geometry, material } of parts) scene.add(new THREE.Mesh(geometry, bakeMaterial(kind, material)));
       cam.left = -reach;
@@ -171,9 +173,13 @@ export function bakeImpostors(renderer, protoParts, { frameW = 128 } = {}) {
         renderer.setRenderTarget(rt);
         renderer.render(scene, cam);
       }
+      // finish this one on the GPU (a 1-pixel read waits for it) so progress is real
+      renderer.readRenderTargetPixels(rt, 0, row * fh, 1, 1, px);
       scene.traverse((o) => { if (o.material) o.material.dispose(); });
-    });
-  });
+      renderer.setRenderTarget(prevTarget);
+      await loadTick((row * 2 + t + 1) / (names.length * 2 + 1));
+    }
+  }
 
   // read back, fix the edges, and turn into mipmapped textures
   const read = (rt) => {

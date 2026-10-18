@@ -536,12 +536,22 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   controls hint toasts once on start. `progress(to, expectedMs)` in `main.js` animates the bar with a
   compositor transform (Web Animations, linear), so it keeps moving while a blocking step runs. Each segment starts from our own
   computed position, never lower: CSS transitions restarted from the main thread's stale value and jumped backwards.
-  **Paced by this device's last load** (the user: it stalled halfway, then the end flashed by): `progress('<step>')` starts
-  each named step (`LOAD_STEPS`: terrain, trail, vegetation, shading, textures, warmup, with first-visit defaults in ms);
-  each step's share of the bar and its expected time come from the durations saved in localStorage (`pacnw.loadTimes`) on
-  the previous load. A segment covers 85% of its share in the expected time, then creeps through the rest over 2× that,
-  so a slow step never freezes the bar. `await progress(null)` saves the timings and fills the last 3% over 350 ms
-  (waiting ≤ 0.5 s) before "Tap to start". Adding a loading step = a new `LOAD_STEPS` key + a `progress()` call.
+  **Real progress, no stalls** (the user: it stalled halfway, then the end flashed by; saved per-device timings were tried
+  and dropped at the user's request): each step has a fixed share (`LOAD_SHARE` in main.js) and the long loops report
+  how far along they are with `await loadTick(f)` (`src/loadprogress.js`), which every ~40 ms reports to the bar and
+  yields a `setTimeout(0)` task so the page paints: `prepareTerrain()` (the height grid, a row at a time, before
+  `buildTerrain`), `buildTrail` (async: grid rows, each A* leg), `bakeImpostors` (async: per tree type × albedo/normal, with
+  a 1-pixel readback so the GPU work is really done), `scatter`/`buildVegetation` (async: every row of each scatter pass,
+  weighted by `SHARE`, then each placement type), and `warmUp` (async: `renderer.compile(object, camera, scene)` in
+  batches of 8, then each program in `renderer.info.programs` linked in turn (waits on `isReady()` with
+  KHR_parallel_shader_compile, then `getUniforms()`), then 24 draws of cost-balanced batches (vertices × instances) to a
+  16×16 target with a pixel readback each; `post.warmUp` runs after visibility is restored, with the normal culled view:
+  with everything visible and unculled it drew the whole world at full resolution). `loadTickNow(f)` forces a yield
+  between sync steps. Each report glides the bar there in 0.2 s and then creeps 25% further toward the step's end over
+  4 s. Awaits keep the scatter's rng order: instance counts are identical. `?perf` logs `longest stall` (SwiftShader:
+  2.4 s, was 7+ s and ~30 s of silent warm-up; a real GPU is far faster). `await progress(null)` fills the last 3% over
+  350 ms (≤ 0.5 s wait) before "Tap to start".
+
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216
   (the user's phone ran ~18 ms/frame avg, worst mid-20s, no hitches). After tiers: desktop 1.57M/286,

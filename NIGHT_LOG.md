@@ -303,3 +303,9 @@ wet glint. The marsh and the ponds get the same treatment.
 The bar used fixed guesses for how long each step takes, so on a phone it stalled about halfway (building the forest)
 and then raced through the end. Now each step's share of the bar comes from how long it took on this device last time,
 a slow step keeps creeping instead of stopping, and the last bit fills visibly before "Tap to start".
+
+### 39. The loading bar follows real progress (the user: no saved profiles)
+Dropped the saved per-device timings. The slow loading work (terrain, trail, the forest scatter, the far-tree bake and
+the shader warm-up) now reports how far along it is and briefly hands control back to the browser about 25 times a
+second, so the bar keeps moving with the actual work. The warm-up also stopped drawing the whole world at full
+resolution once.
