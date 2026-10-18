@@ -24,6 +24,8 @@ import { loadTextureSet } from './textures.js';
 const MATERIAL_LAYER = {
   Bark: 'bark', CedarBark: 'cedar', SnagBark: 'snag', Rock: 'rock', ScanRockA: 'rock', ScanRockB: 'rock',
   RootSoil: 'soil', // the torn face of a root wad: earth (the bark photo made it read as a slice of trunk)
+  BrokenWood: 'snag', // a nurse log's splintered break: grey weathered wood fibres
+  RotWood: 'soil', // its punky rotten heart
 };
 
 export const surfaceDetail = {

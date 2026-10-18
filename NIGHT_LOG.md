@@ -316,3 +316,9 @@ most never reached the screen, while the perf overlay (and the automatic resolut
 now waits until the GPU has caught up to within two frames. The game runs at the rate the screen really shows, the
 overlay reports it honestly (with a "gpu-bound" share), and the automatic resolution can step down, now also below 1×
 on a big 4K window.
+
+### 41. Nurse logs sit on the ground; a real broken end (found by the user)
+The fallen logs were set by the lowest ground under them, so a hump in the middle swallowed some to the top (the one
+before the first bridge). They're now seated so their top half always shows, and spots where a log would bridge a dip
+get none (about a third). The broken end was drawn inside out, so you saw into a hollow tube; it's now a ragged rim of
+splinters around a torn face of grey wood with a red-brown rotten heart.

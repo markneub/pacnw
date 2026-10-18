@@ -89,6 +89,14 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   of the back; ~35 thin rootlets hanging from the rim. Roots use `RootSoil` too (bark-coloured ones took moss green and
   read as sticks); `RootSoil` → the surface photo `soil` (brown_mud_02, copied from the ground set; the bark photo made the
   plate read as a slice of trunk) and moss 0.25. ~3.2k tris (was ~1k).
+  **Nurse log seating + broken end** (the user: "you can see through the top", "the cut end isn't realistic"): placement
+  took the lowest of 5 ground samples, so a hump under the middle buried the log to its top (1.5 m at the one by the
+  first bridge). Now 17 × 3 samples along/across it: y is set so the ground comes up at most 0.9 r into the trunk
+  anywhere, and the log is left out (rng still drawn, so nothing else moves) where its underside would then be > 0.4 m off
+  the ground: 563 → 373 logs. The broken end (own rng `seed + 151`) was a splinter cone wound inside out (culled: you saw
+  into the hollow tube); now a ragged bark-backed rim (mostly 0.1–0.45 m splinters, a quarter 0.5–0.9 m), a torn face of
+  `BrokenWood` (0.6, 0.52, 0.42; snag photo) and a pit of punky `RotWood` (0.5, 0.29, 0.17; soil photo) hollowed back into
+  the heart. End faces get little light under the canopy: darker colours read as black.
   **Vine maple** leaves: `maple_spray()` shades each leaf (lighter centre, darker rim, mottle) with a soft shadow on the
   leaves beneath, lobes cut ~1/3 in; the cards are **folded** (`_card(fold=0.45)`: a shallow V along the twig, 4 tris; each
   half rises 0.45 × its width), with more roll, since flat horizontal cards seen at eye level were thin streaks. `fold=0`

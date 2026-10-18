@@ -176,6 +176,8 @@ def mats():
         "soil": material("RootSoil", (0.4, 0.31, 0.22)),
         "plank": material("Plank", (0.4, 0.36, 0.3)),  # weathered boards
         "log_end": material("LogEnd", (0.42, 0.37, 0.31)),  # weathered, greyed end grain (fresh "Wood" read as orange)
+        "rot_wood": material("RotWood", (0.5, 0.29, 0.17)),  # punky red-brown heartwood rot inside a broken log
+        "broken_wood": material("BrokenWood", (0.6, 0.52, 0.42)),  # its splintered break (light: the end faces get little light)
         "sign_post": material("SignPost", (0.33, 0.23, 0.15)),
         "lod": material("LodVertexColor", (1.0, 1.0, 1.0), 0.85),
         "fir_cards": card_material("FirCards", os.path.join(ROOT, "public", "textures", "foliage", "fir_spray.png")),
@@ -881,13 +883,35 @@ def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
         for i in range(sides):
             j = (i + 1) % sides
             b.face((lo[i], lo[j], hi[j], hi[i]), bark)
-    # broken end: a jagged cone of splinters
+    # Broken end (own rng, seed + 151): the trunk snapped when it fell and has rotted since. A
+    # ragged rim of bark-backed splinters, mostly short with a few long ones; inside it the torn,
+    # fibrous broken face; and a punky, rotten heart hollowed back into the trunk. (The old end was
+    # a cone of splinters wound inside out, so it was culled: you saw into the hollow tube.)
+    # Faces wind (prev[i], prev[j], next[j], next[i]) going out along +X or in toward the axis,
+    # which faces them outward; there's no normal recalculation for this asset.
+    er = random.Random(seed + 151)
     loop, x, r, bend, zc = loops[-1]
-    for i in range(sides):
-        j = (i + 1) % sides
-        tip = b.v((x + rng.uniform(0.2, 1.4) * (1.0 if i % 3 else 0.4), bend + math.cos(TAU * (i + 0.5) / sides) * r * 0.45,
-                   zc + math.sin(TAU * (i + 0.5) / sides) * r * 0.45))
-        b.face((loop[j], loop[i], tip), M["log_end"])
+
+    def ring(rr, dx, jag=None, wob=0.0):
+        out = []
+        for i in range(sides):
+            a = TAU * i / sides
+            q = rr * (1.0 + er.uniform(-wob, wob))
+            out.append(b.v((x + dx + (jag[i] if jag else 0.0), math.cos(a) * q + bend, math.sin(a) * q + zc)))
+        return out
+
+    jag = [er.uniform(0.5, 0.9) if er.random() < 0.25 else er.uniform(0.1, 0.45) for _ in range(sides)]
+    rim = ring(r * 0.9, 0.0, jag, 0.04)  # splinter tips (bark outside)
+    lip = ring(r * 0.62, 0.0, [0.45 * j for j in jag], 0.1)  # the inner edge of the broken wood
+    pit = ring(r * 0.35, -0.25 * r, None, 0.15)  # down into the rotten heart
+    for k in range(sides):
+        m = (k + 1) % sides
+        b.face((loop[k], loop[m], rim[m], rim[k]), bark)
+        b.face((rim[k], rim[m], lip[m], lip[k]), M["broken_wood"])
+        b.face((lip[k], lip[m], pit[m], pit[k]), M["rot_wood"])
+    heart = b.v((x - 0.55 * r, bend, zc))
+    for k in range(sides):
+        b.face((pit[k], pit[(k + 1) % sides], heart), M["rot_wood"])
     # Root wad at the root end: a windthrown tree tears up a thick, lumpy plate of soil with its
     # roots (a flat disc read as a slice of trunk). The roots are earth-coated too (RootSoil:
     # bark-coloured roots took the moss shader's green and read as sticks). Thick roots flare out of the trunk end across

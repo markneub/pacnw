@@ -615,17 +615,35 @@ async function scatter(trail) {
       const dz = Math.sin(ang);
       const half_ = (NURSE.length / 2) * scale;
       let ok = true;
-      let y = Infinity;
       for (let k = -2; k <= 2; k++) {
         const px = x + dx * half_ * k * 0.5;
         const pz = z + dz * half_ * k * 0.5;
         if (trail.distanceTo(px, pz) < TRAIL_WIDTH + 2.5 || Math.hypot(px - SPAWN.x, pz - SPAWN.z) < 12 || offStream(px, pz) < 3) ok = false;
-        y = Math.min(y, groundAt(px, pz));
       }
       if (!ok) continue;
+      // Seat it so that nowhere along or across it does the ground come up more than 0.9 of a
+      // radius into the trunk (its top half always shows: a hump under the middle once swallowed
+      // it to the top), and leave it out where that has it bridging a dip (its underside more
+      // than 0.4 m off the ground). About 2/3 of the spots keep their log.
+      let y = -Infinity;
+      const under = []; // the ground minus the log's underside there (above its origin)
+      for (let k = 0; k <= 16; k++) {
+        const u = 0.02 + (0.96 * k) / 16;
+        const along = (u - 0.5) * NURSE.length * scale;
+        const { r, top } = nurseAt(u);
+        for (const side of [-0.7, 0, 0.7]) {
+          const px = x + dx * along - dz * r * scale * side;
+          const pz = z + dz * along + dx * r * scale * side;
+          const d = groundAt(px, pz) - (top - r - Math.sqrt(1 - side * side) * r) * scale;
+          under.push(d);
+          y = Math.max(y, d - 0.9 * r * scale);
+        }
+      }
+      const seated = under.every((d) => y - d < 0.4);
       // three's rotation about Y maps local +X to (cos r, -sin r)
       const rotY = Math.atan2(-dz, dx);
-      add('log_nurse', { x, y: y - 0.1, z, rotY, scale, tint: rng(), axis: [dx, dz] });
+      const tint = rng(); // (drawn either way, with what grows on it, so the rng sequence stays put)
+      if (seated) add('log_nurse', { x, y, z, rotY, scale, tint, axis: [dx, dz] });
       // what grows on it
       for (let k = 0; k < 12; k++) {
         const u = 0.12 + 0.78 * rng();
@@ -633,10 +651,11 @@ async function scatter(trail) {
         const { top } = nurseAt(u);
         const px = x + dx * along;
         const pz = z + dz * along;
-        const py = y - 0.1 + top * scale - 0.05;
+        const py = y + top * scale - 0.05;
         const what = rng();
-        if (what < 0.35) add('sapling', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.2 + rng() * 0.18, tint: rng() });
-        else if (what < 0.8) add(rng() < 0.5 ? 'fern_a' : 'fern_b', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.5 + rng() * 0.35, tint: rng() });
+        const put = (name, it) => seated && add(name, it);
+        if (what < 0.35) put('sapling', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.2 + rng() * 0.18, tint: rng() });
+        else if (what < 0.8) put(rng() < 0.5 ? 'fern_a' : 'fern_b', { x: px, y: py, z: pz, rotY: rng() * 6.28, scale: 0.5 + rng() * 0.35, tint: rng() });
       }
     }
     await row(5, gz);
