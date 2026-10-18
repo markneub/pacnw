@@ -513,6 +513,8 @@ export function buildWater() {
     shader.uniforms.uTime = shared.uTime;
     shader.uniforms.uWet = shared.uWet;
     shader.uniforms.uRain = shared.uRain;
+    shader.uniforms.uShoreGround = shared.uGroundH;
+    shader.uniforms.uShoreGrid = shared.uGroundGrid;
     patchGlitter(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vWaterXZ;\nvarying float vWaterY;')
@@ -525,7 +527,28 @@ export function buildWater() {
         varying vec2 vWaterXZ;
         varying float vWaterY;
         ${GLITTER_GLSL}
+        uniform highp sampler2D uShoreGround;
+        uniform vec4 uShoreGrid; // min x, min z, step, n
+        float shoreLine = 0.0; // the thin wet glint where the water meets the shore
         float wHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float wNoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = p - i;
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), f.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), f.x), f.y);
+        }
+        // the rendered terrain's height under this point (same grid and triangulation as groundAt)
+        float shoreGround(vec2 xz) {
+          vec2 g = clamp((xz - uShoreGrid.xy) / uShoreGrid.z, vec2(0.0), vec2(uShoreGrid.w - 1.0001));
+          ivec2 i = ivec2(floor(g));
+          vec2 f = g - vec2(i);
+          float ha = texelFetch(uShoreGround, i, 0).r;
+          float hb = texelFetch(uShoreGround, i + ivec2(0, 1), 0).r;
+          float hc = texelFetch(uShoreGround, i + ivec2(1, 1), 0).r;
+          float hd = texelFetch(uShoreGround, i + ivec2(1, 0), 0).r;
+          return f.x + f.y <= 1.0 ? ha + (hd - ha) * f.x + (hb - ha) * f.y
+            : hc + (hb - hc) * (1.0 - f.x) + (hd - hc) * (1.0 - f.y);
+        }
         vec2 rainRing(vec2 p, float t) {
           vec2 cell = floor(p);
           vec2 f = fract(p) - 0.5;
@@ -538,10 +561,24 @@ export function buildWater() {
           return d / r * ring;
         }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+        // marsh water: shallow, still and stained brown with tannins from the peat
+        float mw = 1.0 - smoothstep(0.55, 1.0, length((vWaterXZ - vec2(${MARSH.x.toFixed(1)}, ${MARSH.z.toFixed(1)})) / vec2(${MARSH.rx.toFixed(1)}, ${MARSH.rz.toFixed(1)})));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.021, 0.01), mw * 0.9);
         {
-          // marsh water: shallow, still and stained brown with tannins from the peat
-          float mw = 1.0 - smoothstep(0.55, 1.0, length((vWaterXZ - vec2(${MARSH.x.toFixed(1)}, ${MARSH.z.toFixed(1)})) / vec2(${MARSH.rx.toFixed(1)}, ${MARSH.rz.toFixed(1)})));
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.021, 0.01), mw * 0.9);
+          // The shore. The terrain's 5 m triangles cut the flat water along straight lines, so the
+          // water ends a little before that, where it is (noisy) 3–30 cm deep: a ragged, wandering
+          // waterline that laps slowly up and back. Shallows are clearer and take the bed's colour,
+          // with a faint wet glint along the edge.
+          float depth = vWaterY - shoreGround(vWaterXZ);
+          float en = wNoise(vWaterXZ * 0.45) * 0.6 + wNoise(vWaterXZ * 1.7 + 11.0) * 0.3 + wNoise(vWaterXZ * 6.0 + 5.0) * 0.1;
+          float edge = 0.03 + 0.27 * en + 0.025 * sin(uTime * 0.7 + en * 9.0);
+          edge = mix(edge, 0.005 + 0.03 * en, mw); // the marsh is only ~8 cm deep between the tussocks
+          float wet = smoothstep(edge, edge + 0.05, depth);
+          if (wet < 0.01) discard;
+          float shallow = smoothstep(edge, edge + 0.9, depth);
+          diffuseColor.rgb = mix(vec3(0.05, 0.045, 0.03), diffuseColor.rgb, shallow);
+          diffuseColor.a *= wet * mix(0.45, 1.0, shallow);
+          shoreLine = exp(-pow((depth - edge - 0.03) * 40.0, 2.0)) * wNoise(vWaterXZ * 3.0 + uTime * 0.3) * (1.0 - mw);
         }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
@@ -576,6 +613,7 @@ export function buildWater() {
           refl = mix(shore, refl, smoothstep(treeTop - 0.01, treeTop + 0.01, e));
           float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(normal, wV), 0.0, 1.0), 5.0);
           reflectedLight.indirectSpecular = refl * fres * 1.15;
+          reflectedLight.indirectSpecular += fogColor * shoreLine * 0.15;
           // sun glitter (calm open water: a moderate wave-slope spread; rain roughens it)
           vec3 glP = vec3(vWaterXZ.x, vWaterY, vWaterXZ.y);
           reflectedLight.indirectSpecular += ${'vec3(' + [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b].map((v) => v.toFixed(3)).join(', ') + ')'} * glitter(glP, normalize(cameraPosition - glP), 0.16 + 0.06 * uWet);

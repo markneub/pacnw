@@ -293,3 +293,8 @@ brown with the paint peeling to grey wood, two bolts, and white routed capitals.
 ### 36. Arrows on the trail signs; the post holds the top plank
 Each destination now has an arrow for the way to go: the signs stand beside the trail facing it, so stops further along
 point left and those behind point right. The post now runs up past the board, so from behind the top plank is attached.
+
+### 37. A natural lake shore (found by the user)
+The waterline followed the ground's 5 m triangles in straight lines. The water now fades out in the last few centimetres
+of depth along a ragged, wandering edge that laps gently, through clearer shallows that show the muddy bed, with a faint
+wet glint. The marsh and the ponds get the same treatment.

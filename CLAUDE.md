@@ -207,6 +207,13 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   rings: density in the marsh down to WATER_LEVEL − 0.35 (out of the water) in noise clumps, ×3.2 tall (`gMarsh` ellipse in
   the vertex shader), olive `SEDGE` going to straw. ~10 dead **snags** on hummocks (`addMarshSnags`, hash on a 9 m grid).
   Views (from the boardwalk): `x=187&z=465`. Gotcha for scripted renders: call `grass.update(camera)` after moving the camera.
+- **Lake shore** (lake/pond shader in terrain.js `buildWater`; the user: edges "too straight and geometric"): the flat water
+  cut the 5 m terrain triangles along straight lines. Now each water pixel reads the rendered ground under it
+  (`shoreGround`, `uGroundH` with groundAt's triangulation) and the water ends where it is 3–30 cm deep by 3-octave value
+  noise (2–0.17 m features), lapping ±2.5 cm slowly, so the mesh intersection is never seen (`discard` past the edge).
+  Shallows (to ~0.9 m beyond the edge) go clearer (alpha × 0.45–1) toward a muddy bed colour, with a faint broken wet glint
+  at the edge. In the marsh (~8 cm deep between tussocks) the edge is 0.5–3.5 cm, or its water vanished. Cost: 4 texelFetch
+  + 4 noise lookups on water pixels. Views: `x=279.7&z=416.4&yaw=0.98&pitch=-0.3`, pond `x=-345&z=215&yaw=0.98&pitch=-0.25`.
 - **Sun glitter** (`GLITTER_GLSL` + `patchGlitter` in materials.js, used by the lake and stream shaders): world-anchored
   cells (6 cm, doubling with distance in blended power-of-two LODs, `0.004·dist`), each holding one round facet point at a
   random spot that re-rolls 3–7×/s (staggered, fading in/out). A facet flashes with probability exp(−tan²θh/σ²) × 0.3,
