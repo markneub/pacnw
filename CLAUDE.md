@@ -279,7 +279,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   replacing `opaque_fragment`. Swell amplitude `uOSwell` 0.7 m. Debug trick: output (oFoam, cycle, oFilm) as the colour.
   Budget (container, `still`): beach view phone 22 draws / 0.13M tris (0.10M with `off=water`), desktop 41 / 0.40M;
   phone spawn 186 / 1.19M (the grid is drawn whenever the coast is within the far plane; out of sight it's depth-rejected).
-  No phone bench yet: `?bench=ocean&views=beach`.
+  **Phone bench** (`?bench=ocean&views=beach`, DPR 1.75, full clock): beach full frame 3.4 ms, ocean 0.5 ±0.3 ms (14 draws, 0.10M tris).
 - **Lake shore** (lake/pond shader in terrain.js `buildWater`; the user: edges "too straight and geometric"): the flat water
   cut the 5 m terrain triangles along straight lines. Now each water pixel reads the rendered ground under it
   (`shoreGround`, `uGroundH` with groundAt's triangulation) and the water ends where it is 3–30 cm deep by 3-octave value
