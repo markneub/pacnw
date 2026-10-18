@@ -153,6 +153,8 @@ export function baseHeight(x, z) {
 /** The marsh: 1 in its flat middle, easing to 0 at its edge (an irregular oval by the lake). */
 export const MARSH = { x: 165, z: 478, rx: 62, rz: 30 };
 export function marshAt(x, z) {
+  // (cheap out first: this runs in every height lookup, and the noise was measurable at load)
+  if (Math.abs(x - MARSH.x) > MARSH.rx * 1.3 || Math.abs(z - MARSH.z) > MARSH.rz * 1.3) return 0;
   const d = Math.hypot((x - MARSH.x) / MARSH.rx, (z - MARSH.z) / MARSH.rz) + nDetail(x * 0.03 + 11, z * 0.03) * 0.18;
   return 1 - smoothstep(0.65, 1.0, d);
 }
