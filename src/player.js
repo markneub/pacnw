@@ -19,7 +19,8 @@ export class Player {
     this.pitch = 0;
     this.keys = new Set();
     this.onGround = true;
-    this.bob = 0;
+    this.bob = 0; // footstep phase (2π per step)
+    this.bobAmp = 0; // eases with speed
     this.locked = false;
     this.stick = new THREE.Vector2(); // analog input: x = strafe, y = forward, length 0..1
     this.moveDir = new THREE.Vector3(); // reused each frame (no per-frame garbage)
@@ -133,13 +134,26 @@ export class Player {
     }
 
     const moving = Math.hypot(this.vel.x, this.vel.z);
-    if (this.onGround) this.bob += dt * moving * 1.6;
-    this.syncCamera(moving);
+    // Gait: the head dips once per footstep and sways a little toward the planted foot once
+    // per stride. The game walks fast (5 m/s), so steps are sized for a natural cadence: ~2.1
+    // steps/s walking, ~2.9 running. The motion eases in and out with speed, so stopping settles
+    // instead of freezing mid-bob.
+    if (this.onGround) this.bob += (dt * moving * 2 * Math.PI) / (1 + 0.27 * moving);
+    const want = this.onGround ? Math.min(1, moving / PLAYER.walkSpeed) * (1 + 0.5 * Math.min(1, Math.max(0, moving - PLAYER.walkSpeed) / 6)) : 0;
+    this.bobAmp += (want - this.bobAmp) * Math.min(1, dt * 6);
+    this.syncCamera();
   }
 
-  syncCamera(moving = 0) {
-    const bob = Math.sin(this.bob) * Math.min(moving, 6) * 0.012;
-    this.camera.position.set(this.pos.x, this.pos.y + PLAYER.eyeHeight + bob, this.pos.z);
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
+  syncCamera() {
+    const a = this.bobAmp;
+    const stride = this.bob * 0.5; // two steps per stride
+    const dip = (Math.cos(this.bob) - 1) * 0.5 * 0.035 * a; // 0 at mid-stance .. -3.5 cm at heel strike
+    const sway = Math.sin(stride) * 0.012 * a;
+    this.camera.position.set(
+      this.pos.x + Math.cos(this.yaw) * sway,
+      this.pos.y + PLAYER.eyeHeight + dip,
+      this.pos.z - Math.sin(this.yaw) * sway,
+    );
+    this.camera.rotation.set(this.pitch, this.yaw, Math.sin(stride) * 0.004 * a);
   }
 }

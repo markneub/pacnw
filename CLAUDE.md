@@ -153,6 +153,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   term), the mist light in post.js and the motes. The soft 2 m map (two 5-tap passes) closed the gaps between crowns, so
   shafts were broad glows. Load +0.4 s in the container. Everything else (rain shelter, puddle/stream reflections, glitter
   shade, instance tints, grass) keeps the soft map.
+- **Player head bob** (`player.js` `syncCamera`, no option): gait-based. Phase advances 2π per step, step length
+  1 + 0.27 × speed m (the game walks at 5 m/s, so real step lengths would be a 6 Hz jitter): ~2.2 steps/s walking, ~2.9
+  running. Head dips (cos − 1)/2 × 3.5 cm per step, sways ±1.2 cm sideways and rolls ±0.004 rad once per stride, all
+  × `bobAmp` (eases with speed at 6/s, ×1.5 running, 0 in the air). Replaced a plain 1.3 Hz sine of up to ±7 cm.
 - `src/terrain.js`: `heightAt(x,z)` is the smooth noise height that drives terrain generation and scatter
   decisions. `groundAt(x,z)` is the height of the *rendered* triangulated mesh. Use it for anything that
   must sit on the ground (instances, player feet, trail ribbon). `snowlineAt`/`snowAmount` keep ground snow, snowy-tree choice and rain→snow consistent.
@@ -416,7 +420,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 
 - Wet look: done (rain sheltered by the canopy, trunk rivulets, leaf sheen, puddles, wet-rock film). (Done: sharper god-ray shafts, see Sun map.)
 - Tree cost is fill-bound (see the reverted mid tier): try cutting card overdraw if the frame budget gets tight.
-- Subtle head bob while walking (no option: opinionated).
+- (Done: head bob, see Player.)
 - **Next (the user's plan, in order):**
   1. (Done: landscape rework, see Map.)
   2. (Done: streams, see Streams.)

@@ -153,3 +153,8 @@ Sunlight through the trees (sunflecks, the light in the mist, the floating motes
 the crowns instead of a soft, blurred 2 m one, so the gaps between crowns stay open: shafts read as distinct beams with
 edges rather than broad glows. Look (sun): spawn `?weather=sun&yaw=0.98&pitch=0.1`. Cost: ~0.4 s more load in the
 container, ~8 MB of GPU memory; per-frame cost unchanged (same samples).
+
+### 16. Head bob
+Walking now moves your head the way a walk does: a small dip with each footstep (about 2 steps a second), a slight sway
+from side to side with each stride and a tiny roll, a bit stronger when running, settling smoothly when you stop. The old
+bob was a slow, larger up-and-down wave. No option for it, as agreed. (Not visible in still renders: walk around to judge.)
