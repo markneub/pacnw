@@ -309,3 +309,10 @@ Dropped the saved per-device timings. The slow loading work (terrain, trail, the
 the shader warm-up) now reports how far along it is and briefly hands control back to the browser about 25 times a
 second, so the bar keeps moving with the actual work. The warm-up also stopped drawing the whole world at full
 resolution once.
+
+### 40. Frame pacing for GPUs that fall behind (the user's M1 Mac mini)
+The browser kept asking for 60 frames a second even when the Mac's GPU could only finish a few, so frames piled up and
+most never reached the screen, while the perf overlay (and the automatic resolution) thought all was well. Each frame
+now waits until the GPU has caught up to within two frames. The game runs at the rate the screen really shows, the
+overlay reports it honestly (with a "gpu-bound" share), and the automatic resolution can step down, now also below 1×
+on a big 4K window.

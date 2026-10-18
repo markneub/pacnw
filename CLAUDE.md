@@ -568,6 +568,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   Bench at DPR 2 (804×1300, with bark/rock textures): full 4.7–5.2 ms at full clock, 12–13 ms after the mid-run clock drop
   (it hit ~20–25 s into a flat-out run both times, so it looks like a sustained-load/heat limit). Bark/rock textures 0.0 ±0.3,
   ground detail ~0, trees 1.1–1.6 (4.8 slow), ground 0.6 (2.4 slow), sky 0.3–1.3. In the slow state DPR 2 vs 1.5 costs ~3 ms. 
+  **GPU frame pacing** (`src/framepacer.js`; the user's M1 Mac mini: `?perf` said 50–60 fps while the screen showed
+  ~5–10, and 4K fullscreen "30 fps" looked far worse): the browser kept calling rAF at 60 Hz while the GPU fell behind,
+  so frames queued and most were never shown, and `?perf`/autores (which time rAF) saw nothing wrong. Each frame now ends
+  with a `fenceSync`; a frame starts only when ≤ 2 earlier ones are still on the GPU (polled with `getSyncParameter`,
+  no blocking; a fence older than 250 ms is dropped), else that rAF is skipped. So the loop runs at the rate the GPU
+  delivers, perf and autores see the real frame rate, and `?perf` line 3 shows `gpu-bound N%` (skipped rAFs).
+  Desktop autores floor is now a function: 1, or lower for a big canvas (down to ~2 Mpx, min 0.5: a 4K window at DPR 1
+  is 8 Mpx), re-read at each step so going fullscreen later counts. Can't be exercised in SwiftShader (it blocks inside
+  each frame); verify on the Mac.
   Safety net: `src/autores.js` steps DPR down 0.25 (floor 1.25 phone / 1 desktop) when >10% of frames over a full 120-frame window
   take >22 ms. It holds 2 s after start and after each step, treats >250 ms gaps as pauses, and never steps back up (no
   oscillation). Each step is one framebuffer realloc (a single hitch). Off with `?dpr=`, `?autores=0` or `?still`. The `?perf`

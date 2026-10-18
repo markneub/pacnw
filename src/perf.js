@@ -72,6 +72,8 @@ export class PerfOverlay {
     }
     this.sync = !this.ext && mode === 'sync';
     this.pixel = new Uint8Array(4);
+    this.pacer = null; // set by main.js
+    this.drawnSincePaint = 0;
   }
 
   /** Call at the very start of the frame. */
@@ -105,6 +107,7 @@ export class PerfOverlay {
     const ms = now - this.last;
     this.last = now;
     this.frame.push(ms);
+    this.drawnSincePaint++;
     if (ms > 50 && this.frame.count > 30) this.hitches++;
     if (now < this.nextPaint) return;
     this.nextPaint = now + 500;
@@ -146,6 +149,15 @@ export class PerfOverlay {
       text += `cpu ${cpu} · gpu n/a here (use ?bench)`;
     }
     const { calls, triangles } = this.renderer.info.render;
-    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris · dpr ${this.renderer.getPixelRatio()}`;
+    // animation frames skipped because the GPU was behind (framepacer.js): GPU-bound when > 0
+    let wait = '';
+    if (this.pacer) {
+      const drawn = this.drawnSincePaint;
+      const skipped = this.pacer.skipped;
+      this.pacer.skipped = 0;
+      wait = ` · gpu-bound ${Math.round((100 * skipped) / Math.max(1, skipped + drawn))}%`;
+    }
+    this.drawnSincePaint = 0;
+    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris · dpr ${this.renderer.getPixelRatio()}${wait}`;
   }
 }

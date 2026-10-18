@@ -13,6 +13,7 @@ import { shadeGround } from './bake.js';
 import { NearPool } from './detail.js';
 import { buildSigns } from './signs.js';
 import { PerfOverlay } from './perf.js';
+import { FramePacer } from './framepacer.js';
 import { loadGroundDetail } from './grounddetail.js';
 import { patchSunlight, addTrunkMoss } from './materials.js';
 import { loadSurfaceDetail } from './surfacedetail.js';
@@ -291,11 +292,19 @@ async function init() {
   const perf = params.has('perf') ? new PerfOverlay(renderer, params.get('perf')) : null;
   // steps resolution down if frames keep missing 60 fps (phones that heat up)
   const autoRes = params.has('dpr') || params.get('autores') === '0' || params.has('still') ? null
-    : new AutoResolution(renderer, { floor: Math.min(renderer.getPixelRatio(), lowPower ? 1.25 : 1) });
+    : new AutoResolution(renderer, {
+      // phones: 1.25. Desktops: 1, or lower on a big canvas (a 4K window at DPR 1 is 8 Mpx), down
+      // to ~2 Mpx or 0.5
+      floor: lowPower ? Math.min(renderer.getPixelRatio(), 1.25)
+        : () => Math.min(renderer.getPixelRatio(), Math.max(0.5, Math.min(1, Math.sqrt(2.1e6 / (window.innerWidth * window.innerHeight))))),
+    });
+  const pacer = new FramePacer(renderer);
+  if (perf) perf.pacer = pacer;
   let hudTimer = 0;
 
   let frames = 0;
   renderer.setAnimationLoop(() => {
+    if (!pacer.ready()) return; // the GPU is still busy with earlier frames: skip this one
     perf?.begin();
     autoRes?.tick();
     // ?still=N renders N frames then stops (for headless screenshots)
@@ -334,6 +343,7 @@ async function init() {
     }
 
     post.render(scene, camera);
+    pacer.submit();
     perf?.end();
     if (still) {
       renderer.setAnimationLoop(null);

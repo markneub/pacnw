@@ -8,6 +8,9 @@
  *
  * Isolated hitches don't trigger it, and neither do long gaps (tab switches,
  * ?bench). Off with ?dpr=… (a fixed resolution) or ?autores=0.
+ *
+ * `floor` is a number or a function (re-read at each step, so a window that goes fullscreen
+ * later gets a lower floor). It only sees frames that are really drawn (framepacer.js).
  */
 const WINDOW = 120; // frames (~2 s at 60 fps)
 const MIN_FRAMES = WINDOW; // judge only on a full window since the last reset
@@ -28,7 +31,11 @@ export class AutoResolution {
     this.slowCount = 0;
     this.last = now();
     this.holdUntil = this.last + HOLD_MS;
-    this.done = renderer.getPixelRatio() - STEP < floor - 1e-3;
+    this.done = false;
+  }
+
+  floorNow() {
+    return typeof this.floor === 'function' ? this.floor() : this.floor;
   }
 
   reset() {
@@ -40,7 +47,7 @@ export class AutoResolution {
 
   /** Call once per frame. */
   tick() {
-    if (this.done) return;
+    if (this.done || this.renderer.getPixelRatio() - STEP < this.floorNow() - 1e-3) return;
     const now = this.now();
     const dt = now - this.last;
     this.last = now;
@@ -58,10 +65,9 @@ export class AutoResolution {
 
   stepDown(now) {
     const from = this.renderer.getPixelRatio();
-    const to = Math.max(this.floor, from - STEP);
+    const to = Math.max(this.floorNow(), from - STEP);
     this.renderer.setPixelRatio(to);
     console.info(`auto resolution: ${from} → ${to} (${this.slowCount}/${this.n} frames missed 60 fps)`);
-    this.done = to - STEP < this.floor - 1e-3;
     this.holdUntil = now + HOLD_MS;
     this.reset();
   }
