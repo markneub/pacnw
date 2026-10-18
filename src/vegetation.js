@@ -133,7 +133,8 @@ function patchCards(mat) {
       // needles are matte: grazing-angle Fresnel off a low sun made sprays grey-white
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         reflectedLight.directSpecular *= 0.15;
-        reflectedLight.indirectSpecular *= 0.35;
+        // wet leaves pick up a soft sheen of the sky
+        reflectedLight.indirectSpecular *= 0.35 + 0.45 * uWet;
         #if defined(SUN_VIS) && NUM_DIR_LIGHTS > 0 && ${snow ? 0 : 1}
         {
           // backlight: thin leaves glow when you look toward the sun through them

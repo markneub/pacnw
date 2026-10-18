@@ -229,6 +229,7 @@ export function addTrunkMoss(material) {
       .replace('#include <color_fragment>', `#include <color_fragment>
         float gcSnow = 0.0;
         float gcMoss;
+        float tmWet = 0.0;
         {
           vec3 n = normalize(vTmNormal);
           // around the trunk (angle) and up it: patchy, so the edge is ragged
@@ -250,7 +251,13 @@ export function addTrunkMoss(material) {
           vec3 duff = mix(vec3(0.07, 0.052, 0.035), vec3(0.045, 0.06, 0.028), tmNoise(vTmPos.xz * 2.3 + 11.0));
           diffuseColor.rgb = mix(diffuseColor.rgb, duff, soil * 0.85);
           gcMoss = max(gcMoss, soil * 0.85); // the bark photo fades under it too
-        }`);
+          // rain runs down the trunks in rivulets: darker, glossy vertical streaks, most on the rain side
+          float rivulet = tmNoise(vec2(around * 9.0 + vTmPos.x * 0.7, vTmHeight * 0.22));
+          tmWet = smoothstep(0.5, 0.78, rivulet) * (0.35 + 0.65 * wetSide) * uWet * (1.0 - dry) * (1.0 - soil);
+          diffuseColor.rgb *= 1.0 - 0.35 * tmWet;
+        }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.22, tmWet);`);
   };
   material.customProgramCacheKey = () => `${prevKey ? prevKey.call(material) : ''}|trunkmoss`;
   return material;

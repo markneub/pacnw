@@ -73,7 +73,9 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   trunk, tapering to 0.35 r0, reach 1.5–2.4 r_base, the tip diving underground. Faces wind (lo[i], hi[i], hi[j], lo[j])
   (the ring turns clockwise about the root's direction). First tries read as blades, then inside-out black fins, then
   splayed tubes ("spider legs"). `addTrunkMoss` also does **ground blending**: the bottom ~0.5 m above the ground
-  (`vTmAbove`) fades to damp duff/moss with a ragged edge and the bark photo fades with it. Phone spawn 0.76 → 0.82M tris.
+  (`vTmAbove`) fades to damp duff/moss with a ragged edge and the bark photo fades with it. In rain, **rivulets**: vertical noise
+  bands (most on the rain side) × `uWet` darken bark 35% and drop roughness toward 0.22. Wet cards keep 0.35 + 0.45·uWet
+  of their indirect specular (a soft sky sheen). Phone spawn 0.76 → 0.82M tris.
   Phone bench: trees 1.8 → 2.0 ms at spawn (±0.1), 1.3 in the forest; full frame 6.7 / 5.2 ms.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
@@ -117,7 +119,9 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   finger (only while walking) is free look. No on-screen touch UI apart from that faint look-mode vignette, and no jumping (both at the user's request). Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
   turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, half the
   particles). Override with `?quality=low|high`.
-- `src/weather.js`: GPU rain lines and snow points wrapped in a box around the camera (plus sun-break **motes**: ~900 soft
+- `src/weather.js`: GPU rain lines (**sheltered**: below ~18 m above the ground, a streak is dropped with probability up to 88% ×
+  canopy (the canopy map, ×2.2), so under closed crowns only drips fall and clearings get the full shower; the canopy uniforms are
+  attached after `UniformsUtils.merge`, which clones) and snow points wrapped in a box around the camera (plus sun-break **motes**: ~900 soft
   additive points within 7 m, lit by forward scattering × canopy sun visibility; `?off=motes`, bench row `motes`), with fog/light
   lerped by altitude relative to the local snowline, and WebAudio noise ambience.
 - **Be opinionated (the user's call):** no user-facing options or toggles for how the game feels (head bob, sway, etc.).
@@ -340,7 +344,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 
 ## Backlog (agreed with the user)
 
-- Wet look in rain (glossier trunks/rocks, drips, puddles reflecting the sky). Sharper god-ray shafts (1 m canopy map).
+- Wet look, more of it: puddles in hollows reflecting the sky, wet-rock gloss. (Done: rain sheltered by the canopy, trunk rivulets,
+  leaf sheen.) Sharper god-ray shafts (1 m canopy map).
 - Tree cost is fill-bound (see the reverted mid tier): try cutting card overdraw if the frame budget gets tight.
 - Subtle head bob while walking (no option: opinionated).
 - Deferred by the user (they test with the sound off): sound — footsteps by surface, birdsong in sun breaks, drips after rain.

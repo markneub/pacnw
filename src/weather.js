@@ -44,6 +44,8 @@ function createRain(count = 14000) {
     ]),
     vertexShader: /* glsl */ `
       #include <fog_pars_vertex>
+      uniform sampler2D uCanopyMap;
+      uniform vec4 uCanopyRect;
       attribute float aEnd;
       uniform float uTime;
       uniform vec3 uCam;
@@ -61,6 +63,12 @@ function createRain(count = 14000) {
         gl_Position = projectionMatrix * mvPosition;
         float d = length(p - uCam);
         vAlpha = (1.0 - smoothstep(18.0, 34.0, d)) * mix(1.0, 0.35, aEnd);
+        // shelter: under a closed canopy most rain never reaches the floor, only drips from
+        // the crowns, while clearings get the full shower (canopy map, as for the sunlight)
+        float canopy = min(1.0, texture2D(uCanopyMap, (p.xz - uCanopyRect.xy) / uCanopyRect.zw).r * 2.2);
+        float above = p.y - (uCam.y - 1.7); // ~height above the ground under the camera
+        float shelter = canopy * smoothstep(18.0, 8.0, above);
+        if (fract(position.y * 71.3 + position.x * 7.9) < 0.88 * shelter) vAlpha = 0.0;
         #include <fog_vertex>
       }
     `,
@@ -69,11 +77,15 @@ function createRain(count = 14000) {
       uniform float uIntensity;
       varying float vAlpha;
       void main() {
+        if (vAlpha <= 0.0) discard;
         gl_FragColor = vec4(0.72, 0.78, 0.84, 0.42 * vAlpha * uIntensity);
         #include <fog_fragment>
       }
     `,
   });
+  // shared (not cloned by merge): the canopy map is baked after the weather is built
+  mat.uniforms.uCanopyMap = shared.uCanopyMap;
+  mat.uniforms.uCanopyRect = shared.uCanopyRect;
   const lines = new THREE.LineSegments(geo, mat);
   lines.frustumCulled = false;
   lines.renderOrder = 10;
