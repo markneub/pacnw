@@ -65,9 +65,10 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `GROUND_COVER`/`gcMoss` so the bark photo fades under it. A first try at 2–6 m and brighter green painted whole trunks.
   **Roots + trunk bases (AAA-style, scaled for phones):** `roots()` runs first (own rng `seed + 313`; fir 6, hemlock 5,
   cedar 7 along its flutes; none on snowy trees or saplings) and returns its angles; `trunk(..., base_rings=True, lobes=)`
-  then packs rings at 0/0.12/0.3/0.6/1.0/1.6/2.4 m, flares smoothly (exponential, e-fold 0.8 r_base) instead of flaring
-  only the bottom ring, and bulges each lobe toward a root (cos⁶, ×0.35, fading with height), so roots grow out of
-  buttresses. Near trunks have 18 sides (20 fluted). Each root is a **fin**: 9 sides × 7 segments, cross-section
+  then packs rings at −1 (below ground, so slopes never expose the bottom edge)/0/0.12/0.3/0.6/1.0/1.6/2.4 m, flares only
+  30% of `flare` all round (exponential, e-fold 0.8 r_base: a full even flare stretched a "webbing" skirt between the roots,
+  seen by the user), and bulges narrow lobes toward each root (cos¹⁰, strength 0.25 + 0.7 (flare − 1)), so roots grow out of
+  buttresses with the trunk staying near its radius between them. Root tips dive 3 × r_end below ground. Near trunks have 18 sides (20 fluted). Each root is a **fin**: 9 sides × 7 segments, cross-section
   1.35 r tall × 0.75 r wide at the trunk, flattening to wide and low, its top falling concavely from 0.8–1.2 r_base up the
   trunk, tapering to 0.35 r0, reach 1.5–2.4 r_base, the tip diving underground. Faces wind (lo[i], hi[i], hi[j], lo[j])
   (the ring turns clockwise about the root's direction). First tries read as blades, then inside-out black fins, then

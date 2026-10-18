@@ -196,7 +196,8 @@ def trunk(b, mat, height, r_base, r_top, sides=7, flare=1.0, lean=(0.0, 0.0), ri
     buttress instead of poking out of a cylinder."""
     loops = []
     if base_rings:
-        zs = [0.0, 0.12, 0.3, 0.6, 1.0, 1.6, 2.4]
+        # (a ring a metre below ground, so a slope never shows the trunk's bottom edge)
+        zs = [-1.0, 0.0, 0.12, 0.3, 0.6, 1.0, 1.6, 2.4]
         zs = [z for z in zs if z < height * 0.3] + [height * (k / rings) for k in range(1, rings + 1) if height * k / rings > 2.6]
     else:
         zs = [height * k / rings for k in range(rings + 1)]
@@ -205,7 +206,9 @@ def trunk(b, mat, height, r_base, r_top, sides=7, flare=1.0, lean=(0.0, 0.0), ri
         t = z / height
         r = r_base + (r_top - r_base) * t
         if base_rings:
-            r *= 1.0 + (flare - 1.0) * math.exp(-z / fh)
+            # only a little flare all round: between the roots a real trunk stays close to its radius
+            # (an even flare stretched a skirt of bark across the gaps); the lobes carry the rest
+            r *= 1.0 + (flare - 1.0) * 0.3 * math.exp(-max(z, 0.0) / fh)
         elif k == 0:
             r *= flare
         ox, oy = lean[0] * t * t, lean[1] * t * t
@@ -216,7 +219,7 @@ def trunk(b, mat, height, r_base, r_top, sides=7, flare=1.0, lean=(0.0, 0.0), ri
             if flutes and z < flute_h:
                 jitter *= 1.0 + 0.22 * (1.0 - z / flute_h) ** 1.5 * math.cos(a * flutes)
             for la, ls in lobes:
-                jitter *= 1.0 + ls * math.exp(-z / (fh * 1.1)) * max(0.0, math.cos(a - la)) ** 6
+                jitter *= 1.0 + ls * math.exp(-max(z, 0.0) / (fh * 1.1)) * max(0.0, math.cos(a - la)) ** 10
             loop.append(b.v((ox + math.cos(a) * r * jitter, oy + math.sin(a) * r * jitter, z)))
         loops.append(loop)
     for k in range(len(loops) - 1):
@@ -260,7 +263,7 @@ def roots(b, mat, r_base, count, seed, ground=0.3, reach=(1.5, 2.4), flutes=0):
             hgt = r * (1.35 - 0.75 * t)  # a tall, narrow fin by the trunk ...
             wid = r * (0.75 + 0.55 * t)  # ... flattening as it spreads
             # its top falls in a concave curve to the ground, then the tip dives under
-            top = ground + (h0 - ground) * (1.0 - t) ** 2.2 + r_end * 0.5 * (1.0 - t) - r_end * 1.6 * t ** 3
+            top = ground + (h0 - ground) * (1.0 - t) ** 2.2 + r_end * 0.5 * (1.0 - t) - r_end * 3.0 * t ** 3
             pts.append(out * radial + lat * (wig * t * t) + Vector((0.0, 0.0, top - hgt)))
             sizes.append((wid, hgt))
         loops = []
@@ -440,7 +443,7 @@ def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trun
                         flutes=flutes if flutes == n_roots else 0) if n_roots and not snow else []
     trunk(b, bark, trunk_h, r_trunk, r_trunk * taper, flare=flare, sides=20 if flutes else 18,
           rings=8 if (nod or flutes) else 6, lean=(nod, 0.0), flutes=flutes, flute_h=height * 0.12,
-          lobes=[(a, 0.35) for a in root_angles], base_rings=True)
+          lobes=[(a, 0.25 + 0.7 * (flare - 1.0)) for a in root_angles], base_rings=True)
     r_at = lambda z: r_trunk * (1.0 - (1.0 - taper) * z / trunk_h)
     axis_at = lambda z: Vector((nod * (z / trunk_h) ** 2, 0.0, 0.0))  # the trunk's centre line
     for _ in range(stubs):  # dead stubs on the bare lower trunk
