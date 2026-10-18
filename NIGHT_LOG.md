@@ -133,3 +133,8 @@ about 40 seconds of rain, spreading out from the deepest spot, and dry slowly (a
 right after a shower you still see them in the sun. They mirror the canopy and sky (dark under trees, grey sky in gaps)
 and show rain rings while it's raining. The lake also no longer shows rain rings in sunshine.
 Look: `?weather=rain&x=-5&z=665&yaw=0&pitch=-0.45` (near spawn). Cost: shader work on ground pixels only.
+
+### 13. Wet rocks
+In rain, boulders, stones and cairns now get a patchy film of water on their bare stone (not on the moss): darker and
+glossy, catching the sky, and they dry off when the rain stops. Compare `?weather=rain` with `?weather=clear` at any
+boulder. Cost: a few shader ops on rocks.

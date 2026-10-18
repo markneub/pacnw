@@ -204,7 +204,7 @@ function convertMaterial(src, assetName, lod, cache) {
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns' && !pebble) addWindSway(mat, 2.5, undefined, 'fade');
   // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
-  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' ? 0.2 : 1, snow: pebble ? 0 : 1 });
+  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' ? 0.2 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0 });
   if (cards) patchCards(mat);
   // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
   if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);

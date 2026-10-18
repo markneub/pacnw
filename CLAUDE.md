@@ -131,13 +131,16 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   shore `x=279.7&z=416.4&yaw=0.98&pitch=-0.12`. Cost: ALU on water pixels only.
 - **Puddles** (`patchPuddles` in materials.js; terrain + trail tread): `shared.uPuddle` fills toward 1 over ~40 s whenever
   it rains in the valley (1 − sun, or the `?weather` pin) and dries over ~200 s; `uRain` = the rain amount at the player
-  (lake + puddle rain rings). Terrain tiles carry `aHollow` per vertex (5 m Laplacian concavity > 0.02–0.3 m × flat (<~1%
-  slope off level... `1 − nv.y` < 0.004–0.012) × forest-floor/mud layers × above the lake): ~1.8% of the land. The cover fills
+  (lake + puddle rain rings). Terrain tiles carry `aHollow` per vertex (5 m Laplacian concavity > 0.02–0.3 m × flat
+  (`1 − nv.y` < 0.004–0.012) × forest-floor/mud layers × above the lake): ~1.8% of the land. The cover fills
   from the deepest spot (`pd = hollow × noise`, threshold 1 − 0.55·uPuddle); the tread keeps its noise puddles, growing
   with uPuddle, none within ~15 m of the snowline. In a puddle: albedo × 0.45, roughness 0.05, a flat normal + rain rings
   (injected at `emissivemap_fragment`, after the ground-detail normal), and the specular swapped for the creeks' mirror
   (sky × canopy above the reflected ray, dark banks for low rays, Fresnel max 0.82). The material must declare
   `float puddle` and `vGroundPos`. View: `weather=rain&x=-5&z=665&yaw=0&pitch=-0.45`. Cost: a branch on terrain/trail pixels.
+- **Wet rock** (`addGroundCover(..., { film })`, on for scans, pebbles and `Rock`): in rain (`smoothstep(0.6, 0.95, uWet)`:
+  overcast-dry is 0.55, rain 1, sun 0.2) bare stone (not moss/snow) gets a patchy water film (trig noise + up-facing bias):
+  albedo × 0.82, roughness → 0.14, so it mirrors the sky.
 - `src/terrain.js`: `heightAt(x,z)` is the smooth noise height that drives terrain generation and scatter
   decisions. `groundAt(x,z)` is the height of the *rendered* triangulated mesh. Use it for anything that
   must sit on the ground (instances, player feet, trail ribbon). `snowlineAt`/`snowAmount` keep ground snow, snowy-tree choice and rain→snow consistent.
@@ -399,7 +402,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 
 ## Backlog (agreed with the user)
 
-- Wet look, more of it: wet-rock gloss. (Done: rain sheltered by the canopy, trunk rivulets, leaf sheen, puddles.) Sharper god-ray shafts (1 m canopy map).
+- Wet look: done (rain sheltered by the canopy, trunk rivulets, leaf sheen, puddles, wet-rock film). Sharper god-ray shafts (1 m canopy map).
 - Tree cost is fill-bound (see the reverted mid tier): try cutting card overdraw if the frame budget gets tight.
 - Subtle head bob while walking (no option: opinionated).
 - **Next (the user's plan, in order):**

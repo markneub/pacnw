@@ -132,7 +132,7 @@ export function addWindSway(material, strength = 0.012, wet = 0.25, lod = null) 
  * `moss` scales the moss (scanned rocks already have their own); `lod` is the
  * near/far tier for models that have both (see patchLod).
  */
-export function addGroundCover(material, { moss = 1, lod = null, snow = 1 } = {}) {
+export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film = 0 } = {}) {
   material.onBeforeCompile = (shader) => {
     patchWet(shader, 1);
     patchLod(shader, lod);
@@ -177,10 +177,20 @@ export function addGroundCover(material, { moss = 1, lod = null, snow = 1 } = {}
         float gcMoss = up * (1.0 - snowy) * ${(0.85 * moss).toFixed(3)}; // read by surfacedetail.js
         float gcSnow = up * snowy * ${snow.toFixed(2)};
         diffuseColor.rgb = mix(diffuseColor.rgb, moss, gcMoss);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), gcSnow);`,
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), gcSnow);
+        // stone in rain: a film of water, patchy as it runs off, glosses the bare rock (not moss or snow)
+        float gcFilm = ${film.toFixed(2)} * smoothstep(0.6, 0.95, uWet) * (1.0 - gcMoss) * (1.0 - gcSnow)
+          * smoothstep(0.25, 0.55, 0.5 + 0.35 * sin(vCoverPos.x * 1.7 + sin(vCoverPos.z * 1.3) * 2.0) * sin(vCoverPos.y * 2.1 + vCoverPos.z * 0.9)
+                                   + 0.25 * normalize(vCoverNormal).y);
+        diffuseColor.rgb *= 1.0 - 0.18 * gcFilm;`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.14, gcFilm);`,
       );
   };
-  material.customProgramCacheKey = () => `groundcover|${moss}|${lod}|${snow}|${sunKey()}`;
+  material.customProgramCacheKey = () => `groundcover|${moss}|${lod}|${snow}|${film}|${sunKey()}`;
   return material;
 }
 
