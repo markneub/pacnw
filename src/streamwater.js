@@ -349,7 +349,9 @@ function streamMaterial(rockTex) {
             if (bb < 0 || bb >= w) continue;
             for (int k = 0; k < 2; k++) {
               vec4 t = texelFetch(uSwRocks, ivec2(bb, row + k), 0);
-              if (t.z > 0.0) { swRk[swRkN] = t.xyz; swRkN++; }
+              // only rocks close enough to touch this spot's water (their effects end by ~10 radii):
+              // most of a creek then skips the rock maths entirely
+              if (t.z > 0.0 && length((vec2(vWUv.x * vSwInfo.x, vWUv.y) - t.xy) / t.z) < 10.0) { swRk[swRkN] = t.xyz; swRkN++; }
             }
           }
         }

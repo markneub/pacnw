@@ -191,7 +191,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   normal), milky aerated colour, alpha → 0.97 (white water hides the bed).
   **Phone bench** (DPR 1.5 after autores, full clock): spawn full 5.0 ms (trees 2.3, water 0.0, rain/snow ~0); snowfield 4.5
   (trees 1.7, snow 0.2); **creek view** (opt-in `views=creek`) 5.0 ms with **water 1.1 ms** when it fills the screen. The
-  rapids' ridge noise (8 lookups) now only runs where `rapid` > 0. Views: on the bridge
+  rapids' ridge noise (8 lookups) now only runs where `rapid` > 0. At DPR 1.75 the creek view was full 6.0 ms, water 1.3 ms;
+  `swLoadRocks` now keeps only rocks within 10 radii of the pixel (their effects end there), so most creek pixels skip
+  the rock maths (3 loops incl. the finite-difference normals). Views: on the bridge
   `x=84&z=0`, looking up/downstream.
 - **Marsh + boardwalk** (`MARSH`/`marshAt` in terrain.js: an oval (165, 478) 62 × 30 m with noisy edge on the lake's
   south-east shore): `baseHeight` eases the ground to WATER_LEVEL − 0.08 + hummock noise (±0.5 m), so the lake surface
