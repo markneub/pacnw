@@ -100,6 +100,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   Now `broken_end(b, M, loop, x, r, centre, d, er)` (lengths in units of r, faces oriented by `_face_toward`, which
   reverses a face whose winding points away from a hint direction) also gives both ends of the ordinary `log` (own rng
   `seed + 151`): its flat `LogEnd` discs read as dark faceted blobs. `LogEnd` is now only the root wad's trunk cap.
+  **Leaning snags** (`log_leaning`, `leaning_snag()`: a grey SnagBark trunk 20 m along +X from its base at the origin,
+  r 0.42 → 62% taper, a slight bow and sag, both ends `broken_end`, 14 blunt stubs; the user asked for "fallen trees
+  leaning on other trees"): `addLeaners` (vegetation.js, after the marsh snags; hash, no rng) picks ~0.6% of fir/hemlock/
+  cedar 25 m+ below the snowline, stands the base 0.9–1.6 × the contact height away and rests the snag against the side
+  of the host trunk 5–11 m up (axes pass host r at that height (HOST radii/heights from the Blender trees) + its own r
+  apart), scaled 0.75–1.35 so ~4 m runs on past into the crown. `tilt` (17–60°, else skipped: a base far uphill once gave
+  ~0° and the collider loop never ended) pitches it about local Z through the base. Skipped if its part under 3 m crosses
+  the trail (+1.5 m) or a creek, the ground rises > 0.6 m into it, or another trunk is within 1.4 × scale + 0.4 m of the
+  axis. Colliders along the part under ~2 m. 121 placed. 'log' prefix: rocks kind (125 m chunks, ground cover/moss on top).
   **Vine maple** leaves: `maple_spray()` shades each leaf (lighter centre, darker rim, mottle) with a soft shadow on the
   leaves beneath, lobes cut ~1/3 in; the cards are **folded** (`_card(fold=0.45)`: a shallow V along the twig, 4 tris; each
   half rises 0.45 × its width), with more roll, since flat horizontal cards seen at eye level were thin streaks. `fold=0`

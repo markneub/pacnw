@@ -860,7 +860,7 @@ def _face_toward(b, idx, mat, toward):
     b.face(idx, mat)
 
 
-def broken_end(b, M, loop, x, r, centre, d, er):
+def broken_end(b, M, loop, x, r, centre, d, er, bark=None):
     """
     The snapped, rotted end of a trunk lying along X, on its end ring `loop` (at x, radius r,
     axis at `centre` = (y, z)), facing d = +1 (+X) or -1. A ragged rim of bark-backed splinters,
@@ -887,7 +887,7 @@ def broken_end(b, M, loop, x, r, centre, d, er):
     for k in range(sides):
         m = (k + 1) % sides
         a = TAU * (k + 0.5) / sides
-        _face_toward(b, (loop[k], loop[m], rim[m], rim[k]), M["bark"], (0, math.cos(a), math.sin(a)))
+        _face_toward(b, (loop[k], loop[m], rim[m], rim[k]), bark or M["bark"], (0, math.cos(a), math.sin(a)))
         _face_toward(b, (rim[k], rim[m], lip[m], lip[k]), M["broken_wood"], (d, 0, 0))
         _face_toward(b, (lip[k], lip[m], pit[m], pit[k]), M["rot_wood"], (d, 0, 0))
         _face_toward(b, (pit[k], pit[m], heart), M["rot_wood"], (d, 0, 0))
@@ -1163,6 +1163,46 @@ def log(M, name, seed, length=9.0, radius=0.55, sides=10):
     return b.build(name)
 
 
+def leaning_snag(M, name, seed=61, length=20.0, r0=0.42, sides=9, rings=10):
+    """
+    A dead tree that fell against a living one: a grey trunk along +X from its base at the
+    origin (axis at ground level, so the base end sits half in the ground once tilted up), snapped
+    at both ends, with blunt branch stubs all round. vegetation.js addLeaners() tilts it up about
+    the base so it rests against a neighbour's trunk.
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    bark = M["snag"]
+    loops = []
+    for k in range(rings + 1):
+        t = k / rings
+        x = length * t
+        r = r0 * (1.0 - 0.62 * t) * (1.0 + rng.uniform(-0.04, 0.04))
+        cy = 0.22 * math.sin(t * math.pi)  # a slight sideways bow
+        cz = -0.12 * math.sin(t * math.pi)  # and a little sag
+        loop = [b.v((x, math.cos(TAU * i / sides) * r + cy, math.sin(TAU * i / sides) * r + cz)) for i in range(sides)]
+        loops.append((loop, x, r, cy, cz))
+    for k in range(rings):
+        lo, hi = loops[k][0], loops[k + 1][0]
+        for i in range(sides):
+            j = (i + 1) % sides
+            a = TAU * (i + 0.5) / sides
+            _face_toward(b, (lo[i], lo[j], hi[j], hi[i]), bark, (0, math.cos(a), math.sin(a)))
+    er = random.Random(seed + 151)
+    for (loop, x, r, cy, cz), d in ((loops[0], -1), (loops[-1], 1)):
+        broken_end(b, M, loop, x, r, (cy, cz), d, er, bark=bark)
+    for _ in range(14):  # blunt, broken-off branch stubs all round
+        t = rng.uniform(0.15, 0.95)
+        x = length * t
+        r = r0 * (1.0 - 0.62 * t)
+        a = rng.uniform(0, TAU)
+        out = Vector((0, math.cos(a), math.sin(a)))
+        base = Vector((x, 0.22 * math.sin(t * math.pi), -0.12 * math.sin(t * math.pi))) + out * r * 0.8
+        tip = base + out * rng.uniform(0.3, 0.9) + Vector((rng.uniform(0.1, 0.5), 0, 0))
+        _stub(b, bark, base, tip, max(0.05, r * 0.3), max(0.035, r * 0.18))
+    return b.build(name)
+
+
 def stump(M, name, seed, radius=0.8, height=1.1, sides=9):
     rng = random.Random(seed)
     b = MeshBuilder()
@@ -1339,6 +1379,7 @@ def main():
     pebbles(M, "pebbles_d", 64, stones=3, spread=0.5, size=(0.16, 0.4))  # a few cobbles
     pebbles(M, "pebbles_e", 65, stones=8, spread=1.2, size=(0.04, 0.13))  # gravel
     log(M, "log", 31)
+    leaning_snag(M, "log_leaning")
     nurse_log(M, "log_nurse")
     stump(M, "stump", 41)
 

@@ -350,6 +350,77 @@ function addMarshSnags(placements, trail) {
   }
 }
 
+/**
+ * Dead trees fallen against living ones (Blender log_leaning: a snag along local +X from its base,
+ * LEANER.length long, radius LEANER.r0 at the base tapering 62%). For ~0.6% of the valley's big
+ * conifers, chosen by hash (no scatter rng), a snag stands its base on the ground 0.9-1.6x the
+ * contact height away and rests against the side of the tree's trunk 5-11 m up, its top running
+ * on past into the crown. Skipped where its low part would cross the trail, a creek or water, or
+ * pass through another trunk. Its `axis`/`tilt` give colliders along the part below head height.
+ */
+const LEANER = { length: 20, r0: 0.42 };
+const HOST = { fir: [0.62, 30], hemlock: [0.5, 26], cedar: [0.8, 27] }; // trunk radius at the base, height
+const leanerR = (t) => LEANER.r0 * (1 - 0.62 * t);
+
+function addLeaners(placements, trail) {
+  // every trunk, on an 8 m grid, to keep leaners from passing through other trees
+  const grid = new Map();
+  for (const name of ['fir', 'hemlock', 'cedar', 'snag', 'sapling']) {
+    for (const p of placements[name] ?? []) {
+      const k = cellKey(Math.floor(p.x / 8), Math.floor(p.z / 8));
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(p);
+    }
+  }
+  const out = (placements.log_leaning ||= []);
+  for (const host of ['fir', 'hemlock', 'cedar']) {
+    const [r0, H] = HOST[host];
+    for (const t of placements[host] ?? []) {
+      const pick = hash2(t.x * 0.37 + 11, t.z * 0.61 - 7);
+      if (pick > 0.006) continue;
+      const u0 = pick / 0.006; // reused for the choices below
+      if (t.y > snowlineAt(t.x, t.z) - 25) continue;
+      const h = 5 + 6 * hash2(t.z + 3, t.x);
+      const a = hash2(t.x - 9, t.z + 2) * Math.PI * 2;
+      const ux = Math.cos(a);
+      const uz = Math.sin(a);
+      const d = h * (0.9 + 0.7 * u0);
+      const side = hash2(t.z, t.x - 4) < 0.5 ? 1 : -1;
+      // rest against the trunk's side: the axes pass (host radius + leaner radius) apart
+      const rHost = r0 * (1 - 0.88 * (h / (0.97 * H))) * t.scale;
+      const len = Math.hypot(d, h);
+      const scale = Math.min(1.35, Math.max(0.75, (len + 4) / LEANER.length));
+      const off = rHost + leanerR(len / (LEANER.length * scale)) * scale;
+      const cx = t.x - uz * side * off;
+      const cz = t.z + ux * side * off;
+      const bx = cx - ux * d;
+      const bz = cz - uz * d;
+      const by = groundAt(bx, bz) - 0.12 * scale;
+      const tilt = Math.atan2(t.y + h - by, d);
+      // (between ~17° and 60°: a base far uphill would leave it lying flat or pointing down)
+      let ok = by > waterLevelAt(bx, bz) + 0.5 && tilt > 0.3 && tilt < 1.05;
+      // the part below ~3 m: off the trail and out of the creeks
+      for (let s = 0; ok && s <= len; s += 1) {
+        const px = bx + ux * s * Math.cos(tilt);
+        const pz = bz + uz * s * Math.cos(tilt);
+        const above = by + s * Math.sin(tilt) - groundAt(px, pz);
+        if (above < 3 && (trail.distanceTo(px, pz) < TRAIL_WIDTH + 1.5 || offStream(px, pz) < 1)) ok = false;
+        if (above < -0.6) ok = false; // the ground rises into it
+        // no other trunk within reach of the axis (the host aside)
+        for (let gz = Math.floor(pz / 8) - 1; ok && gz <= Math.floor(pz / 8) + 1; gz++) {
+          for (let gx = Math.floor(px / 8) - 1; ok && gx <= Math.floor(px / 8) + 1; gx++) {
+            for (const o of grid.get(cellKey(gx, gz)) ?? []) {
+              if (o !== t && Math.hypot(o.x - px, o.z - pz) < 1.4 * o.scale + 0.4) { ok = false; break; }
+            }
+          }
+        }
+      }
+      if (!ok) continue;
+      out.push({ x: bx, y: by, z: bz, rotY: Math.atan2(-uz, ux), tilt, scale, tint: u0, axis: [ux, uz] });
+    }
+  }
+}
+
 /** Signposts at each stop, a bench at the lake, cairns along the snowy section. */
 function placeTrailFurniture(trail, add) {
   const { points, stops } = trail;
@@ -750,6 +821,7 @@ export async function buildVegetation(protos, trail, { impostors = null } = {}) 
   const placements = await scatter(trail);
   addStreamRocks(placements, protos, trail);
   addMarshSnags(placements, trail);
+  addLeaners(placements, trail);
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
   for (const name of Object.keys(placements)) {
     if (!name.startsWith('pebbles')) continue;
@@ -846,6 +918,14 @@ export async function buildVegetation(protos, trail, { impostors = null } = {}) 
         }
         const plate = (-0.5 * NURSE.length - 0.4) * it.scale;
         addCollider(it.x + dx * plate, it.z + dz * plate, NURSE.plate * 0.55 * it.scale);
+      }
+      if (name === 'log_leaning') {
+        // circles along the part you could walk into (below ~2 m off its base's ground)
+        const [dx, dz] = it.axis;
+        for (let s = 0; s * Math.sin(it.tilt) < 2 && s < LEANER.length * it.scale; s += 0.7) {
+          const r = leanerR(s / (LEANER.length * it.scale)) * it.scale;
+          addCollider(it.x + dx * s * Math.cos(it.tilt), it.z + dz * s * Math.cos(it.tilt), r + 0.1);
+        }
       }
     });
     const farColors = farParts.map((part) => instanceColors(part.material.name, tints, shades, n));

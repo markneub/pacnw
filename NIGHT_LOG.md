@@ -331,3 +331,8 @@ none (25 instead of 35).
 ### 43. Broken ends on the ordinary fallen logs too
 Their ends were flat, dark, faceted discs. They now get the same ragged splintered end with a red-brown rotten heart as
 the nurse logs. The marsh edge looked natural close up after the lake shore change, so it needed nothing more.
+
+### 44. Dead trees leaning on living ones (the user's idea)
+About 120 grey dead trunks now lean against big trees in the valley forest: the base on the ground a few metres out,
+the trunk resting against the side of a living tree's trunk 5-11 m up and running on into its crown, with broken ends
+and branch stubs. They keep clear of the trail, the creeks and other trunks, and you can't walk through their low end.
