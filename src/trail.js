@@ -335,7 +335,8 @@ export function buildTrail() {
   setGroundModifier(benchHeight);
 
   const mesh = buildCorridorMesh(points, distanceTo);
-  setTerrainCutout(...buildCutoutMask(points, distanceTo));
+  setTerrainCutout(...buildCutoutMask(mesh.userData.cover));
+  delete mesh.userData.cover;
 
   return { points, stops, distanceTo, guide, mesh };
 }
@@ -343,38 +344,68 @@ export function buildTrail() {
 /**
  * Mask over the trail's bounding box (1 texel per metre): 1 where the terrain
  * mesh should be hidden because the corridor mesh replaces it.
+ *
+ * Built from the corridor's own triangles, so it can never cut a hole: a texel
+ * is cut only if it lies under a triangle of the strip that is fully opaque
+ * (all three corners inside the faded edge) and faces up (where the strip folds
+ * back on the inside of a tight switchback, its flipped triangles are culled),
+ * then the mask is eroded by a texel, because the shader samples it bilinearly.
+ * (A mask from distanceTo() alone left holes at the trail's ends and at
+ * switchbacks: tools/holecheck.mjs finds them.)
  */
-function buildCutoutMask(points, distanceTo) {
+function buildCutoutMask(cover) {
+  const { positions, alphas, indices } = cover;
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;
   let maxZ = -Infinity;
-  for (const p of points) {
-    minX = Math.min(minX, p.x);
-    maxX = Math.max(maxX, p.x);
-    minZ = Math.min(minZ, p.y);
-    maxZ = Math.max(maxZ, p.y);
+  for (let i = 0; i < positions.length; i += 3) {
+    minX = Math.min(minX, positions[i]);
+    maxX = Math.max(maxX, positions[i]);
+    minZ = Math.min(minZ, positions[i + 2]);
+    maxZ = Math.max(maxZ, positions[i + 2]);
   }
-  const pad = CORRIDOR_HALF + 2;
-  minX = Math.floor(minX - pad);
-  minZ = Math.floor(minZ - pad);
-  const w = Math.ceil(maxX + pad) - minX;
-  const h = Math.ceil(maxZ + pad) - minZ;
+  minX = Math.floor(minX - 2);
+  minZ = Math.floor(minZ - 2);
+  const w = Math.ceil(maxX + 2) - minX;
+  const h = Math.ceil(maxZ + 2) - minZ;
+  const covered = new Uint8Array(w * h);
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = indices[t];
+    const b = indices[t + 1];
+    const c = indices[t + 2];
+    if (alphas[a] < 0.999 || alphas[b] < 0.999 || alphas[c] < 0.999) continue;
+    const ax = positions[a * 3]; const az = positions[a * 3 + 2];
+    const bx = positions[b * 3]; const bz = positions[b * 3 + 2];
+    const cx = positions[c * 3]; const cz = positions[c * 3 + 2];
+    // facing up: the y of (b - a) x (c - a)
+    const ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+    if (ny <= 1e-6) continue;
+    // texel centres inside the triangle (in xz)
+    const x0 = Math.max(0, Math.floor(Math.min(ax, bx, cx) - minX));
+    const x1 = Math.min(w - 1, Math.ceil(Math.max(ax, bx, cx) - minX));
+    const z0 = Math.max(0, Math.floor(Math.min(az, bz, cz) - minZ));
+    const z1 = Math.min(h - 1, Math.ceil(Math.max(az, bz, cz) - minZ));
+    const edge = (px, pz, qx, qz, rx, rz) => (qx - px) * (rz - pz) - (qz - pz) * (rx - px);
+    const area = edge(ax, az, bx, bz, cx, cz);
+    for (let j = z0; j <= z1; j++) {
+      for (let i = x0; i <= x1; i++) {
+        const px = minX + i + 0.5;
+        const pz = minZ + j + 0.5;
+        const e0 = edge(ax, az, bx, bz, px, pz) * area;
+        const e1 = edge(bx, bz, cx, cz, px, pz) * area;
+        const e2 = edge(cx, cz, ax, az, px, pz) * area;
+        if (e0 >= 0 && e1 >= 0 && e2 >= 0) covered[j * w + i] = 1;
+      }
+    }
+  }
+  // erode: keep a texel only if it and its 8 neighbours are covered
   const data = new Uint8Array(w * h);
-  // the corridor strip stops square at the trail's two ends, but distanceTo() rounds them off,
-  // so a cutout from it alone left a half-disc hole past each end (seen through to the sky at the
-  // trailhead): only cut where a point is not beyond either end (1.5 m short, so the strip overlaps)
-  const ends = [[points[0], points[1]], [points[points.length - 1], points[points.length - 2]]].map(([a, b]) => {
-    const l = Math.hypot(b.x - a.x, b.y - a.y);
-    return { x: a.x, z: a.y, dx: (b.x - a.x) / l, dz: (b.y - a.y) / l };
-  });
-  const beyondEnd = (x, z) => ends.some((e) => (x - e.x) * e.dx + (z - e.z) * e.dz < 1.5);
-  for (let j = 0; j < h; j++) {
-    for (let i = 0; i < w; i++) {
-      // texel centres
-      const x = minX + i + 0.5;
-      const z = minZ + j + 0.5;
-      if (distanceTo(x, z) < CUTOUT_HALF && !beyondEnd(x, z)) data[j * w + i] = 255;
+  for (let j = 1; j < h - 1; j++) {
+    for (let i = 1; i < w - 1; i++) {
+      let all = 1;
+      for (let dj = -1; dj <= 1 && all; dj++) for (let di = -1; di <= 1; di++) if (!covered[(j + dj) * w + i + di]) { all = 0; break; }
+      if (all) data[j * w + i] = 255;
     }
   }
   const tex = new THREE.DataTexture(data, w, h, THREE.RedFormat);
@@ -471,7 +502,7 @@ function buildCorridorMesh(points, distanceTo) {
     vertexColors: true,
     roughness: 0.97,
     metalness: 0,
-    transparent: true,
+    transparent: false, // the opaque interior; the faded fringe uses fringeMat (below)
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -2,
@@ -514,6 +545,15 @@ function buildCorridorMesh(points, distanceTo) {
     patchGroundDetail(shader);
   };
   mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
+  // The faded outer fringe blends over the terrain, so it's transparent, and it must not write
+  // depth: where switchback legs overlap, a fringe drawn first used to hide the leg beneath it,
+  // and with the terrain cut away there the sky showed through (tools/holecheck.mjs).
+  const fringeMat = mat.clone();
+  fringeMat.transparent = true;
+  fringeMat.depthWrite = false;
+  fringeMat.onBeforeCompile = mat.onBeforeCompile;
+  fringeMat.customProgramCacheKey = mat.customProgramCacheKey;
+  const opaqueTri = (alpha, a, b, c) => alpha[a] > 0.999 && alpha[b] > 0.999 && alpha[c] > 0.999;
 
   // Split into ~150 m segments so off-screen stretches are frustum-culled.
   // Normals come from the full strip, so segment joins don't show.
@@ -531,18 +571,79 @@ function buildCorridorMesh(points, distanceTo) {
       const attr = geo.attributes[name];
       part.setAttribute(name, new THREE.BufferAttribute(attr.array.slice(v0 * attr.itemSize, v1 * attr.itemSize), attr.itemSize));
     }
-    const idx = [];
+    const alpha = part.attributes.color.array.filter((_, k) => k % 4 === 3);
+    const solid = [];
+    const fringe = [];
     for (let i = 1; i <= r1 - r0; i++) {
       const a = (i - 1) * rowLen;
       const b = i * rowLen;
-      for (let j = 0; j < across; j++) idx.push(a + j, a + j + 1, b + j, a + j + 1, b + j + 1, b + j);
+      for (let j = 0; j < across; j++) {
+        for (const [p, q, r] of [[a + j, a + j + 1, b + j], [a + j + 1, b + j + 1, b + j]]) {
+          (opaqueTri(alpha, p, q, r) ? solid : fringe).push(p, q, r);
+        }
+      }
     }
-    part.setIndex(idx);
+    part.setIndex([...solid, ...fringe]);
+    part.addGroup(0, solid.length, 0);
+    part.addGroup(solid.length, fringe.length, 1);
     part.computeBoundingSphere();
-    const mesh = new THREE.Mesh(part, mat);
+    const mesh = new THREE.Mesh(part, [mat, fringeMat]);
     mesh.name = `trail ${r0}`;
     group.add(mesh);
   }
+  // Skirts: a wall hanging 3 m down from the strip's opaque boundary (|u| = 4.8 m, where the
+  // terrain cutout ends) and across both ends. Around switchbacks the strip's faded edge can sit
+  // up to ~2 m off the terrain (one leg's bench cut reaches into the next), and a sightline under
+  // it used to look into the cut-away hole beneath and see the sky. Standard terrain crack fix.
+  {
+    const P = geo.attributes.position;
+    const C = geo.attributes.color;
+    const L = geo.attributes.aLayers;
+    const jEdge = Math.round((CORRIDOR_HALF - 4.8) / CORRIDOR_STEP); // u = ±4.8
+    const sPos = [];
+    const sCol = [];
+    const sLay = [];
+    const sIdx = [];
+    const wall = (vA, vB) => {
+      const base = sPos.length / 3;
+      for (const v of [vA, vB]) {
+        for (const drop of [0, 3]) {
+          sPos.push(P.getX(v), P.getY(v) - drop, P.getZ(v));
+          const k = drop ? 0.55 : 0.8; // a little darker going down
+          sCol.push(C.getX(v) * k, C.getY(v) * k, C.getZ(v) * k, 1);
+          sLay.push(L.getX(v), L.getY(v), L.getZ(v), L.getW(v));
+        }
+      }
+      // two-sided (the material is DoubleSide-free, so emit both windings)
+      sIdx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+      sIdx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
+    };
+    for (let i = 1; i < rows; i++) {
+      const a = (i - 1) * rowLen;
+      const b = i * rowLen;
+      wall(a + jEdge, b + jEdge);
+      wall(a + across - jEdge, b + across - jEdge);
+    }
+    for (const r of [0, rows - 1]) for (let j = jEdge; j < across - jEdge; j++) wall(r * rowLen + j, r * rowLen + j + 1);
+    const skirt = new THREE.BufferGeometry();
+    skirt.setAttribute('position', new THREE.Float32BufferAttribute(sPos, 3));
+    skirt.setAttribute('color', new THREE.Float32BufferAttribute(sCol, 4));
+    skirt.setAttribute('aTread', new THREE.Float32BufferAttribute(new Float32Array(sPos.length / 3), 1));
+    skirt.setAttribute('aLayers', new THREE.Float32BufferAttribute(sLay, 4));
+    skirt.setIndex(sIdx);
+    skirt.computeVertexNormals();
+    skirt.computeBoundingSphere();
+    const mesh = new THREE.Mesh(skirt, mat);
+    mesh.name = 'trail skirt';
+    group.add(mesh);
+  }
+
+  // what the terrain cutout is built from (buildCutoutMask)
+  group.userData.cover = {
+    positions: geo.attributes.position.array,
+    alphas: Float32Array.from({ length: geo.attributes.color.count }, (_, i) => geo.attributes.color.getW(i)),
+    indices: geo.index.array,
+  };
   geo.dispose();
   return group;
 }

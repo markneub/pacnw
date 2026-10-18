@@ -110,9 +110,15 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   (Gaussian weights) so close switchbacks keep level treads. The 5 m terrain grid can't hold that, so a
   0.5 m-resolution corridor mesh (`buildCorridorMesh`) replaces it. The terrain fragment shader discards
   inside `CUTOUT_HALF` using a 1 m mask texture (`setTerrainCutout`), and the corridor's outer edge
-  alpha-fades over the terrain. The mask skips points beyond the trail's two ends (1.5 m short): `distanceTo` rounds the
-  ends off but the strip stops square, which left a half-disc hole to the sky at the trailhead (seen by the user as a
-  "reflective patch" by the sign). `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
+  alpha-fades over the terrain. **No holes, by construction** (the user found sky showing through at the trailhead and
+  around the switchbacks): (1) the cutout mask is rasterised from the corridor's own *opaque, up-facing* triangles and
+  eroded a texel (`buildCutoutMask(cover)`), so terrain is only removed under solid strip; (2) the strip is split into an
+  opaque interior (`mat`, depth-writing) and the faded fringe (`fringeMat`: transparent, `depthWrite: false`), because a
+  fringe drawn first hid the overlapping switchback leg beneath it; (3) a 3 m **skirt** hangs from the opaque boundary
+  (|u| = 4.8 m) and across both ends, since around switchbacks the faded edge sits up to ~2 m off the terrain.
+  **`tools/holecheck.mjs`** (magenta sky, fog off, looks down along the whole trail and over a 60 m map grid; `trail` for the
+  trail only, ~5 min in SwiftShader; exits 1 and lists views) must report no holes after any change to the trail, terrain
+  cutout or ground meshes. `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
 - Trail QA numbers (cross-slope on tread p50 ≈0, p95 ≈13%; grade p95 ≈26%) come from measuring
   `groundAt` across/along `trail.points` in node. Re-check them after changing the route or widths.
 - `src/touch.js`: one-thumb scheme. The first finger is the steer: its horizontal movement turns (swipe-style, ~130° per
