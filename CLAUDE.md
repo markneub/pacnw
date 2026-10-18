@@ -535,8 +535,13 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   it that simple, with no instructions or flavour text and nothing that changes the box mid-load. A one-line
   controls hint toasts once on start. `progress(to, expectedMs)` in `main.js` animates the bar with a
   compositor transform (Web Animations, linear), so it keeps moving while a blocking step runs. Each segment starts from our own
-  computed position, never lower: CSS transitions restarted from the main thread's stale value and jumped backwards. Re-tune the expected times if
-  loading steps change.
+  computed position, never lower: CSS transitions restarted from the main thread's stale value and jumped backwards.
+  **Paced by this device's last load** (the user: it stalled halfway, then the end flashed by): `progress('<step>')` starts
+  each named step (`LOAD_STEPS`: terrain, trail, vegetation, shading, textures, warmup, with first-visit defaults in ms);
+  each step's share of the bar and its expected time come from the durations saved in localStorage (`pacnw.loadTimes`) on
+  the previous load. A segment covers 85% of its share in the expected time, then creeps through the rest over 2× that,
+  so a slow step never freezes the bar. `await progress(null)` saves the timings and fills the last 3% over 350 ms
+  (waiting ≤ 0.5 s) before "Tap to start". Adding a loading step = a new `LOAD_STEPS` key + a `progress()` call.
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216
   (the user's phone ran ~18 ms/frame avg, worst mid-20s, no hitches). After tiers: desktop 1.57M/286,

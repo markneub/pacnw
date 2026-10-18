@@ -298,3 +298,8 @@ point left and those behind point right. The post now runs up past the board, so
 The waterline followed the ground's 5 m triangles in straight lines. The water now fades out in the last few centimetres
 of depth along a ragged, wandering edge that laps gently, through clearer shallows that show the muddy bed, with a faint
 wet glint. The marsh and the ponds get the same treatment.
+
+### 38. A smoother loading bar (found by the user)
+The bar used fixed guesses for how long each step takes, so on a phone it stalled about halfway (building the forest)
+and then raced through the end. Now each step's share of the bar comes from how long it took on this device last time,
+a slow step keeps creeping instead of stopping, and the last bit fills visibly before "Tap to start".

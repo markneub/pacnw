@@ -85,26 +85,68 @@ function step(label) {
 }
 
 /**
- * Loading bar. Steps block the main thread, so each step animates the bar
- * (a compositor transform, which keeps running while JS is busy) toward
- * where that step should end, over roughly how long it usually takes.
+ * Loading bar. Steps block the main thread, so each step animates the bar (a compositor
+ * transform, which keeps running while JS is busy) across that step's share of the bar.
  *
- * Each segment starts explicitly from where the bar is now, computed from our
- * own timeline (segments are linear). A CSS transition would start from the
- * main thread's last known value, which is stale after a long blocking step,
- * so the bar jumped backwards. It never goes below where it has been.
+ * Shares and timing come from how long each step took on this device last time (localStorage),
+ * with rough defaults on a first visit, so the bar fills at an even pace instead of racing
+ * through quick steps and stalling on slow ones. A segment covers 85% of its share in the
+ * expected time and then creeps on over the next 2x that, so a slow step never stops the bar
+ * dead. Each segment starts explicitly from where the bar is now (our own timeline: a CSS
+ * transition would start from the main thread's stale value and jump backwards), never lower.
  */
+const LOAD_STEPS = { terrain: 700, trail: 1500, vegetation: 4500, shading: 700, textures: 200, warmup: 1500 };
+const LOAD_KEY = 'pacnw.loadTimes';
+const loadMs = { ...LOAD_STEPS };
+try {
+  const saved = JSON.parse(localStorage.getItem(LOAD_KEY) ?? '{}');
+  for (const k in loadMs) if (saved[k] > 0) loadMs[k] = saved[k];
+} catch { /* no storage: the defaults */ }
+const loadEnd = {}; // where each step's share of the bar ends (the last 3% is the finish)
+{
+  const total = Object.values(loadMs).reduce((a, b) => a + b, 0);
+  let acc = 0;
+  for (const k in loadMs) loadEnd[k] = 0.97 * (acc += loadMs[k]) / total;
+}
 const fill = document.getElementById('progress-fill');
 const bar = { from: 0, to: 0, t0: 0, ms: 1 };
-function progress(to, expectedMs) {
-  const now = performance.now();
-  const at = bar.from + (bar.to - bar.from) * Math.min(1, (now - bar.t0) / bar.ms);
-  const from = Math.max(at, 0);
-  to = Math.max(to, from);
-  Object.assign(bar, { from, to, t0: now, ms: Math.max(1, expectedMs) });
+const loadTook = {};
+let segment = null;
+let segmentStart = 0;
+// the bar's position t ms into the current segment: 85% of the way at bar.ms, all of it at 3x
+function barAt(t) {
+  const d = bar.to - bar.from;
+  const u = t / bar.ms;
+  return bar.from + d * (u < 1 ? 0.85 * u : Math.min(1, 0.85 + 0.15 * (u - 1) / 2));
+}
+function animateBar(from, to, ms, keyframes) {
+  Object.assign(bar, { from, to, t0: performance.now(), ms: Math.max(1, ms) });
   fill.getAnimations().forEach((a) => a.cancel());
-  fill.animate([{ transform: `scaleX(${from})` }, { transform: `scaleX(${to})` }],
-    { duration: bar.ms, easing: 'linear', fill: 'forwards' });
+  return fill.animate(keyframes, { duration: keyframes.length > 2 ? bar.ms * 3 : bar.ms, easing: 'linear', fill: 'forwards' });
+}
+/** Start the named loading step (ending the one before), or the finish with name null. */
+function progress(name) {
+  const now = performance.now();
+  if (segment) loadTook[segment] = now - segmentStart;
+  segment = name;
+  segmentStart = now;
+  const from = Math.max(0, barAt(now - bar.t0));
+  if (!name) {
+    try {
+      localStorage.setItem(LOAD_KEY, JSON.stringify(Object.fromEntries(Object.entries(loadTook).map(([k, v]) => [k, Math.round(v)]))));
+    } catch { /* not remembered */ }
+    const a = animateBar(from, 1, 350, [{ transform: `scaleX(${from})` }, { transform: 'scaleX(1)' }]);
+    // (don't wait on a busy compositor: the start prompt comes after at most 0.5 s)
+    return Promise.race([a.finished.catch(() => {}), new Promise((r) => setTimeout(r, 500))]);
+  }
+  const to = Math.max(loadEnd[name], from);
+  const mid = from + 0.85 * (to - from);
+  animateBar(from, to, loadMs[name], [
+    { transform: `scaleX(${from})`, offset: 0 },
+    { transform: `scaleX(${mid})`, offset: 1 / 3 },
+    { transform: `scaleX(${to})`, offset: 1 },
+  ]);
+  return null;
 }
 
 async function init() {
@@ -113,7 +155,7 @@ async function init() {
     : Promise.all([loadGroundDetail(renderer, { lowPower }), loadSurfaceDetail(renderer, { lowPower })]);
   // scanned boulders' photos and baked normals (glTF UVs: no flip)
   const rockTexReady = loadTextureSet(renderer, 'rocks', { lowPower, flipY: false });
-  progress(0.1, 500);
+  progress('terrain');
   await nextFrame();
   const terrain = buildTerrain();
   {
@@ -129,14 +171,14 @@ async function init() {
   scene.add(buildWater());
   step('terrain');
 
-  progress(0.22, 700);
+  progress('trail');
   await nextFrame();
   const trail = buildTrail();
   scene.add(trail.mesh);
   if (!off.has('water')) scene.add(buildStreamWater(trail)); // (the rocks in it skip the footbridges)
   step('trail');
 
-  progress(0.5, 2200); // models + impostor bake + scatter
+  progress('vegetation'); // models + impostor bake + scatter
   const protos = await loadPrototypes(['forest', 'rocks'].map((m) => `${import.meta.env.BASE_URL}models/${m}.glb`));
   await nextFrame();
   // far trees as billboards (?farTrees=lod: the old 3D far models, for comparison)
@@ -147,7 +189,7 @@ async function init() {
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
   step('vegetation');
 
-  progress(0.6, 500);
+  progress('shading'); // and grass
   await nextFrame();
   shadeGround(terrain, veg.canopyAt);
   shadeGround(trail.mesh, veg.canopyAt);
@@ -187,18 +229,19 @@ async function init() {
   const cycleWeather = () => flash(`Weather: ${weather.cycleOverride()}`);
   if (touch) new TouchControls(renderer.domElement, player); // eslint-disable-line no-new
 
+  progress('textures');
   const [ground, surface] = await detailReady; // before warm-up so their shaders compile now
   const rockTex = await rockTexReady;
   applyRockTextures(rockTex);
   step(`detail textures (ground ${ground ? 'on' : 'off'}, surface ${surface ? 'on' : 'off'}, rocks ${rockTex ? 'on' : 'off'})`);
 
-  progress(0.98, 2500);
+  progress('warmup');
   await nextFrame();
   warmUp();
   step('warm-up');
   if (params.has('perf')) console.info('load:', timings.join(' · '));
 
-  progress(1, 200);
+  await progress(null); // fill the rest where it can be seen, then offer the start
   status.textContent = touch ? 'Tap to start' : 'Click to start';
   overlay.classList.add('ready');
   let started = false;
