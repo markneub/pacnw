@@ -188,7 +188,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   ~70% wider (8.5 m), bed 0.6 m deeper, ~2× the rocks and bigger ones (+0.45 r), and the trail is routed to cross there
   (`WET_COST` × 0.1 in the rapids): a 12.2 m two-piece footbridge (spans > 9 m use two models end to end, 0.5 m overlap).
   In the shader (`aInfo.z`): base speed + 2.6, standing-wave ridges (|2n − 1| ridge noise: white crests, slopes in the
-  normal), milky aerated colour, alpha → 0.97 (white water hides the bed). Views: on the bridge
+  normal), milky aerated colour, alpha → 0.97 (white water hides the bed).
+  **Phone bench** (DPR 1.5 after autores, full clock): spawn full 5.0 ms (trees 2.3, water 0.0, rain/snow ~0); snowfield 4.5
+  (trees 1.7, snow 0.2); **creek view** (opt-in `views=creek`) 5.0 ms with **water 1.1 ms** when it fills the screen. The
+  rapids' ridge noise (8 lookups) now only runs where `rapid` > 0. Views: on the bridge
   `x=84&z=0`, looking up/downstream.
 - **Marsh + boardwalk** (`MARSH`/`marshAt` in terrain.js: an oval (165, 478) 62 × 30 m with noisy edge on the lake's
   south-east shore): `baseHeight` eases the ground to WATER_LEVEL − 0.08 + hummock noise (±0.5 m), so the lake surface

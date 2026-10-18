@@ -434,9 +434,11 @@ function streamMaterial(rockTex) {
           float patches = swNoise(swPm * vec2(0.5, 0.18) + vec2(0.0, -uSwTime * 0.3 * base));
           float cov = smoothstep(1.4, 3.0, vFlow.z) * (0.15 + 0.5 * patches);
           // standing waves in the rapids: irregular ridges (not bands straight across), white on top
-          float rn = swNoise(swPm * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise(swPm * vec2(1.7, 1.2) + 8.3) * 0.35;
-          float crest = 1.0 - abs(2.0 * rn - 1.0);
-          cov = max(cov, rapid * (0.1 + 0.7 * smoothstep(0.6, 0.95, crest)) * (0.45 + 0.55 * patches));
+          if (rapid > 0.001) {
+            float rn = swNoise(swPm * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise(swPm * vec2(1.7, 1.2) + 8.3) * 0.35;
+            float crest = 1.0 - abs(2.0 * rn - 1.0);
+            cov = max(cov, rapid * (0.1 + 0.7 * smoothstep(0.6, 0.95, crest)) * (0.45 + 0.55 * patches));
+          }
           cov = max(cov, swRockF.x * 1.25);
           cov = max(cov, smoothstep(0.82, 0.98, abs(u)) * 0.3);
           // (stretched along the current: white water streaks, round bubbles read as a cow print)
@@ -462,12 +464,14 @@ function streamMaterial(rockTex) {
           float amp = 0.1 + 0.16 * smoothstep(0.4, 2.5, base) + 0.12 * rapid;
           vec2 slope = (n1 * 0.6 + n2 * 0.55) * amp * (1.0 + 0.8 * swRockF.x);
           // rapids: standing waves (they stay put while the water runs through them)
-          // (slopes of the same ridge field as the foam, by finite differences)
-          float r0 = swNoise(swPm * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise(swPm * vec2(1.7, 1.2) + 8.3) * 0.35;
-          float rx = swNoise((swPm + vec2(0.1, 0.0)) * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise((swPm + vec2(0.1, 0.0)) * vec2(1.7, 1.2) + 8.3) * 0.35;
-          float ry = swNoise((swPm + vec2(0.0, 0.1)) * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise((swPm + vec2(0.0, 0.1)) * vec2(1.7, 1.2) + 8.3) * 0.35;
-          float c0 = 1.0 - abs(2.0 * r0 - 1.0);
-          slope += rapid * 0.55 * vec2((1.0 - abs(2.0 * rx - 1.0)) - c0, (1.0 - abs(2.0 * ry - 1.0)) - c0) / 0.1 * 0.35;
+          if (rapid > 0.001) { // (only in the rapids: 6 noise lookups)
+            // (slopes of the same ridge field as the foam, by finite differences)
+            float r0 = swNoise(swPm * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise(swPm * vec2(1.7, 1.2) + 8.3) * 0.35;
+            float rx = swNoise((swPm + vec2(0.1, 0.0)) * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise((swPm + vec2(0.1, 0.0)) * vec2(1.7, 1.2) + 8.3) * 0.35;
+            float ry = swNoise((swPm + vec2(0.0, 0.1)) * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise((swPm + vec2(0.0, 0.1)) * vec2(1.7, 1.2) + 8.3) * 0.35;
+            float c0 = 1.0 - abs(2.0 * r0 - 1.0);
+            slope += rapid * 0.55 * vec2((1.0 - abs(2.0 * rx - 1.0)) - c0, (1.0 - abs(2.0 * ry - 1.0)) - c0) / 0.1 * 0.35;
+          }
           vec3 along = normalize(vec3(vFlow.x, 0.0, vFlow.y));
           vec3 across = vec3(-along.z, 0.0, along.x);
           vec3 nWorld = vec3(0.0, 1.0, 0.0) - across * slope.x - along * slope.y;
