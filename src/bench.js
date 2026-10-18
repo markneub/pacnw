@@ -23,6 +23,8 @@ const VIEWS = [
   { key: 'spawn', name: 'spawn', x: null, z: null },
   { key: 'forest', name: 'forest', x: -30, z: 420, yaw: 0.3, pitch: 0 },
   { key: 'snow', name: 'snowfield', x: 90, z: -500, yaw: 0.2, pitch: 0 },
+  // a creek with rocks filling the lower half of the screen (only when asked for: views=creek)
+  { key: 'creek', name: 'creek', x: 463, z: -12.7, yaw: 3.13, pitch: -0.4, optIn: true },
 ];
 
 /**
@@ -30,7 +32,7 @@ const VIEWS = [
  *  rows   which rows to run, e.g. ['trees', 'grass']; empty = all. Keys: trees,
  *         ferns, rocks, ground, detail, tex, grass, grass50, near40, water, sky,
  *         weather, motes, post, sort, empty, dpr (all the resolution rows). "full" always runs.
- *  views  e.g. ['spawn']; empty = all (spawn, forest, snow)
+ *  views  e.g. ['spawn']; empty = all (spawn, forest, snow); 'creek' only when named
  *  heat   seconds of flat-out rendering first. Phones slow their GPU after
  *         ~20 s of full load; heat=30 measures that throttled state directly.
  *  quick  smoke test for slow software renderers (one view, tiny batches)
@@ -42,7 +44,7 @@ export async function runBench({
   const N = quick ? 2 : 12; // frames per batch
   const PAIRS = quick ? 1 : 5; // alternating full/config batch pairs per row (median taken)
   const WARM_MS = quick ? heat * 1000 : Math.max(1500, heat * 1000);
-  const views = quick ? VIEWS.slice(0, 1) : VIEWS.filter((v) => !viewKeys.length || viewKeys.includes(v.key));
+  const views = quick ? VIEWS.slice(0, 1) : VIEWS.filter((v) => (!viewKeys.length && !v.optIn) || viewKeys.includes(v.key));
   const gl = renderer.getContext();
   const pixel = new Uint8Array(4);
   const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);

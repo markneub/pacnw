@@ -302,7 +302,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   speed mid-run. It reports each part off, an empty scene and other DPRs, in a copyable table. The user runs it on their phone
   and pastes the result. **Parameterized (v3):** `?bench=trees,grass` runs only those rows (keys: trees, ferns, rocks,
   ground, detail, tex, grass, grass50, near40, water, sky, weather, empty, dpr) plus the full baseline. `&views=spawn,forest,snow`,
-  and `&heat=30` renders flat out first (in 200 ms slices), so the run measures the throttled state directly. The full
+  `creek` (opt-in only: a creek with rocks filling the lower screen, `x=463&z=-12.7&yaw=3.13&pitch=-0.4`; the user saw 33 fps
+  with autores down at 1.25 looking down a creek), and `&heat=30` renders flat out first (in 200 ms slices), so the run measures the throttled state directly. The full
   run takes ~2 min. Ask for just the rows a change touches. **The user prefers not to heat up:** links go without `&heat` and measure
   the full-clock state. Judge by relative cost (paired "saves"); autores covers throttling. Rule of thumb: keep the
   full-clock phone frame at spawn ≲6 ms (throttled has been ~2.5× full clock). Tree culling at full clock: trees spawn
