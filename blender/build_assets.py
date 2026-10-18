@@ -852,6 +852,47 @@ def vine_maple(M, name, seed=5, leafy=1.0):
     return b.build(name)
 
 
+def _face_toward(b, idx, mat, toward):
+    """A face whose front (by winding) points along `toward`: reversed if it doesn't."""
+    p0, p1, p2 = (Vector(b.verts[i]) for i in idx[:3])
+    if (p1 - p0).cross(p2 - p0).dot(Vector(toward)) < 0:
+        idx = tuple(reversed(idx))
+    b.face(idx, mat)
+
+
+def broken_end(b, M, loop, x, r, centre, d, er):
+    """
+    The snapped, rotted end of a trunk lying along X, on its end ring `loop` (at x, radius r,
+    axis at `centre` = (y, z)), facing d = +1 (+X) or -1. A ragged rim of bark-backed splinters,
+    mostly short with a few long ones; inside it the torn, fibrous broken face (BrokenWood);
+    and a punky, rotten heart (RotWood) hollowed back into the trunk. Lengths scale with r.
+    End faces get little light under the canopy, so the woods are light (darker read as black).
+    """
+    sides = len(loop)
+    cy, cz = centre
+
+    def ring(rr, dx, jag=None, wob=0.0):
+        out = []
+        for i in range(sides):
+            a = TAU * i / sides
+            q = rr * (1.0 + er.uniform(-wob, wob))
+            out.append(b.v((x + d * (dx + (jag[i] if jag else 0.0)), math.cos(a) * q + cy, math.sin(a) * q + cz)))
+        return out
+
+    jag = [r * (er.uniform(0.6, 1.1) if er.random() < 0.25 else er.uniform(0.1, 0.5)) for _ in range(sides)]
+    rim = ring(r * 0.9, 0.0, jag, 0.04)  # splinter tips (bark outside)
+    lip = ring(r * 0.62, 0.0, [0.45 * j for j in jag], 0.1)  # the inner edge of the broken wood
+    pit = ring(r * 0.35, -0.25 * r, None, 0.15)  # down into the rotten heart
+    heart = b.v((x - d * 0.55 * r, cy, cz))
+    for k in range(sides):
+        m = (k + 1) % sides
+        a = TAU * (k + 0.5) / sides
+        _face_toward(b, (loop[k], loop[m], rim[m], rim[k]), M["bark"], (0, math.cos(a), math.sin(a)))
+        _face_toward(b, (rim[k], rim[m], lip[m], lip[k]), M["broken_wood"], (d, 0, 0))
+        _face_toward(b, (lip[k], lip[m], pit[m], pit[k]), M["rot_wood"], (d, 0, 0))
+        _face_toward(b, (pit[k], pit[m], heart), M["rot_wood"], (d, 0, 0))
+
+
 def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
     """
     A fallen old-growth trunk, lying along X and settled into the ground
@@ -883,35 +924,10 @@ def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
         for i in range(sides):
             j = (i + 1) % sides
             b.face((lo[i], lo[j], hi[j], hi[i]), bark)
-    # Broken end (own rng, seed + 151): the trunk snapped when it fell and has rotted since. A
-    # ragged rim of bark-backed splinters, mostly short with a few long ones; inside it the torn,
-    # fibrous broken face; and a punky, rotten heart hollowed back into the trunk. (The old end was
-    # a cone of splinters wound inside out, so it was culled: you saw into the hollow tube.)
-    # Faces wind (prev[i], prev[j], next[j], next[i]) going out along +X or in toward the axis,
-    # which faces them outward; there's no normal recalculation for this asset.
-    er = random.Random(seed + 151)
+    # Broken end (own rng, seed + 151): see broken_end(). (It was a cone of splinters wound inside
+    # out, so it was culled: you saw into the hollow tube.)
     loop, x, r, bend, zc = loops[-1]
-
-    def ring(rr, dx, jag=None, wob=0.0):
-        out = []
-        for i in range(sides):
-            a = TAU * i / sides
-            q = rr * (1.0 + er.uniform(-wob, wob))
-            out.append(b.v((x + dx + (jag[i] if jag else 0.0), math.cos(a) * q + bend, math.sin(a) * q + zc)))
-        return out
-
-    jag = [er.uniform(0.5, 0.9) if er.random() < 0.25 else er.uniform(0.1, 0.45) for _ in range(sides)]
-    rim = ring(r * 0.9, 0.0, jag, 0.04)  # splinter tips (bark outside)
-    lip = ring(r * 0.62, 0.0, [0.45 * j for j in jag], 0.1)  # the inner edge of the broken wood
-    pit = ring(r * 0.35, -0.25 * r, None, 0.15)  # down into the rotten heart
-    for k in range(sides):
-        m = (k + 1) % sides
-        b.face((loop[k], loop[m], rim[m], rim[k]), bark)
-        b.face((rim[k], rim[m], lip[m], lip[k]), M["broken_wood"])
-        b.face((lip[k], lip[m], pit[m], pit[k]), M["rot_wood"])
-    heart = b.v((x - 0.55 * r, bend, zc))
-    for k in range(sides):
-        b.face((pit[k], pit[(k + 1) % sides], heart), M["rot_wood"])
+    broken_end(b, M, loop, x, r, (bend, zc), 1, random.Random(seed + 151))
     # Root wad at the root end: a windthrown tree tears up a thick, lumpy plate of soil with its
     # roots (a flat disc read as a slice of trunk). The roots are earth-coated too (RootSoil:
     # bark-coloured roots took the moss shader's green and read as sticks). Thick roots flare out of the trunk end across
@@ -1127,14 +1143,15 @@ def log(M, name, seed, length=9.0, radius=0.55, sides=10):
         for i in range(sides):
             j = (i + 1) % sides
             b.face((loops[k][i], loops[k + 1][i], loops[k + 1][j], loops[k][j]), M["bark"])
-    for loop, flip in ((loops[0], True), (loops[-1], False)):
-        cx = sum(b.verts[i][0] for i in loop) / sides
+    # both ends snapped and rotted (they were flat end-grain discs that read as dark blobs);
+    # own rng, so the stubs below don't move
+    er = random.Random(seed + 151)
+    for loop, d in ((loops[0], -1), (loops[-1], 1)):
+        x = b.verts[loop[0]][0]
         cy = sum(b.verts[i][1] for i in loop) / sides
         cz = sum(b.verts[i][2] for i in loop) / sides
-        c = b.v((cx + (-0.1 if flip else 0.1), cy, cz))
-        for i in range(sides):
-            j = (i + 1) % sides
-            b.face((c, loop[j], loop[i]) if flip else (c, loop[i], loop[j]), M["log_end"])
+        r = sum(math.hypot(b.verts[i][1] - cy, b.verts[i][2] - cz) for i in loop) / sides
+        broken_end(b, M, loop, x, r, (cy, cz), d, er)
     # a couple of broken branch stubs
     for _ in range(4):
         x = rng.uniform(-length * 0.35, length * 0.35)

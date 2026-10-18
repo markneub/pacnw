@@ -97,6 +97,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   into the hollow tube); now a ragged bark-backed rim (mostly 0.1–0.45 m splinters, a quarter 0.5–0.9 m), a torn face of
   `BrokenWood` (0.6, 0.52, 0.42; snag photo) and a pit of punky `RotWood` (0.5, 0.29, 0.17; soil photo) hollowed back into
   the heart. End faces get little light under the canopy: darker colours read as black.
+  Now `broken_end(b, M, loop, x, r, centre, d, er)` (lengths in units of r, faces oriented by `_face_toward`, which
+  reverses a face whose winding points away from a hint direction) also gives both ends of the ordinary `log` (own rng
+  `seed + 151`): its flat `LogEnd` discs read as dark faceted blobs. `LogEnd` is now only the root wad's trunk cap.
   **Vine maple** leaves: `maple_spray()` shades each leaf (lighter centre, darker rim, mottle) with a soft shadow on the
   leaves beneath, lobes cut ~1/3 in; the cards are **folded** (`_card(fold=0.45)`: a shallow V along the twig, 4 tris; each
   half rises 0.45 × its width), with more roll, since flat horizontal cards seen at eye level were thin streaks. `fold=0`

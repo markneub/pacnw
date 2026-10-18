@@ -327,3 +327,7 @@ splinters around a torn face of grey wood with a red-brown rotten heart.
 The stone piles marking the trail in the snow sat a metre off the tread, often right on the edge of the bank below it.
 Each now picks the most level spot at or beside the tread's edge nearby; on steep traverses with no such spot there's
 none (25 instead of 35).
+
+### 43. Broken ends on the ordinary fallen logs too
+Their ends were flat, dark, faceted discs. They now get the same ragged splintered end with a red-brown rotten heart as
+the nurse logs. The marsh edge looked natural close up after the lake shore change, so it needed nothing more.
