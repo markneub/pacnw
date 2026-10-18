@@ -110,7 +110,9 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   (Gaussian weights) so close switchbacks keep level treads. The 5 m terrain grid can't hold that, so a
   0.5 m-resolution corridor mesh (`buildCorridorMesh`) replaces it. The terrain fragment shader discards
   inside `CUTOUT_HALF` using a 1 m mask texture (`setTerrainCutout`), and the corridor's outer edge
-  alpha-fades over the terrain. `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
+  alpha-fades over the terrain. The mask skips points beyond the trail's two ends (1.5 m short): `distanceTo` rounds the
+  ends off but the strip stops square, which left a half-disc hole to the sky at the trailhead (seen by the user as a
+  "reflective patch" by the sign). `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
 - Trail QA numbers (cross-slope on tread p50 ≈0, p95 ≈13%; grade p95 ≈26%) come from measuring
   `groundAt` across/along `trail.points` in node. Re-check them after changing the route or widths.
 - `src/touch.js`: one-thumb scheme. The first finger is the steer: its horizontal movement turns (swipe-style, ~130° per

@@ -361,10 +361,20 @@ function buildCutoutMask(points, distanceTo) {
   const w = Math.ceil(maxX + pad) - minX;
   const h = Math.ceil(maxZ + pad) - minZ;
   const data = new Uint8Array(w * h);
+  // the corridor strip stops square at the trail's two ends, but distanceTo() rounds them off,
+  // so a cutout from it alone left a half-disc hole past each end (seen through to the sky at the
+  // trailhead): only cut where a point is not beyond either end (1.5 m short, so the strip overlaps)
+  const ends = [[points[0], points[1]], [points[points.length - 1], points[points.length - 2]]].map(([a, b]) => {
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    return { x: a.x, z: a.y, dx: (b.x - a.x) / l, dz: (b.y - a.y) / l };
+  });
+  const beyondEnd = (x, z) => ends.some((e) => (x - e.x) * e.dx + (z - e.z) * e.dz < 1.5);
   for (let j = 0; j < h; j++) {
     for (let i = 0; i < w; i++) {
       // texel centres
-      if (distanceTo(minX + i + 0.5, minZ + j + 0.5) < CUTOUT_HALF) data[j * w + i] = 255;
+      const x = minX + i + 0.5;
+      const z = minZ + j + 0.5;
+      if (distanceTo(x, z) < CUTOUT_HALF && !beyondEnd(x, z)) data[j * w + i] = 255;
     }
   }
   const tex = new THREE.DataTexture(data, w, h, THREE.RedFormat);
