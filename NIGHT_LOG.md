@@ -231,3 +231,11 @@ and "End of trail" at the basin. Cream letters routed into the wood, readable fr
 At the edge of their draw distance, ferns, salal and loose stones used to shrink down into the ground, so walking toward
 them they seemed to sprout up in front of you. Now they keep their full size and fade in as a fine dissolve, each at a
 slightly different distance, the same way trees switch detail levels. Cost: none measurable (same pixels).
+
+### 28. Switchbacks into the snow; the dark spots (found by the user)
+The trail used to climb the steep snow in a ladder of ~10 m zig-zags with sharp hairpins. The route search now charges
+for every turn, so it makes long, sweeping legs and few hairpins like a built trail (it's longer, 2.9 km, and gentler:
+the steepest 5% went from 26% to 21% grade). It also avoids walking along creeks, so it crosses each one once, squarely
+(4 footbridges now). The dark spots were the hidden curtain under the trail's edge: its lighting was broken (black)
+wherever it peeked above the ground. Fixed, along with thin black lines along the trail edge in the snow. No holes.
+Note: the new route moved trees near the trail, and the sign distances updated with it.

@@ -53,57 +53,92 @@ for (let dz = -2; dz <= 2; dz++) {
   }
 }
 
-/** Least-cost path between two points, preferring gentle grades (→ switchbacks). */
-function route(heights, side, a, b) {
+/**
+ * Least-cost path between two points, preferring gentle grades (→ switchbacks).
+ * The search state is (cell, heading), so turning costs something: every
+ * change of direction adds TURN_COST × (1 − cos θ)/2 metres. Without it the
+ * cheapest way up a steep slope was a ladder of ~10 m legs with hairpins every
+ * few metres (the user saw sharp, cut-up switchbacks into the snow); with it
+ * the legs run longer and the hairpins are fewer, as on a built trail.
+ */
+const TURN_COST = 40;
+const WET_COST = 60; // m per 6 m cell in or beside a creek
+function route(heights, side, wet, a, b) {
+  const D = MOVES.length;
   const idx = (ix, iz) => iz * NX + ix;
   const toCell = (p) => [Math.round((p.x - MIN_X) / CELL), Math.round((p.z - MIN_Z) / CELL)];
   const [sx, sz] = toCell(a);
   const [tx, tz] = toCell(b);
   const start = idx(sx, sz);
   const goal = idx(tx, tz);
+  // the turn cost between each pair of move directions
+  const turn = new Float32Array(D * D);
+  for (let i = 0; i < D; i++) {
+    for (let j = 0; j < D; j++) {
+      const [ax, az, al] = MOVES[i];
+      const [bx, bz, bl] = MOVES[j];
+      const cos = ((ax * bx + az * bz) * CELL * CELL) / (al * bl);
+      turn[i * D + j] = (TURN_COST * (1 - cos)) / 2;
+    }
+  }
 
-  const g = new Float32Array(NX * NZ).fill(Infinity);
-  const from = new Int32Array(NX * NZ).fill(-1);
-  const closed = new Uint8Array(NX * NZ);
+  const g = new Float32Array(NX * NZ * D).fill(Infinity);
+  const from = new Int32Array(NX * NZ * D).fill(-1);
+  const closed = new Uint8Array(NX * NZ * D);
   const heap = new MinHeap();
-  g[start] = 0;
-  heap.push(start, 0);
+  // the start may leave in any direction
+  for (let d = 0; d < D; d++) {
+    g[start * D + d] = 0;
+    heap.push(start * D + d, 0);
+  }
+  let end = -1;
 
   while (heap.size) {
-    const cur = heap.pop();
-    if (cur === goal) break;
-    if (closed[cur]) continue;
-    closed[cur] = 1;
+    const st = heap.pop();
+    const cur = (st / D) | 0;
+    const dir = st - cur * D;
+    if (cur === goal) {
+      end = st;
+      break;
+    }
+    if (closed[st]) continue;
+    closed[st] = 1;
     const cx = cur % NX;
     const cz = (cur - cx) / NX;
-    for (const [dx, dz, dist] of MOVES) {
+    for (let k = 0; k < D; k++) {
+      const [dx, dz, dist] = MOVES[k];
       const nx = cx + dx;
       const nz = cz + dz;
       if (nx < 0 || nz < 0 || nx >= NX || nz >= NZ) continue;
       const n = idx(nx, nz);
-      if (closed[n]) continue;
+      const ns = n * D + k;
+      if (closed[ns]) continue;
       const h = heights[n];
       if (h < WATER_LEVEL + 1.2) continue;
       const grade = (h - heights[cur]) / dist;
       // steep grades cost a lot more than distance; side-slope makes the
       // tread hard to cut, so avoid traversing cliffs too
       const steep = Math.max(0, Math.abs(grade) - 0.18);
-      const cost = dist * (1 + 40 * grade * grade + 2500 * steep * steep + 6 * side[n] * side[n]);
-      const ng = g[cur] + cost;
-      if (ng < g[n]) {
-        g[n] = ng;
-        from[n] = cur;
+      const cost = dist * (1 + 40 * grade * grade + 2500 * steep * steep + 6 * side[n] * side[n]) + (cur === start ? 0 : turn[dir * D + k]) + wet[n] * WET_COST;
+      const ng = g[st] + cost;
+      if (ng < g[ns]) {
+        g[ns] = ng;
+        from[ns] = st;
         const hx = (nx - tx) * CELL;
         const hz = (nz - tz) * CELL;
-        heap.push(n, ng + Math.hypot(hx, hz));
+        heap.push(ns, ng + Math.hypot(hx, hz));
       }
     }
   }
 
   const path = [];
-  for (let c = goal; c !== -1; c = from[c]) {
+  for (let st = end; st !== -1; st = from[st]) {
+    const c = (st / D) | 0;
     const cx = c % NX;
-    path.push(new THREE.Vector2(MIN_X + cx * CELL, MIN_Z + ((c - cx) / NX) * CELL));
+    if (path.length && path[path.length - 1].c === c) continue;
+    const v = new THREE.Vector2(MIN_X + cx * CELL, MIN_Z + ((c - cx) / NX) * CELL);
+    v.c = c;
+    path.push(v);
   }
   path.reverse();
   path[0].set(a.x, a.z);
@@ -200,18 +235,23 @@ function resample(pts, spacing) {
 export function buildTrail() {
   const heights = new Float32Array(NX * NZ);
   const side = new Float32Array(NX * NZ);
+  const wet = new Uint8Array(NX * NZ);
   for (let iz = 0; iz < NZ; iz++) {
     for (let ix = 0; ix < NX; ix++) {
       const x = MIN_X + ix * CELL;
       const z = MIN_Z + iz * CELL;
       heights[iz * NX + ix] = heightAt(x, z);
       side[iz * NX + ix] = slopeAt(x, z);
+      // creeks: stepping into one costs a lot, so the trail crosses once, squarely, rather than
+      // following a channel (it once crossed the same creek twice at a hairpin)
+      const c = streams().nearest(x, z);
+      if (c.seg && c.d < c.half + 4) wet[iz * NX + ix] = 1;
     }
   }
 
   let coarse = [];
   for (let i = 0; i < TRAIL_STOPS.length - 1; i++) {
-    const leg = route(heights, side, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
+    const leg = route(heights, side, wet, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
     coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
   }
   const points = resample(chaikin(coarse, 3), STEP);
@@ -718,7 +758,9 @@ function buildCorridorMesh(points, distanceTo) {
       for (const v of [vA, vB]) {
         for (const drop of [0, 3]) {
           sPos.push(P.getX(v), P.getY(v) - drop, P.getZ(v));
-          const k = drop ? 0.55 : 0.8; // a little darker going down
+          // the strip edge's own colour (darkened, it read as black notches where a skirt shows
+          // above ground at hairpins)
+          const k = drop ? 0.85 : 1;
           sCol.push(C.getX(v) * k, C.getY(v) * k, C.getZ(v) * k, 1);
           sLay.push(L.getX(v), L.getY(v), L.getZ(v), L.getW(v));
         }
@@ -740,7 +782,9 @@ function buildCorridorMesh(points, distanceTo) {
     skirt.setAttribute('aTread', new THREE.Float32BufferAttribute(new Float32Array(sPos.length / 3), 1));
     skirt.setAttribute('aLayers', new THREE.Float32BufferAttribute(sLay, 4));
     skirt.setIndex(sIdx);
-    skirt.computeVertexNormals();
+    // lit like the ground it continues: computeVertexNormals averaged the two windings' opposite
+    // normals to zero, so wherever the skirt showed it was black (spots and thin lines in the snow)
+    skirt.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(sPos.length).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
     skirt.computeBoundingSphere();
     const mesh = new THREE.Mesh(skirt, mat);
     mesh.name = 'trail skirt';

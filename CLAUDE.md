@@ -230,6 +230,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 - Trail in snow: no flat fill colour (a grey-blue `packed` stripe read as paint). The tread there is the snow's own colour
   lerped 0.4 + 0.45 × groove (1 − (d/width)², deepest mid-tread) toward `packed`, with an edge 0.3 + 0.5·snow m soft, and
   `aTread` × (1 − 0.7·snow) so the tread's dark grit stays off trodden snow.
+- **Route search with turning cost** (`route()` in trail.js): the A* state is (cell, heading over the 16 MOVES), and each
+  change of direction costs `TURN_COST` (40) × (1 − cos θ)/2 m; cells within half + 4 m of a creek cost `WET_COST` (60 m)
+  each, so the trail crosses a creek once, squarely. Before, the cheapest way up steep snow was a ladder of ~10 m legs with
+  hairpins every few metres (the user: "very sharp") and once a hairpin crossed the same creek twice. Now: 2.88 km (was
+  2.45), 1.5 km in snow, grade p95 21% (was 26%), cross-slope p95 1% (was 12%), 4 footbridges, sharp turns near/above the
+  snowline 28 → 7. Trail build 1.2 → 2.2 s (container; 16× the A* states). The new route moved trees near the trail.
+  The **skirt** is emitted with both windings, so `computeVertexNormals` averaged them to zero and it rendered **black**
+  wherever it showed above ground (the "weird dark spots" at hairpins, and thin black lines along the corridor edge in snow).
+  It now has up-facing normals and the strip edge's colour.
 - Trail QA numbers (cross-slope on tread p50 ≈0, p95 ≈13%; grade p95 ≈26%) come from measuring
   `groundAt` across/along `trail.points` in node. Re-check them after changing the route or widths.
 - `src/touch.js`: one-thumb scheme. The first finger is the steer: its horizontal movement turns (swipe-style, ~130° per
