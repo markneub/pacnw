@@ -8,6 +8,7 @@ export const shared = {
   uWind: { value: 1 },
   uSnowline: { value: SNOWLINE },
   uWet: { value: 1 }, // 0 dry .. 1 soaked: darker, glossier surfaces
+  uRain: { value: 1 }, // 0 .. 1 rain falling here (weather.js): rings on the water
   uLodRadius: { value: 85 }, // m; full-detail trees inside, far LOD outside
   uLodBand: { value: 12 }, // m either side of uLodRadius over which the tiers crossfade
   uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
@@ -263,6 +264,56 @@ export function addTrunkMoss(material) {
   return material;
 }
 addTrunkMoss.enabled = true; // ?off=moss
+
+/**
+ * Sun glitter on water (GLSL, for the lake and the streams). The surface is
+ * treated as tiny wave facets in world-anchored cells: a facet flashes when its
+ * random slope happens to mirror the sun into the eye, which needs a tilt of
+ * the half vector away from vertical; the chance of that falls off with the
+ * wave slope spread (sigma), so the sparkles gather into the glitter path
+ * toward the sun on their own. Each cell re-rolls its facet a few times a
+ * second, staggered, so sparkles flash and go. Cells grow with distance in
+ * power-of-two steps, blended, so distant glitter doesn't shimmer.
+ * glitter(worldPos, toEye, sigma) returns HDR sunlight to add (times uGlSun).
+ */
+export const GLITTER_GLSL = /* glsl */ `
+  uniform float uGlTime;
+  uniform float uGlSun;
+  float glHash(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+  float glLevel(vec2 xz, float cell, float pTilt) {
+    vec2 c = floor(xz / cell);
+    float phase = glHash(vec3(c, 7.0));
+    float t = uGlTime * (3.0 + 4.0 * phase) + phase * 10.0;
+    float roll = floor(t);
+    float life = fract(t);
+    float h = glHash(vec3(c, roll));
+    // the facet is a round point somewhere in its cell (a whole lit cell reads as a square)
+    vec2 o = vec2(glHash(vec3(c, roll + 0.37)), glHash(vec3(c, roll + 0.71))) * 0.5 + 0.25;
+    float d = length(fract(xz / cell) - o);
+    // a flash: on when this roll's facet mirrors the sun, brightest mid-life
+    return step(h, pTilt) * smoothstep(0.3, 0.05, d) * smoothstep(0.0, 0.25, life) * smoothstep(1.0, 0.55, life);
+  }
+  float glitter(vec3 wp, vec3 toEye, float sigma) {
+    vec3 sun = normalize(vec3(${SUN_DIR.x.toFixed(4)}, ${SUN_DIR.y.toFixed(4)}, ${SUN_DIR.z.toFixed(4)}));
+    vec3 hv = normalize(sun + toEye);
+    float cosT = max(hv.y, 1e-3);
+    float tan2 = (1.0 - cosT * cosT) / (cosT * cosT);
+    // chance that a facet tilts that far, times how many facets per cell flash
+    float pTilt = exp(-tan2 / (sigma * sigma)) * 0.3;
+    float dist = length(wp - cameraPosition);
+    float lod = log2(max(dist * 0.004, 0.06) / 0.06);
+    float l0 = floor(lod);
+    float cell0 = 0.06 * exp2(l0);
+    float g = mix(glLevel(wp.xz, cell0, pTilt), glLevel(wp.xz + 17.3, cell0 * 2.0, pTilt), fract(lod));
+    // a soft sheen along the glitter path, under the sparkles
+    float sheen = pow(max(dot(reflect(-toEye, vec3(0.0, 1.0, 0.0)), sun), 0.0), 60.0) * 0.25;
+    return (g * 16.0 + sheen) * uGlSun;
+  }
+`;
+export function patchGlitter(shader) {
+  shader.uniforms.uGlTime = shared.uTime;
+  shader.uniforms.uGlSun = shared.uSun;
+}
 
 /**
  * Sunlight through the canopy, for everything outdoors: the sun's direct light

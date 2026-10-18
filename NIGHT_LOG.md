@@ -117,3 +117,12 @@ footbridge, tilted to the grade where needed, and you walk across on the deck.
 Look: a creek near the lake `?x=163&z=66.6&yaw=-1.81&pitch=-0.3`, a snowmelt creek on the snowfield
 `?weather=sun&x=-30&z=-432&yaw=-2.25&pitch=-0.3`, a footbridge `?weather=sun&x=246.6&z=-187.1&yaw=-0.64&pitch=-0.2`.
 Cost: 4 stream meshes + bridges (phone spawn draws 155 → 173, tris unchanged). `?off=water` hides them.
+
+### 11. Sun glitter on the lake and streams
+In a sun break, water facing the sun now sparkles: tiny points of sunlight that flash and vanish, gathering into a
+glittering path toward the sun, like a breezy lake on a sunny day. It's physically based in spirit (each spot of water
+is a tiny wave facet, and it flashes only when its tilt happens to mirror the sun into your eye), so the path's width and
+place follow the view by themselves. Creeks glitter more widely (rougher, faster water), only where sunlight actually
+reaches them through the canopy, and not on white water. Fixed along the way: the lake showed rain rings in sunshine.
+Look (sun): from the east shore `?weather=sun&x=279.7&z=416.4&yaw=0.98&pitch=-0.12`.
+Cost: a few dozen shader ops on water pixels only; no draws or triangles.

@@ -121,6 +121,14 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   6.4 m, scaled to the span, moss 0.2) spans bank to bank, **tilted to the grade** (`tilt` placement field → rotation about
   local Z). `walkAt()` (terrain.js, `setWalkModifier`) puts the player on the deck; player.js uses it. Phone spawn draws
   155 → 173.
+- **Sun glitter** (`GLITTER_GLSL` + `patchGlitter` in materials.js, used by the lake and stream shaders): world-anchored
+  cells (6 cm, doubling with distance in blended power-of-two LODs, `0.004·dist`), each holding one round facet point at a
+  random spot that re-rolls 3–7×/s (staggered, fading in/out). A facet flashes with probability exp(−tan²θh/σ²) × 0.3,
+  θh = the half vector's tilt from vertical, so sparkles gather into the glitter path by themselves; gain 16 (HDR) plus a
+  faint sheen lobe, × `uSun`. σ: lake 0.16 + 0.06·uWet, streams 0.2–0.32 with speed; streams also × canopy toward the sun
+  and × (1 − foam). (Whole lit cells read as squares, hence the round points.) Lake rain rings now follow `shared.uRain`
+  (the rain amount), not `uWet`, which stays 0.2 in sun and drew rings on a sunny lake. Views (sun):
+  shore `x=279.7&z=416.4&yaw=0.98&pitch=-0.12`. Cost: ALU on water pixels only.
 - `src/terrain.js`: `heightAt(x,z)` is the smooth noise height that drives terrain generation and scatter
   decisions. `groundAt(x,z)` is the height of the *rendered* triangulated mesh. Use it for anything that
   must sit on the ground (instances, player feet, trail ribbon). `snowlineAt`/`snowAmount` keep ground snow, snowy-tree choice and rain→snow consistent.
@@ -389,8 +397,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 - **Next (the user's plan, in order):**
   1. (Done: landscape rework, see Map.)
   2. (Done: streams, see Streams.)
-  3. Sun glitter on water (streams and the lake): realistic sparkle where the sun's reflection is visible. The user can
-     share reference photos.
+  3. (Done: sun glitter, see Sun glitter.)
 - Deferred by the user (they test with the sound off): sound — footsteps by surface, birdsong in sun breaks, drips after rain.
 
 ## Headless screenshots (how to see the scene)

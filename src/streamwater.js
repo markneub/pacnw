@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { rawGroundAt, streams } from './terrain.js';
-import { shared, patchSunlight, sunKey } from './materials.js';
+import { shared, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter } from './materials.js';
+import { SUN_DIR, SUN_COLOR } from './atmosphere.js';
 
 /**
  * The streams' water: one ribbon per stream along its points, filling the
@@ -111,6 +112,7 @@ function streamMaterial() {
     shader.uniforms.uWet = shared.uWet;
     shader.uniforms.uSwCanopy = shared.uCanopyMap;
     shader.uniforms.uSwCanopyRect = shared.uCanopyRect;
+    patchGlitter(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec3 aFlow;
@@ -127,6 +129,7 @@ function streamMaterial() {
         uniform float uWet;
         uniform sampler2D uSwCanopy;
         uniform vec4 uSwCanopyRect;
+        ${GLITTER_GLSL}
         varying vec3 vFlow;
         varying vec2 vWUv;
         varying vec3 vWPos;
@@ -188,6 +191,12 @@ function streamMaterial() {
           // (moving water is never a perfect mirror)
           float fres = 0.02 + 0.6 * pow(1.0 - clamp(dot(normal, wV), 0.0, 1.0), 5.0);
           reflectedLight.indirectSpecular = refl * fres * (1.0 - swFoam);
+          // sun glitter where the sun reaches the water (the canopy along the ray toward it), wider
+          // on faster, rougher water
+          vec2 toSun = vec2(${(SUN_DIR.x / SUN_DIR.y).toFixed(3)}, ${(SUN_DIR.z / SUN_DIR.y).toFixed(3)}) * 10.0;
+          float shade = min(1.0, texture2D(uSwCanopy, (vWPos.xz + toSun - uSwCanopyRect.xy) / uSwCanopyRect.zw).r * 2.4);
+          reflectedLight.indirectSpecular += ${'vec3(' + [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b].map((v) => v.toFixed(3)).join(', ') + ')'}
+            * glitter(vWPos, normalize(cameraPosition - vWPos), 0.2 + 0.12 * smoothstep(0.4, 2.0, vFlow.z)) * (1.0 - shade) * (1.0 - swFoam);
         }
         #endif`);
   };

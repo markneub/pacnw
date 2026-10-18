@@ -360,6 +360,7 @@ export class Weather {
     const wetTarget = (0.55 + 0.45 * this.rainAmount - 0.35 * sun) * (1 - snowT);
     shared.uWet.value += (wetTarget - shared.uWet.value) * (this.wetStarted ? 1 - Math.exp(-dt * 0.3) : 1);
     this.wetStarted = true;
+    shared.uRain.value = this.rainAmount;
 
     shared.uWind.value = 0.7 + this.snowAmount * 0.8 + Math.sin(time * 0.13) * 0.3;
 

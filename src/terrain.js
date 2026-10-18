@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED } from './config.js';
-import { shared, wetChunks, patchSunlight, sunKey } from './materials.js';
+import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter } from './materials.js';
+import { SUN_COLOR } from './atmosphere.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 import { buildStreams } from './streams.js';
 
@@ -460,11 +461,13 @@ export function buildWater() {
     transparent: true,
     opacity: 0.92,
   });
-  // Wave normals: two slow swell layers plus expanding rain rings, scaled by
-  // wetness. The reflection itself comes from the scene's environment map.
+  // Wave normals: two slow swell layers plus expanding rain rings while it
+  // rains. The reflection itself comes from the scene's environment map.
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = shared.uTime;
     shader.uniforms.uWet = shared.uWet;
+    shader.uniforms.uRain = shared.uRain;
+    patchGlitter(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vWaterXZ;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWaterXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
@@ -472,7 +475,9 @@ export function buildWater() {
       .replace('#include <common>', `#include <common>
         uniform float uTime;
         uniform float uWet;
+        uniform float uRain;
         varying vec2 vWaterXZ;
+        ${GLITTER_GLSL}
         float wHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         vec2 rainRing(vec2 p, float t) {
           vec2 cell = floor(p);
@@ -490,7 +495,7 @@ export function buildWater() {
           vec2 p = vWaterXZ;
           vec2 g = vec2(cos(p.x * 0.31 + uTime * 0.8), cos(p.y * 0.27 - uTime * 0.65)) * 0.035
                  + vec2(cos(p.x * 1.1 + p.y * 0.6 + uTime * 1.9), cos(p.y * 0.9 - p.x * 0.4 + uTime * 1.6)) * 0.018;
-          g += (rainRing(p * 0.9, uTime) + rainRing(p * 1.3 + 17.0, uTime * 1.1)) * 0.35 * uWet;
+          g += (rainRing(p * 0.9, uTime) + rainRing(p * 1.3 + 17.0, uTime * 1.1)) * 0.35 * uRain;
           vec3 nWorld = normalize(vec3(-g.x, 1.0, -g.y));
           normal = normalize((viewMatrix * vec4(nWorld, 0.0)).xyz);
         }`)
@@ -518,6 +523,9 @@ export function buildWater() {
           refl = mix(shore, refl, smoothstep(treeTop - 0.01, treeTop + 0.01, e));
           float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(normal, wV), 0.0, 1.0), 5.0);
           reflectedLight.indirectSpecular = refl * fres * 1.15;
+          // sun glitter (calm open water: a moderate wave-slope spread; rain roughens it)
+          vec3 glP = vec3(vWaterXZ.x, ${WATER_LEVEL.toFixed(1)}, vWaterXZ.y);
+          reflectedLight.indirectSpecular += ${'vec3(' + [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b].map((v) => v.toFixed(3)).join(', ') + ')'} * glitter(glP, normalize(cameraPosition - glP), 0.16 + 0.06 * uWet);
         }
         #endif`);
   };
