@@ -190,6 +190,17 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   In the shader (`aInfo.z`): base speed + 2.6, standing-wave ridges (|2n − 1| ridge noise: white crests, slopes in the
   normal), milky aerated colour, alpha → 0.97 (white water hides the bed). Views: on the bridge
   `x=84&z=0`, looking up/downstream.
+- **Marsh + boardwalk** (`MARSH`/`marshAt` in terrain.js: an oval (165, 478) 62 × 30 m with noisy edge on the lake's
+  south-east shore): `baseHeight` eases the ground to WATER_LEVEL − 0.08 + hummock noise (±0.5 m), so the lake surface
+  (which covers it) leaves tussocks and hummocks; the lake shader stains it dark tannin brown (ellipse, no noise). New trail
+  stop **Marsh boardwalk** (160, 480) between the trailhead and the lake (trail 3.0 km); A* may enter marsh cells despite the
+  water rule. `trail.boardwalk`: 3 m sections along the trail where marsh > 0.12 and raw ground < WATER_LEVEL + 1 (wet
+  ground only: the noisy edge reached up a hillside), deck ≥ water + 0.4 / ground + 0.25, at most 0.1 m between sections
+  (lower ones raised), 25 sections = 75 m. Blender `boardwalk` (3 m: two stringers, ~15 boards 1.2 m, four 1.4 m round posts),
+  scaleX 1.06 to overlap on bends; walkable via `setWalkModifier`. No tread colour under it. Marsh **sedge** = the grass
+  rings: density in the marsh down to WATER_LEVEL − 0.35 (out of the water) in noise clumps, ×3.2 tall (`gMarsh` ellipse in
+  the vertex shader), olive `SEDGE` going to straw. ~10 dead **snags** on hummocks (`addMarshSnags`, hash on a 9 m grid).
+  Views (from the boardwalk): `x=187&z=465`. Gotcha for scripted renders: call `grass.update(camera)` after moving the camera.
 - **Sun glitter** (`GLITTER_GLSL` + `patchGlitter` in materials.js, used by the lake and stream shaders): world-anchored
   cells (6 cm, doubling with distance in blended power-of-two LODs, `0.004·dist`), each holding one round facet point at a
   random spot that re-rolls 3–7×/s (staggered, fading in/out). A facet flashes with probability exp(−tan²θh/σ²) × 0.3,

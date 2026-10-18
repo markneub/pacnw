@@ -256,3 +256,10 @@ The upturned roots of the big fallen logs were a flat bark-textured disc. They'r
 of the ground: a thick, lumpy plate of earth (with a soil photo texture), heavy roots flaring out of the trunk and
 snapping off past the edge, broken root ends poking out of the back, and thin rootlets hanging down. Still to refine:
 the radiating roots can look a bit spiky from some angles.
+
+### 31. A marsh with a boardwalk
+On the lake's south-east shore there's now a marsh: shallow, dark tannin-stained water with tussocks and hummocks, tall
+olive-to-straw sedge growing up out of it, and dead snags standing in it. The trail has a new stop, **Marsh boardwalk**,
+between the trailhead and the lake viewpoint, and crosses the marsh on a 75 m raised plank boardwalk on posts, about
+0.4 m above the water, rising gently onto the shore at each end. The signs now include it. From spawn it's 350 m along
+the trail. Look: `?x=187&z=465&yaw=1.3` (on the boardwalk).

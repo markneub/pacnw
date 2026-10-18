@@ -1033,6 +1033,30 @@ def pebbles(M, name, seed, stones=6, spread=0.8, size=(0.07, 0.28)):
     return b.build(name)
 
 
+def boardwalk(M, name, seed=73, length=3.0):
+    """
+    One section of a marsh boardwalk along local X, the deck's top at z = 0: boards across two
+    sawn stringers, on a pair of round posts at each end that run down 1.4 m into the water
+    and mud (the scatter seats each section at its own height, so the posts always reach).
+    Sections are placed end to end along the trail.
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    half = length / 2
+    for y in (-0.48, 0.48):  # stringers: sawn timbers under the boards
+        box(b, M["plank"], 0.0, y, -0.14, length, 0.1, 0.16)
+    x = -half + 0.02
+    while x < half - 0.05:
+        w = rng.uniform(0.18, 0.22)
+        box(b, M["plank"], x + w / 2, rng.uniform(-0.015, 0.015), -0.025 + rng.uniform(-0.008, 0.004), w - 0.015,
+            rng.uniform(1.18, 1.24), 0.05)
+        x += w
+    for px in (-half + 0.12, half - 0.12):  # posts, just outside the stringers
+        for y in (-0.58, 0.58):
+            _stub(b, M["bark"], Vector((px, y, -1.4)), Vector((px, y, -0.06)), 0.07, 0.065, sides=6)
+    return b.build(name)
+
+
 def footbridge(M, name, seed=71, length=6.4):
     """
     A plank footbridge for a creek crossing, along local X, the deck's top at
@@ -1279,6 +1303,7 @@ def main():
     cairn(M, "cairn")
     bench(M, "bench")
     footbridge(M, "footbridge")
+    boardwalk(M, "boardwalk")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     bpy.ops.object.select_all(action="SELECT")

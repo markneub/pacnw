@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
-  streams, setWalkModifier, streamBed,
+  streams, setWalkModifier, streamBed, marshAt,
 } from './terrain.js';
 import { shared, wetChunks, patchSunlight, sunKey, patchPuddles } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
@@ -12,6 +12,7 @@ import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 // snow bench and up again into the high basin below the pass.
 export const TRAIL_STOPS = [
   { name: 'trailhead', label: 'Trailhead', x: 22, z: 652 },
+  { name: 'marsh', label: 'Marsh boardwalk', x: 160, z: 480 },
   { name: 'lake', label: 'Lake viewpoint', x: 55, z: 385 },
   { name: 'snowfield', label: 'Snowfield', x: 110, z: -540 },
   { name: 'basin', label: 'High basin', x: 70, z: -920 },
@@ -63,7 +64,7 @@ for (let dz = -2; dz <= 2; dz++) {
  */
 const TURN_COST = 40;
 const WET_COST = 60; // m per 6 m cell in or beside a creek
-function route(heights, side, wet, a, b) {
+function route(heights, side, wet, marsh, a, b) {
   const D = MOVES.length;
   const idx = (ix, iz) => iz * NX + ix;
   const toCell = (p) => [Math.round((p.x - MIN_X) / CELL), Math.round((p.z - MIN_Z) / CELL)];
@@ -114,7 +115,7 @@ function route(heights, side, wet, a, b) {
       const ns = n * D + k;
       if (closed[ns]) continue;
       const h = heights[n];
-      if (h < WATER_LEVEL + 1.2) continue;
+      if (h < WATER_LEVEL + 1.2 && !marsh[n]) continue; // (the marsh is crossed on a boardwalk)
       const grade = (h - heights[cur]) / dist;
       // steep grades cost a lot more than distance; side-slope makes the
       // tread hard to cut, so avoid traversing cliffs too
@@ -236,12 +237,14 @@ export function buildTrail() {
   const heights = new Float32Array(NX * NZ);
   const side = new Float32Array(NX * NZ);
   const wet = new Float32Array(NX * NZ);
+  const marsh = new Uint8Array(NX * NZ);
   for (let iz = 0; iz < NZ; iz++) {
     for (let ix = 0; ix < NX; ix++) {
       const x = MIN_X + ix * CELL;
       const z = MIN_Z + iz * CELL;
       heights[iz * NX + ix] = heightAt(x, z);
       side[iz * NX + ix] = slopeAt(x, z);
+      marsh[iz * NX + ix] = marshAt(x, z) > 0.25 ? 1 : 0;
       // creeks: stepping into one costs a lot, so the trail crosses once, squarely, rather than
       // following a channel (it once crossed the same creek twice at a hairpin)
       const c = streams().nearest(x, z);
@@ -252,7 +255,7 @@ export function buildTrail() {
 
   let coarse = [];
   for (let i = 0; i < TRAIL_STOPS.length - 1; i++) {
-    const leg = route(heights, side, wet, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
+    const leg = route(heights, side, wet, marsh, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
     coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
   }
   const points = resample(chaikin(coarse, 3), STEP);
@@ -464,7 +467,51 @@ export function buildTrail() {
   setTerrainCutout(...buildCutoutMask(mesh.userData.cover));
   delete mesh.userData.cover;
 
+  // The marsh boardwalk: sections along the trail wherever it crosses the marsh, each level, at
+  // least 0.4 m over the water and 0.25 m over the ground, the deck height eased along the run
+  const boardwalk = [];
+  {
+    const SEC = 3.0; // m, one section (the Blender model)
+    let run = [];
+    const flush = () => {
+      if (run.length >= 2) {
+        // deck heights: the need at each section, then smoothed so steps stay small
+        const need = run.map((p) => Math.max(WATER_LEVEL + 0.4, rawGroundAt(p.x, p.z) + 0.25, groundAt(p.x, p.z) + 0.2));
+        // at most 0.1 m between sections (the lower one is raised): a gentle slope, never a step
+        const y = need.slice();
+        for (let k = 1; k < y.length; k++) y[k] = Math.max(y[k], y[k - 1] - 0.1);
+        for (let k = y.length - 2; k >= 0; k--) y[k] = Math.max(y[k], y[k + 1] - 0.1);
+        run.forEach((p, k) => boardwalk.push({ ...p, y: y[k] }));
+      }
+      run = [];
+    };
+    let acc = SEC;
+    for (let i = 1; i < points.length - 1; i++) {
+      const a = points[i - 1];
+      const p = points[i];
+      acc += p.distanceTo(a);
+      const inMarsh = marshAt(p.x, p.y) > 0.12 && rawGroundAt(p.x, p.y) < WATER_LEVEL + 1.0; // (wet ground only)
+      if (!inMarsh) {
+        flush();
+        acc = SEC;
+        continue;
+      }
+      if (acc < SEC - 0.1) continue; // (points are 1.5 m apart: every second one; rounding made it every third)
+      acc = 0;
+      const q = points[Math.min(points.length - 1, i + 2)];
+      const o = points[Math.max(0, i - 2)];
+      const l = Math.hypot(q.x - o.x, q.y - o.y) || 1;
+      run.push({ x: p.x, z: p.y, dx: (q.x - o.x) / l, dz: (q.y - o.y) / l });
+    }
+    flush();
+  }
+
   setWalkModifier((x, z, g) => {
+    for (const s of boardwalk) {
+      const ox = x - s.x;
+      const oz = z - s.z;
+      if (Math.abs(ox * s.dx + oz * s.dz) < 1.65 && Math.abs(-ox * s.dz + oz * s.dx) < 0.65) return Math.max(g, s.y);
+    }
     for (const b of crossings) {
       const ox = x - b.x;
       const oz = z - b.z;
@@ -475,7 +522,7 @@ export function buildTrail() {
     return g;
   });
 
-  return { points, stops, distanceTo, guide, mesh, crossings };
+  return { points, stops, distanceTo, guide, mesh, crossings, boardwalk };
 }
 
 /**
@@ -610,7 +657,8 @@ function buildCorridorMesh(points, distanceTo) {
       // (in snow a softer edge and a boot-packed groove down the middle, over the snow's own colour:
       // a flat grey-blue fill read as a painted stripe)
       const edge = 0.3 + 0.5 * snow;
-      const t = 1 - THREE.MathUtils.smoothstep(d + wobble, TRAIL_WIDTH - edge, TRAIL_WIDTH + edge);
+      // (no tread under the marsh boardwalk: the marsh runs on beneath it)
+      const t = (1 - THREE.MathUtils.smoothstep(d + wobble, TRAIL_WIDTH - edge, TRAIL_WIDTH + edge)) * (1 - THREE.MathUtils.smoothstep(marshAt(x, z), 0.05, 0.2));
       const groove = 1 - Math.min(1, d / TRAIL_WIDTH) ** 2;
       tmp.copy(dirt).lerp(dirtWet, Math.min(1, d / TRAIL_WIDTH) * 0.6);
       tmpSnow.copy(col).lerp(packed, 0.4 + 0.45 * groove);

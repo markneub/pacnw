@@ -140,7 +140,21 @@ export function baseHeight(x, z) {
   const basin = 1 - smoothstep(LAKE.r * 0.55, LAKE.r + wobble, dl);
   h = h * (1 - basin) + (WATER_LEVEL - 7) * basin;
 
+  // the marsh on the south-east shore: a flat at lake level, tussocks and hummocks out of the
+  // shallow water (the lake's surface covers it)
+  const m = marshAt(x, z);
+  if (m > 0) {
+    const hummock = nDetail(x * 0.09 + 3, z * 0.09 - 7) * 0.42 + nDetail(x * 0.3, z * 0.3) * 0.12;
+    h = h * (1 - m) + (WATER_LEVEL - 0.08 + hummock) * m;
+  }
   return h;
+}
+
+/** The marsh: 1 in its flat middle, easing to 0 at its edge (an irregular oval by the lake). */
+export const MARSH = { x: 165, z: 478, rx: 62, rz: 30 };
+export function marshAt(x, z) {
+  const d = Math.hypot((x - MARSH.x) / MARSH.rx, (z - MARSH.z) / MARSH.rz) + nDetail(x * 0.03 + 11, z * 0.03) * 0.18;
+  return 1 - smoothstep(0.65, 1.0, d);
 }
 
 // Heights at the terrain mesh vertices, so groundAt() can return the height of
@@ -520,6 +534,12 @@ export function buildWater() {
           float r = length(d) + 1e-4;
           float ring = exp(-pow((r - ph * 0.45) * 22.0, 2.0)) * (1.0 - ph);
           return d / r * ring;
+        }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          // marsh water: shallow, still and stained brown with tannins from the peat
+          float mw = 1.0 - smoothstep(0.55, 1.0, length((vWaterXZ - vec2(${MARSH.x.toFixed(1)}, ${MARSH.z.toFixed(1)})) / vec2(${MARSH.rx.toFixed(1)}, ${MARSH.rz.toFixed(1)})));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.021, 0.01), mw * 0.9);
         }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {

@@ -4,7 +4,7 @@ import {
   WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, SNOWLINE, TREELINE, SEED, SPAWN,
 } from './config.js';
 import {
-  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt,
+  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt, marshAt, MARSH,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover, addTrunkMoss, shared } from './materials.js';
@@ -15,7 +15,7 @@ import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.j
 import { streamRocks } from './streamwater.js';
 
 const KIND = (name) => (/^(fern|salal|pebbles)/.test(name) ? 'ferns'
-  : /^(boulder|log|stump|signpost|cairn|bench|footbridge)/.test(name) ? 'rocks' : 'trees');
+  : /^(boulder|log|stump|signpost|cairn|bench|footbridge|boardwalk)/.test(name) ? 'rocks' : 'trees');
 
 /** Metres from the edge of the nearest stream's water (negative in it). */
 const offStream = (x, z) => {
@@ -205,7 +205,7 @@ function convertMaterial(src, assetName, lod, cache) {
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns' && !pebble) addWindSway(mat, 2.5, undefined, 'fade');
   // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
-  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' ? 0.2 : src.name === 'RootSoil' ? 0.25 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0 });
+  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0 });
   if (cards) patchCards(mat);
   // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
   if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);
@@ -326,6 +326,24 @@ function seatStones(placements, protos) {
   }
 }
 
+/**
+ * Dead trees standing in the marsh (drowned when the water rose): snags on the hummocks, chosen
+ * by a hash over a 9 m grid (no scatter rng, so nothing else moves), off the boardwalk.
+ */
+function addMarshSnags(placements, trail) {
+  const { x: mx, z: mz, rx, rz } = MARSH;
+  for (let z = mz - rz; z <= mz + rz; z += 9) {
+    for (let x = mx - rx; x <= mx + rx; x += 9) {
+      const h = hash2(x * 1.7, z * 1.3);
+      const px = x + (hash2(x, z + 3) - 0.5) * 7;
+      const pz = z + (hash2(x + 5, z) - 0.5) * 7;
+      if (marshAt(px, pz) < 0.5 || h > 0.3) continue;
+      if (trail.distanceTo(px, pz) < 4) continue;
+      (placements.snag ||= []).push({ x: px, y: groundAt(px, pz) - 0.4, z: pz, rotY: h * 40, scale: 0.55 + h * 1.2, tint: h * 3 % 1 });
+    }
+  }
+}
+
 /** Signposts at each stop, a bench at the lake, cairns along the snowy section. */
 function placeTrailFurniture(trail, add) {
   const { points, stops } = trail;
@@ -346,6 +364,11 @@ function placeTrailFurniture(trail, add) {
     const i = Math.min(stop.index + 3, points.length - 3);
     const { x, z, t } = beside(i, TRAIL_WIDTH + 0.6);
     put('signpost', x, z, Math.atan2(-t.y, t.x));
+  }
+
+  // the marsh boardwalk, a 3 m section at each spot (sections overlap a little on bends)
+  for (const b of trail.boardwalk ?? []) {
+    add('boardwalk', { x: b.x, y: b.y, z: b.z, rotY: Math.atan2(-b.dz, b.dx), scale: 1, scaleX: 1.06, tint: 0.5 });
   }
 
   // footbridges over the creeks (the model is 6.4 m long, along local X)
@@ -659,6 +682,7 @@ export function bakeTreeImpostors(renderer, protos, { lowPower }) {
 export function buildVegetation(protos, trail, { impostors = null } = {}) {
   const placements = scatter(trail);
   addStreamRocks(placements, protos, trail);
+  addMarshSnags(placements, trail);
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
   for (const name of Object.keys(placements)) {
     if (!name.startsWith('pebbles')) continue;

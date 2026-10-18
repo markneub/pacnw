@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, WATER_LEVEL } from './config.js';
 import {
-  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt, waterLevelAt,
+  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt, waterLevelAt, marshAt, MARSH,
 } from './terrain.js';
 import { shared, patchSunlight, sunKey } from './materials.js';
 
@@ -93,6 +93,7 @@ function tuftGeometry() {
 const smooth = THREE.MathUtils.smoothstep;
 const CELL = 16; // m, for skipping rings with no grass in reach
 const LUSH = new THREE.Color('#566f2e');
+const SEDGE = new THREE.Color(0x6f7a34); // marsh sedge, olive
 const DRY = new THREE.Color('#857f4c');
 
 /**
@@ -139,13 +140,19 @@ function bakeGrassMap(terrain, canopyAt) {
       // no grass through snow (the 5 m map would smear it over the snow edge)
       const snowFree = 1 - smooth(layers[2], 0.03, 0.3);
       let density = layers[0] * snowFree * Math.min(1, 0.03 + 0.97 * open * open * (0.3 + 0.7 * meadow) + 0.8 * shore * open);
-      if (y < wl + 0.2) density = 0;
+      // the marsh: tall sedge in clumps on the hummocks and out of the shallow water
+      const m = marshAt(x, z);
+      if (m > 0.05) density = Math.max(density, m * smooth(nForest(x * 0.08 + 5, z * 0.08) * 0.5 + 0.5, 0.25, 0.6) * (y > wl - 0.35 ? 1 : 0));
+      else if (y < wl + 0.2) density = 0;
 
       groundColor(x, y, z, slope, col);
       const shade = Math.min(1.2, lum(shaded[k * 3], shaded[k * 3 + 1], shaded[k * 3 + 2]) / Math.max(1e-4, lum(col.r, col.g, col.b)));
       // greener by water and in meadows, drier higher up; a little of the
       // ground's own tint so it belongs to the place
-      grass.copy(LUSH).lerp(DRY, smooth(y, 60, 150) * 0.7 + (1 - meadow) * 0.15).lerp(col, 0.25).multiplyScalar(shade);
+      grass.copy(LUSH).lerp(DRY, smooth(y, 60, 150) * 0.7 + (1 - meadow) * 0.15).lerp(col, 0.25);
+      // marsh sedge: olive, going to straw in patches
+      if (m > 0.05) grass.lerp(SEDGE, m * 0.8).lerp(DRY, m * 0.35 * smooth(nForest(x * 0.05 - 9, z * 0.05) * 0.5 + 0.5, 0.45, 0.8));
+      grass.multiplyScalar(shade);
       const srgb = grass.convertLinearToSRGB();
       data[k * 4] = Math.min(255, srgb.r * 255);
       data[k * 4 + 1] = Math.min(255, srgb.g * 255);
@@ -368,6 +375,8 @@ function grassMaterial(baked, ring) {
         float gR2 = gHash(gXZ * 0.71 + 13.1);
         float gR3 = gHash(gXZ * 2.13 - 7.7);
         vec4 gMap = texture2D(uGrassMap, ((gXZ - uGrassGrid.xy) / uGrassGrid.z + 0.5) / uGrassGrid.w);
+        // in the marsh (terrain.js MARSH, without its edge noise): taller, and out of shallow water
+        float gMarsh = 1.0 - smoothstep(0.6, 0.95, length((gXZ - vec2(${MARSH.x.toFixed(1)}, ${MARSH.z.toFixed(1)})) / vec2(${MARSH.rx.toFixed(1)}, ${MARSH.rz.toFixed(1)})));
         float gDist = length(gXZ - uGrassCam);
         float gEdge = (uGrassFade.y > 0.0 ? smoothstep(uGrassFade.x, uGrassFade.y, gDist) : 1.0)
           * (1.0 - smoothstep(uGrassFade.z, uGrassFade.w, gDist));
@@ -381,9 +390,10 @@ function grassMaterial(baked, ring) {
           if (all(greaterThan(gCutUv, vec2(0.0))) && all(lessThan(gCutUv, vec2(1.0)))
               && texture2D(uCutMask, gCutUv).r > 0.5) gScale = 0.0;
           gY = gGround(gXZ);
-          if (gY < ${(WATER_LEVEL + 0.15).toFixed(2)}) gScale = 0.0;
+          if (gY < ${(WATER_LEVEL + 0.15).toFixed(2)} - 0.5 * gMarsh) gScale = 0.0;
         }
         float gHeight = mix(0.7, 1.35, gR3) * mix(0.55, 1.0, gMap.a); // sparse grass is shorter
+        gHeight *= 1.0 + 2.2 * gMarsh; // marsh sedge: knee high
         float gA = gR2 * 6.2831853;
         mat2 gRot = mat2(cos(gA), -sin(gA), sin(gA), cos(gA));
         objectNormal.xz = gRot * objectNormal.xz;
