@@ -10,6 +10,7 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround } from './bake.js';
 import { NearPool } from './detail.js';
+import { buildSigns } from './signs.js';
 import { PerfOverlay } from './perf.js';
 import { loadGroundDetail } from './grounddetail.js';
 import { patchSunlight, addTrunkMoss } from './materials.js';
@@ -138,6 +139,7 @@ async function init() {
   step('tree impostors');
   const veg = buildVegetation(protos, trail, { impostors });
   scene.add(veg.group);
+  if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
   step('vegetation');
 
   progress(0.6, 500);

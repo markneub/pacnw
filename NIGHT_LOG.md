@@ -216,3 +216,13 @@ The footbridges were as long as the creek is wide, but the trail crosses at an a
 they tilted with the trail. Now each bridge is level, long enough for the angled crossing, 1.25–1.5 m above the water, and
 rests on a dirt berm at each end with sloped sides; the trail ramps gently up the berm to the deck (following the path's
 curve). Loose stones are kept off the berms. Trail checks unchanged (no holes, same grades and cross-slopes).
+
+---
+
+# Third night
+
+### 26. Writing on the signs
+Each signpost's arrows now name where they lead and how far along the trail: e.g. at the trailhead "Lake viewpoint 350 m"
+ahead and "Cascadia Woods Trail" behind; at the lake "Snowfield 1.5 km" and "Trailhead 350 m"; then "High basin 600 m",
+and "End of trail" at the basin. Cream letters routed into the wood, readable from both sides. Easy to change later
+(`src/signs.js`, labels in `TRAIL_STOPS`).
