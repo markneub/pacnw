@@ -139,14 +139,6 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
     share one instanceMatrix buffer, so a re-cull uploads it once. Verified with a culled-vs-all render: 0 px differ for turns
     ≤10°, and the test catches 34°/90° turns. Draws ~37% of candidates. Phone tris at spawn 0.79 → 0.60M (forest 0.69 → 0.47M). The dither uses `discard`, which can cost fill rate on Apple GPUs
     (hidden-surface removal), so re-check phone `?perf` after changing tree materials.
-  - **Mid tier** (between the near pool and the impostors): `<name>_mid` models from the same Blender functions with
-    `mid=True`, which draw exactly the same random numbers (so the model matches the full one for the dither) but emit every
-    other spray at 1.35× size, no crossed cards, branch sticks, stubs, hanging moss or roots, and a 10-sided trunk (fir ~1/3 the
-    tris). `VIEW_DIST.treeNear` (40 m desktop / 20 m phone) is the full-detail radius; mid out to `treeDetail`. Materials: `near3`
-    (fades out over `uMidRadius ± uMidBand`, 6 m), `mid` (fades in there, out over the LOD band; `vLodFade2`), `far` unchanged;
-    `near` stays the two-tier version (boulders). The mid pool skips trees inside the near tier (`NearPool.update(..., inner)`).
-    `?mid=0` / bench row `mid` ("- mid trees") restore the two tiers. Phone spawn 0.82 → 0.66M tris (+8 draws), desktop 2.24 →
-    1.75M; forest 0.46 → 0.44M. A glbcmp check confirmed the full models were unchanged.
   - **A mid tree tier was tried and reverted** (commit 2d55824): `_mid` models (same tree via `mid=True`, every other spray
     at 1.35×, no crossed cards/sticks/stubs/moss/roots) between 20 and 40 m on phones cut spawn tris 0.82 → 0.66M, but the
     phone bench showed no gain ("- mid trees" 0.3 ±0.5 / 0.2 ±0.2 ms, i.e. noise, +8 draws). **Tree cost on the phone is not
@@ -347,6 +339,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - Wet look in rain (glossier trunks/rocks, drips, puddles reflecting the sky). Sharper god-ray shafts (1 m canopy map).
 - Tree cost is fill-bound (see the reverted mid tier): try cutting card overdraw if the frame budget gets tight.
 - Sound: footsteps by surface, birdsong in sun breaks, drips after rain. Subtle head bob (no option: opinionated).
+- Tree mid-LOD between full detail and impostors if the frame budget gets tight.
 
 ## Headless screenshots (how to see the scene)
 

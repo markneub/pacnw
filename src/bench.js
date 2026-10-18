@@ -27,7 +27,7 @@ const VIEWS = [
 /**
  * Options (from the URL, see main.js):
  *  rows   which rows to run, e.g. ['trees', 'grass']; empty = all. Keys: trees,
- *         ferns, rocks, ground, detail, tex, grass, grass50, near40, mid, water, sky,
+ *         ferns, rocks, ground, detail, tex, grass, grass50, near40, water, sky,
  *         weather, empty, dpr (all the resolution rows). "full" always runs.
  *  views  e.g. ['spawn']; empty = all (spawn, forest, snow)
  *  heat   seconds of flat-out rendering first. Phones slow their GPU after
@@ -103,18 +103,6 @@ export async function runBench({
       };
       set(40);
       return () => set(was);
-    }],
-    // the mid tree tier off: full detail all the way to the impostors, as before it existed
-    ['mid', '- mid trees', () => {
-      const was = [VIEW_DIST.treeNear, shared.uMidRadius.value, shared.uMidBand.value];
-      const set = (near, r, band) => {
-        VIEW_DIST.treeNear = near;
-        shared.uMidRadius.value = r;
-        shared.uMidBand.value = band;
-        veg.updateNear(camera, true);
-      };
-      set(VIEW_DIST.treeDetail, shared.uLodRadius.value, shared.uLodBand.value);
-      return () => set(...was);
     }],
     // the post passes on top of the scene (the full A/B is ?off=post, which also moves MSAA back to the canvas)
     ['post', '- rays/glow', () => {

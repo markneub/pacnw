@@ -107,16 +107,13 @@ export class NearPool {
   }
 
   /** Re-gather the candidates if the camera has moved far enough. Returns true if it did. Allocation-free. */
-  update(cam, radius, force = false, inner = 0) {
+  update(cam, radius, force = false) {
     if (!force && Math.hypot(cam.x - this.lastX, cam.z - this.lastZ) < REFILL_STEP) return false;
     this.lastX = cam.x;
     this.lastZ = cam.z;
 
     const r = radius + MARGIN;
     const r2 = r * r;
-    // an inner hole (the mid tier skips the trees the full-detail tier draws)
-    const rIn = Math.max(0, inner - MARGIN);
-    const rIn2 = rIn * rIn;
     const g0x = Math.floor((cam.x - r) / CELL);
     const g1x = Math.floor((cam.x + r) / CELL);
     const g0z = Math.floor((cam.z - r) / CELL);
@@ -130,8 +127,7 @@ export class NearPool {
           const i = list[j];
           const dx = this.xz[i * 2] - cam.x;
           const dz = this.xz[i * 2 + 1] - cam.z;
-          const d2 = dx * dx + dz * dz;
-          if (d2 <= r2 && d2 >= rIn2) this.candidates[n++] = i;
+          if (dx * dx + dz * dz <= r2) this.candidates[n++] = i;
         }
       }
     }

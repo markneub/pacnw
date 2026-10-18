@@ -10,10 +10,6 @@ export const shared = {
   uWet: { value: 1 }, // 0 dry .. 1 soaked: darker, glossier surfaces
   uLodRadius: { value: 85 }, // m; full-detail trees inside, far LOD outside
   uLodBand: { value: 12 }, // m either side of uLodRadius over which the tiers crossfade
-  // trees have three tiers: full detail inside uMidRadius, a mid model out to uLodRadius, impostors beyond.
-  // With the mid tier off (?mid=0), uMidRadius/uMidBand = uLodRadius/uLodBand: two tiers as before.
-  uMidRadius: { value: 40 },
-  uMidBand: { value: 6 },
   uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
   uSun: { value: 0 }, // 0 overcast .. 1 sun break (weather.js)
   uCanopyMap: { value: null }, // R8, 0 open sky .. 1 deep shade (bake.js bakeCanopy)
@@ -48,48 +44,25 @@ export function patchLod(shader, mode) {
   // band the hidden tier is culled in the vertex shader as before.
   shader.uniforms.uLodRadius = shared.uLodRadius;
   shader.uniforms.uLodBand = shared.uLodBand;
-  shader.uniforms.uMidRadius = shared.uMidRadius;
-  shader.uniforms.uMidBand = shared.uMidBand;
-  // near3: full detail, out to the mid band; mid: from the mid band to the far band; far: beyond.
-  // vLodFade = how much of the *nearer* neighbour this distance still belongs to; each tier keeps
-  // the pixels the same per-pixel dither gives it, so the three partition every pixel.
-  // ('near' is the two-tier version, for models with a far tier but no mid one: boulders)
-  const vs = {
-    near: `vLodFade = smoothstep(uLodRadius + uLodBand, uLodRadius - uLodBand, lodDist);
-           if (lodDist >= uLodRadius + uLodBand) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);`,
-    near3: `vLodFade = smoothstep(uMidRadius + uMidBand, uMidRadius - uMidBand, lodDist);
-           if (lodDist >= uMidRadius + uMidBand) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);`,
-    mid: `vLodFade = smoothstep(uMidRadius + uMidBand, uMidRadius - uMidBand, lodDist);
-          vLodFade2 = smoothstep(uLodRadius + uLodBand, uLodRadius - uLodBand, lodDist);
-          if (lodDist < uMidRadius - uMidBand || lodDist >= uLodRadius + uLodBand) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);`,
-    far: `vLodFade = smoothstep(uLodRadius + uLodBand, uLodRadius - uLodBand, lodDist);
-          if (lodDist < uLodRadius - uLodBand) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);`,
-  }[mode];
-  const keep = {
-    near: 'lodDither < vLodFade',
-    near3: 'lodDither < vLodFade',
-    mid: 'lodDither >= vLodFade && lodDither < vLodFade2',
-    far: 'lodDither >= vLodFade',
-  }[mode];
-  const fading = mode === 'mid' ? '(vLodFade > 0.0 || vLodFade2 < 1.0)' : '(vLodFade < 1.0 && vLodFade > 0.0)';
+  const cull = mode === 'near' ? 'lodDist >= uLodRadius + uLodBand' : 'lodDist < uLodRadius - uLodBand';
+  const keep = mode === 'near' ? 'lodDither < vLodFade' : 'lodDither >= vLodFade';
   shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', `#include <common>
-      uniform float uLodRadius; uniform float uLodBand; uniform float uMidRadius; uniform float uMidBand;
-      varying float vLodFade; varying float vLodFade2;`)
+    .replace('#include <common>', '#include <common>\nuniform float uLodRadius;\nuniform float uLodBand;\nvarying float vLodFade;')
     .replace('#include <project_vertex>', `#include <project_vertex>
       vLodFade = 1.0;
-      vLodFade2 = 1.0;
       #ifdef USE_INSTANCING
         float lodDist = length((modelMatrix * instanceMatrix[3]).xz - cameraPosition.xz);
-        ${vs}
+        // 1 = fully near tier, 0 = fully far tier
+        vLodFade = smoothstep(uLodRadius + uLodBand, uLodRadius - uLodBand, lodDist);
+        if (${cull}) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
       #endif`);
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying float vLodFade;\nvarying float vLodFade2;')
+    .replace('#include <common>', '#include <common>\nvarying float vLodFade;')
     .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
       {
         // interleaved gradient noise: a fine, stable per-pixel threshold
         float lodDither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-        if (${fading} && !(${keep})) discard;
+        if (vLodFade < 1.0 && vLodFade > 0.0 && !(${keep})) discard;
       }`);
 }
 
