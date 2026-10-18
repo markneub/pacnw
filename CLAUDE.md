@@ -339,7 +339,6 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - Wet look in rain (glossier trunks/rocks, drips, puddles reflecting the sky). Sharper god-ray shafts (1 m canopy map).
 - Tree cost is fill-bound (see the reverted mid tier): try cutting card overdraw if the frame budget gets tight.
 - Sound: footsteps by surface, birdsong in sun breaks, drips after rain. Subtle head bob (no option: opinionated).
-- Tree mid-LOD between full detail and impostors if the frame budget gets tight.
 
 ## Headless screenshots (how to see the scene)
 
