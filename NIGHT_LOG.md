@@ -322,3 +322,8 @@ The fallen logs were set by the lowest ground under them, so a hump in the middl
 before the first bridge). They're now seated so their top half always shows, and spots where a log would bridge a dip
 get none (about a third). The broken end was drawn inside out, so you saw into a hollow tube; it's now a ragged rim of
 splinters around a torn face of grey wood with a red-brown rotten heart.
+
+### 42. Cairns on level ground (found by the user)
+The stone piles marking the trail in the snow sat a metre off the tread, often right on the edge of the bank below it.
+Each now picks the most level spot at or beside the tread's edge nearby; on steep traverses with no such spot there's
+none (25 instead of 35).

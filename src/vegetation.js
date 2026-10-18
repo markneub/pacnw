@@ -402,13 +402,40 @@ function placeTrailFurniture(trail, add) {
     put('bench', best.x, best.z, Math.atan2(fx, fz));
   }
 
-  let side = 1;
+  // Cairns in the snow every ~45 m. Each takes the spot at the tread's edge or beside it (either
+  // side, a few points along) where the ground under its base and just around it is most level,
+  // so none perches on the edge of a bank as if about to tumble downhill; it sits into the slope.
+  // On a steep traverse with no such spot there's no cairn.
+  const ring = (x, z, r) => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2;
+      const g = groundAt(x + Math.cos(a) * r, z + Math.sin(a) * r);
+      lo = Math.min(lo, g);
+      hi = Math.max(hi, g);
+    }
+    return { lo, hi };
+  };
   for (let i = 0; i < points.length; i += 30) {
     const p = points[i];
     if (groundAt(p.x, p.y) < snowlineAt(p.x, p.y) - 15) continue;
-    const { x, z } = beside(i, side * (TRAIL_WIDTH + 1.0));
-    put('cairn', x, z, i * 1.7);
-    side = -side;
+    let best = null;
+    for (let di = -6; di <= 6; di += 3) {
+      const j = Math.min(points.length - 1, Math.max(0, i + di));
+      for (const side of [1, -1]) {
+        for (const off of [-0.3, 0.2, 0.6, 1.0, 1.5, 2.1]) { // (from the tread's edge out)
+          const { x, z } = beside(j, side * (TRAIL_WIDTH + off));
+          if (offStream(x, z) < 2) continue;
+          const { lo, hi } = ring(x, z, 0.75);
+          const outer = ring(x, z, 1.6); // and no drop just beyond it
+          const score = hi - lo + 0.5 * (outer.hi - outer.lo) + 0.02 * Math.abs(di) + 0.03 * off;
+          if (!best || score < best.score) best = { x, z, j, score, y: lo + 0.35 * (hi - lo) };
+        }
+      }
+    }
+    // nowhere level enough (a steep traverse): leave this one out
+    if (best && best.score < 0.5) add('cairn', { x: best.x, y: best.y, z: best.z, rotY: best.j * 1.7, scale: 1, tint: 0.5 });
   }
 }
 

@@ -286,6 +286,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   those behind → after the distance. The post runs up past the board's top (1.72 m; it stopped under the top plank, which
   hung in the air from behind: the user). Measure text after setting `letterSpacing` or long rows overrun the distances. Texts from `signTexts(trail)`, labels from
   `TRAIL_STOPS`. View: trailhead sign, near spawn.
+- **Cairns** (`placeTrailFurniture`, every 30 trail points in snow; the user: some looked about to tumble down the
+  mountain): they alternated sides 1 m past the tread edge, often the lip of a fill bank. Now each tries both sides, 6
+  offsets from 0.3 m inside the tread edge to 2.1 m out, and ±6 points along, and takes the spot with the least ground
+  relief under its base (r 0.75 m) + half that within 1.6 m; seated at lo + 0.35 × range; none if the score is ≥ 0.5 m
+  (steep traverses). 35 → 25 cairns, base relief ≤ 0.22 m (was up to 1.3 m). No rng.
 - Trail in snow: no flat fill colour (a grey-blue `packed` stripe read as paint). The tread there is the snow's own colour
   lerped 0.4 + 0.45 × groove (1 − (d/width)², deepest mid-tread) toward `packed`, with an edge 0.3 + 0.5·snow m soft, and
   `aTread` × (1 − 0.7·snow) so the tread's dark grit stays off trodden snow.
