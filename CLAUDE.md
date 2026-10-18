@@ -326,7 +326,8 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   Plan for the slow state (~9 ms at the current settings), since that's what sustained play can drop to. Phone DPR
   went 1.25 → 1.5, then → 2 after the user played `?dpr=2` and it looked and ran fine (desktop stays 1.5), then → **1.75**
   once the scene grew: spawn bench full 6.9 ms at 2× vs 4.0 at 1.25× (trees 2.2 vs 1.3), i.e. frame ≈ 2.2 ms fixed + 4.7 ms ×
-  pixel share (mostly fill-bound); 1.75× (77% of the pixels) predicts ~5.8 ms. 
+  pixel share (mostly fill-bound); 1.75× (77% of the pixels) predicted ~5.8 ms and measured **5.8 ms** at spawn (trees 1.8),
+  4.3 ms in the forest (trees 1.2). 
   Bench at DPR 2 (804×1300, with bark/rock textures): full 4.7–5.2 ms at full clock, 12–13 ms after the mid-run clock drop
   (it hit ~20–25 s into a flat-out run both times, so it looks like a sustained-load/heat limit). Bark/rock textures 0.0 ±0.3,
   ground detail ~0, trees 1.1–1.6 (4.8 slow), ground 0.6 (2.4 slow), sky 0.3–1.3. In the slow state DPR 2 vs 1.5 costs ~3 ms. 
