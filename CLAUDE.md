@@ -241,7 +241,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   toe). **Deep water stops you** (player.js): you can't move to where it's > 1.1 m deep (slides along the edge; the camera
   stays above the surf). **Dune grass**: the grass map's density on sand (dunes above 3–7 m, patches, not steep faces),
   `MARRAM` grey-green to straw, ×2.5 tall (`uGrassSand` in the vertex shader). **Driftwood** (`addDriftwood`, hash, no rng):
-  `log_leaning` lying along the drift line (s 40–76), mostly along the shore, some piles, scale 0.3–0.75, a third sunk,
+  `log_leaning` lying along the drift line (s 40–76), mostly along the shore, some piles, scale 0.4–0.9 (8–18 m), a third sunk,
   skipped where the sand rises into it or falls away, on rock or near the trail (~130). Trail stops now trailhead → **Ocean
   beach** (−60, 942) → along the berm → **Dune trail** (300, 948) → marsh → lake → snowfield → basin (3.95 km); on sand the
   A* grade cost is 60% lower so the path goes up the dunes like the photo, not in switchbacks; trail grid MAX_Z 1000. Signs

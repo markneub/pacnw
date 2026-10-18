@@ -438,7 +438,7 @@ function addDriftwood(placements, trail) {
       const u = hash2(x0 + k * 13.1, 5.3 + k);
       const x = x0 + (hash2(x0, k + 9.7) - 0.5) * 5;
       const z = coastZ(x) - (40 + 36 * u * u); // mostly near the top of the beach
-      const scale = 0.3 + 0.45 * hash2(x, z + 1) ** 1.5;
+      const scale = 0.4 + 0.5 * hash2(x, z + 1) ** 1.5;
       const len = LEANER.length * scale;
       const along = hash2(z, x) < 0.75;
       const a = (along ? 0 : Math.PI / 2) + (hash2(x + 2, z - 3) - 0.5) * (along ? 0.9 : 3);
