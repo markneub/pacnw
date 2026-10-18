@@ -15,6 +15,7 @@ export const shared = {
   uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
   uSun: { value: 0 }, // 0 overcast .. 1 sun break (weather.js)
   uCanopyMap: { value: null }, // R8, 0 open sky .. 1 deep shade (bake.js bakeCanopy)
+  uSunMap: { value: null }, // the same at 1 m, barely blurred: sunlight only (bake.js bakeSunMap)
   uCanopyRect: { value: new THREE.Vector4(-1000, -1000, 2000, 2000) }, // minX, minZ, sizeX, sizeZ
 };
 
@@ -402,7 +403,7 @@ const SUNLIGHT_CHUNK = THREE.ShaderChunk.lights_fragment_begin.replace(
 );
 export function patchSunlight(shader) {
   if (!patchSunlight.enabled || !shared.uCanopyMap.value) return;
-  shader.uniforms.uCanopyMap = shared.uCanopyMap;
+  shader.uniforms.uCanopyMap = shared.uSunMap;
   shader.uniforms.uCanopyRect = shared.uCanopyRect;
   shader.uniforms.uSun = shared.uSun;
   shader.uniforms.uTime = shared.uTime;

@@ -193,7 +193,7 @@ export class Post {
         gl_FragColor = vec4(vec3(light * phase * uSun), 1.0);
       }`, {
       tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
-      uCamPos: { value: new THREE.Vector3() }, uCanopyMap: shared.uCanopyMap, uCanopyRect: shared.uCanopyRect,
+      uCamPos: { value: new THREE.Vector3() }, uCanopyMap: shared.uSunMap, uCanopyRect: shared.uCanopyRect,
       uGround: { value: null }, uGroundGrid: { value: new THREE.Vector4() }, uDensity: { value: 0.01 },
       uTime: { value: 0 }, uSun: { value: 0 }, uFrame: { value: 0 },
     });

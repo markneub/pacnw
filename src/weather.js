@@ -179,7 +179,7 @@ function createMotes(count = 900) {
       uBox: { value: MOTE_BOX },
       uIntensity: { value: 0 },
       uPixelRatio: { value: 1 },
-      uCanopyMap: shared.uCanopyMap,
+      uCanopyMap: shared.uSunMap,
       uCanopyRect: shared.uCanopyRect,
     },
     vertexShader: /* glsl */ `

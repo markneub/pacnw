@@ -147,3 +147,9 @@ a creek are filled in (flat floors), and a big closed basin ends the creek in a 
 All channels are now at most ~3.5 m deep, and banks lie back further where they're deep. The pond glitters in sun like the
 lake. Look: `?weather=sun&x=-345&z=215&yaw=0.98&pitch=-0.15`. Trail checks unchanged (no holes; grades as before).
 Note: this moved trees in the west valley a little (ground heights changed there).
+
+### 15. Sharper sunbeams
+Sunlight through the trees (sunflecks, the light in the mist, the floating motes) now comes from a sharper, 1 m map of
+the crowns instead of a soft, blurred 2 m one, so the gaps between crowns stay open: shafts read as distinct beams with
+edges rather than broad glows. Look (sun): spawn `?weather=sun&yaw=0.98&pitch=0.1`. Cost: ~0.4 s more load in the
+container, ~8 MB of GPU memory; per-frame cost unchanged (same samples).

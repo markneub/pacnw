@@ -148,6 +148,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 - **Wet rock** (`addGroundCover(..., { film })`, on for scans, pebbles and `Rock`): in rain (`smoothstep(0.6, 0.95, uWet)`:
   overcast-dry is 0.55, rain 1, sun 0.2) bare stone (not moss/snow) gets a patchy water film (trig noise + up-facing bias):
   albedo × 0.82, roughness → 0.14, so it mirrors the sky.
+- **Sun map** (`bakeSunMap` in bake.js → `shared.uSunMap`): the crowns again at 1 m, one [1 2 1] blur pass each way
+  (R8 over the world, 7.8 MB, same rect as `uCanopyMap`), used only for sunlight: `sunVisibility` (dapple + its overcast
+  term), the mist light in post.js and the motes. The soft 2 m map (two 5-tap passes) closed the gaps between crowns, so
+  shafts were broad glows. Load +0.4 s in the container. Everything else (rain shelter, puddle/stream reflections, glitter
+  shade, instance tints, grass) keeps the soft map.
 - `src/terrain.js`: `heightAt(x,z)` is the smooth noise height that drives terrain generation and scatter
   decisions. `groundAt(x,z)` is the height of the *rendered* triangulated mesh. Use it for anything that
   must sit on the ground (instances, player feet, trail ribbon). `snowlineAt`/`snowAmount` keep ground snow, snowy-tree choice and rain→snow consistent.
@@ -409,7 +414,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 
 ## Backlog (agreed with the user)
 
-- Wet look: done (rain sheltered by the canopy, trunk rivulets, leaf sheen, puddles, wet-rock film). Sharper god-ray shafts (1 m canopy map).
+- Wet look: done (rain sheltered by the canopy, trunk rivulets, leaf sheen, puddles, wet-rock film). (Done: sharper god-ray shafts, see Sun map.)
 - Tree cost is fill-bound (see the reverted mid tier): try cutting card overdraw if the frame budget gets tight.
 - Subtle head bob while walking (no option: opinionated).
 - **Next (the user's plan, in order):**

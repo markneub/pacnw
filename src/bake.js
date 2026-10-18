@@ -71,6 +71,55 @@ const CROWN = {
  * How shaded each spot is by the forest canopy, from the tree placements.
  * Returns occlusionAt(x, z) in 0 (open sky) .. 1 (deep shade).
  */
+/**
+ * The same crowns at 1 m and barely blurred, for sunlight only (sunflecks, light in the
+ * mist, motes): the soft 2 m map smeared the gaps between crowns shut, so shafts were
+ * broad glows. R8 over the world (7.8 MB), same rect as the canopy map.
+ */
+function bakeSunMap(placements) {
+  const RES = 1;
+  const N = WORLD_SIZE / RES;
+  const half = WORLD_SIZE / 2;
+  const grid = new Float32Array(N * N);
+  for (const [name, list] of Object.entries(placements)) {
+    const crown = CROWN[name];
+    if (!crown) continue;
+    for (const p of list) {
+      const rc = (crown * p.scale) / RES;
+      const cx = (p.x + half) / RES;
+      const cz = (p.z + half) / RES;
+      const w = 0.55 * Math.min(1.3, p.scale);
+      for (let z = Math.max(0, Math.floor(cz - rc)); z <= Math.min(N - 1, Math.ceil(cz + rc)); z++) {
+        for (let x = Math.max(0, Math.floor(cx - rc)); x <= Math.min(N - 1, Math.ceil(cx + rc)); x++) {
+          const d2 = ((x + 0.5 - cx) ** 2 + (z + 0.5 - cz) ** 2) / (rc * rc);
+          if (d2 < 1) grid[z * N + x] += w * (1 - d2);
+        }
+      }
+    }
+  }
+  // one 3-tap pass each way: soft edges, but the gaps stay open
+  const tmp = new Float32Array(N * N);
+  for (let z = 0; z < N; z++) {
+    const r = z * N;
+    tmp[r] = grid[r];
+    tmp[r + N - 1] = grid[r + N - 1];
+    for (let x = 1; x < N - 1; x++) tmp[r + x] = (grid[r + x - 1] + 2 * grid[r + x] + grid[r + x + 1]) * 0.25;
+  }
+  const bytes = new Uint8Array(N * N);
+  for (let z = 0; z < N; z++) {
+    for (let x = 0; x < N; x++) {
+      const k = z * N + x;
+      const v = z === 0 || z === N - 1 ? tmp[k] : (tmp[k - N] + 2 * tmp[k] + tmp[k + N]) * 0.25;
+      bytes[k] = Math.round(Math.min(1, 1 - Math.exp(-v * 1.1)) * 255);
+    }
+  }
+  const tex = new THREE.DataTexture(bytes, N, N, THREE.RedFormat);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 export function bakeCanopy(placements) {
   const RES = 2; // metres per cell
   const N = WORLD_SIZE / RES;
@@ -137,6 +186,7 @@ export function bakeCanopy(placements) {
   tex.needsUpdate = true;
   shared.uCanopyMap.value = tex;
   shared.uCanopyRect.value.set(-half, -half, WORLD_SIZE, WORLD_SIZE);
+  shared.uSunMap.value = bakeSunMap(placements);
 
   return function occlusionAt(x, z) {
     const gx = THREE.MathUtils.clamp((x + half) / RES - 0.5, 0, N - 1.001);
