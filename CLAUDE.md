@@ -242,7 +242,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
     ≤10°, and the test catches 34°/90° turns. Draws ~37% of candidates. **Front to back:** `cull()` packs (dm², index) keys of
     the visible instances and heap-sorts them in place (no allocation) before uploading, so each near pool draws nearest first
     and the depth test rejects hidden alpha-tested card pixels before shading (tree cost is fill). Same pixels (A/B diff within
-    run-to-run noise). `?off=sort`; bench row `sort` ("unsorted near": its "saves" is negative by what sorting saves). Phone tris at spawn 0.79 → 0.60M (forest 0.69 → 0.47M). The dither uses `discard`, which can cost fill rate on Apple GPUs
+    run-to-run noise). `?off=sort`; bench row `sort` ("unsorted near": its "saves" is negative by what sorting saves). **Phone
+    bench** (DPR 1.75, overcast, full clock, after creeks/rocks/glitter/puddles): unsorted costs +0.4 ±0.2 ms at spawn, +0.3 ±0.7
+    in the forest, so sorting saves ~0.3–0.4 ms. Spawn full 6.6 ms (trees 2.3, water 0.0 ±0.6), forest 4.0 ms (trees 1.3, water 0.0). Phone tris at spawn 0.79 → 0.60M (forest 0.69 → 0.47M). The dither uses `discard`, which can cost fill rate on Apple GPUs
     (hidden-surface removal), so re-check phone `?perf` after changing tree materials.
   - **A mid tree tier was tried and reverted** (commit 2d55824): `_mid` models (same tree via `mid=True`, every other spray
     at 1.35×, no crossed cards/sticks/stubs/moss/roots) between 20 and 40 m on phones cut spawn tris 0.82 → 0.66M, but the
