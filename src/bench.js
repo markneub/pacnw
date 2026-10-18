@@ -110,7 +110,7 @@ export async function runBench({
       post.effects = false;
       return () => { post.effects = true; };
     }],
-    ['water', '- water', () => hide(byName('lake'))],
+    ['water', '- water', () => hide(...[byName('lake'), byName('streams')].filter(Boolean))],
     ['sky', '- sky', () => hide(byName('sky'))],
     ['weather', '- rain/snow', () => hide(weather.rain, weather.snow)],
     ['motes', '- motes', () => {
