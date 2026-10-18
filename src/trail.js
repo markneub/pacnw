@@ -32,7 +32,6 @@ const CUTOUT_HALF = 4.7;
 const CORRIDOR_HALF = 5.8;
 const CORRIDOR_STEP = 0.5;
 const STEP = 1.5; // m between centreline points
-const BLEND_SIGMA = 0.7; // how sharply the nearest trail leg takes over (m)
 
 // Routing grid (only covers the area the trail can plausibly use).
 const CELL = 6;
@@ -351,6 +350,30 @@ export function buildTrail() {
     }
     return sum / n;
   });
+  // Hairpin landings: where two legs pass close (and aren't neighbours along the trail), the
+  // bank between their treads can be at most LANDING_SLOPE steep, so their tread heights are
+  // pulled together (both, half each), as a built switchback has a flattened turn. Then a light
+  // smoothing along the trail so the approaches ease into the landing.
+  {
+    const LANDING_SLOPE = 1.2;
+    const pairs = [];
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 8; j < points.length; j++) {
+        const d = points[i].distanceTo(points[j]);
+        if (d < 2 * BANK_OUTER) pairs.push([i, j, Math.max(0.3, d - 2 * BENCH_HALF) * LANDING_SLOPE]);
+      }
+    }
+    for (let it = 0; it < 40; it++) {
+      for (const [i, j, maxDh] of pairs) {
+        const dh = tread[j] - tread[i];
+        if (Math.abs(dh) <= maxDh) continue;
+        const fix = (Math.abs(dh) - maxDh) * Math.sign(dh) * 0.5;
+        tread[i] += fix;
+        tread[j] -= fix;
+      }
+      for (let k = 1; k < tread.length - 1; k++) tread[k] = tread[k] * 0.6 + (tread[k - 1] + tread[k + 1]) * 0.2;
+    }
+  }
 
   // Footbridges where the trail crosses a stream. Each is level, spans the water along the trail
   // (an angled crossing is longer than the channel is wide), sits clear of the water, and rests on
@@ -443,7 +466,11 @@ export function buildTrail() {
       }
       if (d >= BANK_OUTER) continue;
       const keep = THREE.MathUtils.smoothstep(d, BENCH_HALF, BANK_OUTER); // 0 on the tread, 1 outside
-      const w = Math.exp(-(d * d) / (BLEND_SIGMA * BLEND_SIGMA));
+      // inverse distance from the tread's edge: each leg owns its own tread, and between two
+      // close legs the hand-over spreads across the whole gap between their treads, a bank, not
+      // a cliff (a sharp Gaussian put it in ~0.5 m: walls of up to 2.6 m, dark slots in the snow)
+      const de = Math.max(d - BENCH_HALF, 0.02);
+      const w = 1 / (de * de * de);
       const hc = tread[i] + (tread[i + 1] - tread[i]) * t;
       acc += w * (hc - g) * (1 - keep);
       wsum += w;
@@ -690,7 +717,24 @@ function buildCorridorMesh(points, distanceTo) {
   geo.setAttribute('aTread', new THREE.Float32BufferAttribute(treadAttr, 1));
   geo.setAttribute('aLayers', new THREE.Float32BufferAttribute(layers, 4));
   geo.setIndex(indices);
-  geo.computeVertexNormals();
+  // normals from the ground's own slope at each vertex (computeVertexNormals averaged in the
+  // triangles where the strip folds over itself on tight turns: downward normals, black pockets)
+  {
+    const P = geo.attributes.position;
+    const nrm = new Float32Array(P.count * 3);
+    const e = 0.4;
+    for (let v = 0; v < P.count; v++) {
+      const x = P.getX(v);
+      const z = P.getZ(v);
+      const nx = groundAt(x - e, z) - groundAt(x + e, z);
+      const nz = groundAt(x, z - e) - groundAt(x, z + e);
+      const l = Math.hypot(nx, 2 * e, nz);
+      nrm[v * 3] = nx / l;
+      nrm[v * 3 + 1] = (2 * e) / l;
+      nrm[v * 3 + 2] = nz / l;
+    }
+    geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  }
 
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -754,6 +798,25 @@ function buildCorridorMesh(points, distanceTo) {
   fringeMat.onBeforeCompile = mat.onBeforeCompile;
   fringeMat.customProgramCacheKey = mat.customProgramCacheKey;
   const opaqueTri = (alpha, a, b, c) => alpha[a] > 0.999 && alpha[b] > 0.999 && alpha[c] > 0.999;
+  // No triangles that are flipped over: on the inside of a turn tighter than the strip's
+  // half-width the strip folds over itself, and its triangles there face down (seen from above,
+  // their winding reverses) and poked up through the strip as shards (the user: dark shapes in
+  // the snow at hairpins)
+  const PA = geo.attributes.position.array;
+  const facesUp = (a, b, c) => {
+    const ux = PA[b * 3] - PA[a * 3];
+    const uz = PA[b * 3 + 2] - PA[a * 3 + 2];
+    const vx = PA[c * 3] - PA[a * 3];
+    const vz = PA[c * 3 + 2] - PA[a * 3 + 2];
+    return (uz * vx - ux * vz) > 1e-4; // the y of (b − a) × (c − a)
+  };
+  const keepTri = facesUp;
+  {
+    const src = geo.index.array;
+    const kept = [];
+    for (let k = 0; k < src.length; k += 3) if (keepTri(src[k], src[k + 1], src[k + 2])) kept.push(src[k], src[k + 1], src[k + 2]);
+    geo.setIndex(kept);
+  }
 
   // Split into ~150 m segments so off-screen stretches are frustum-culled.
   // Normals come from the full strip, so segment joins don't show.
@@ -779,6 +842,7 @@ function buildCorridorMesh(points, distanceTo) {
       const b = i * rowLen;
       for (let j = 0; j < across; j++) {
         for (const [p, q, r] of [[a + j, a + j + 1, b + j], [a + j + 1, b + j + 1, b + j]]) {
+          if (!keepTri(v0 + p, v0 + q, v0 + r)) continue;
           (opaqueTri(alpha, p, q, r) ? solid : fringe).push(p, q, r);
         }
       }

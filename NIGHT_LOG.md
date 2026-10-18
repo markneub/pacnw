@@ -271,3 +271,10 @@ into the ground the way AAA games seat props: within ~40 cm of the terrain their
 damp duff and moss (snow up high) with a ragged edge, instead of a hard line. If you still want more, the next step
 would be different source scans (more angular, lichen-covered basalt typical of the Cascades) or proper decals of moss
 caps and debris; tell me which bothers you more.
+
+### 33. Fix: dark shapes at the snowy switchbacks (found by the user)
+Where switchback legs pass close on steep snow, the ground between them dropped in a near-vertical wall (up to 2.6 m),
+and at tight hairpins the trail's surface folded over itself, poking up shards and lighting them black. Now the bank
+between close legs is spread over the whole gap (at most ~50°), hairpins have flattened landings like a built trail, the
+folded parts of the surface are removed and the surface is lit from the true ground slope. Checked at every spot the
+scan found; no holes. The steepest part of the trail also got gentler (18% grade for the steepest 5%, was 21%).

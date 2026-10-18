@@ -272,6 +272,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   The **skirt** is emitted with both windings, so `computeVertexNormals` averaged them to zero and it rendered **black**
   wherever it showed above ground (the "weird dark spots" at hairpins, and thin black lines along the corridor edge in snow).
   It now has up-facing normals and the strip edge's colour.
+- **Hairpins on steep ground** (the user's "dark shape in the snow"): (1) `benchHeight` weights legs by inverse cube of the
+  distance from each tread's edge, not a σ = 0.7 m Gaussian (which put the hand-over between two legs into ~0.5 m: walls
+  up to 2.6 m); (2) **landings**: tread heights of legs within 2 × BANK_OUTER of each other (not neighbours along the trail)
+  are pulled together until the bank between their tread edges is ≤ 1.2 : 1, with light smoothing (40 iterations) —
+  steepest 0.5 m steps across the corridor >3 : 1 went 94 → 24 (the rest are footbridge berms), grade p95 21 → 18%;
+  (3) the corridor strip **drops flipped triangles** (`facesUp`): on turns tighter than its 5.8 m half-width the strip
+  folds over itself and those poked through as shards; (4) strip **normals come from groundAt** slopes, not
+  `computeVertexNormals` (folds averaged them downward: black pockets). A per-leg ownership filter was tried and removed:
+  it opened a hole. `tools/holecheck.mjs trail`: no holes. Trail build 1.2 → 1.75 s (container).
 - Trail QA numbers (cross-slope on tread p50 ≈0, p95 ≈13%; grade p95 ≈26%) come from measuring
   `groundAt` across/along `trail.points` in node. Re-check them after changing the route or widths.
 - `src/touch.js`: one-thumb scheme. The first finger is the steer: its horizontal movement turns (swipe-style, ~130° per
