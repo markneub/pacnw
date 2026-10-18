@@ -96,6 +96,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   cedar); the crossed-card draw is taken either way, so no branch moved (bark buffers byte-identical). Card tris: fir
   2386 → 3808, hemlock 2560 → 4004, cedar 2670 → 5340. Phone-setting submitted tris spawn 0.94 → 1.09M, forest 0.62 → 0.69M,
   draws unchanged; shaded card pixels ~−45%. Before/after renders look the same.
+  **Phone bench after:** no measurable gain: spawn full 6.5 ms (was 6.6), trees 2.3 ±0.6 (was 2.3 ±0.3); forest trees 1.2
+  (was 1.3); snowfield full 6.0, trees 2.6. The extra tris cost nothing either, so it stays; the card fill isn't dominated by
+  the empty corners (it's the needles themselves, overlapping).
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
