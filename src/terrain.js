@@ -336,6 +336,7 @@ const COL = {
   sand: C(0xcfc0a0), // pale, warm dune sand, like the Oregon coast
   sandDamp: C(0x9b8f78), // below the reach of the waves
   sandShade: C(0xbcab88),
+  sandFirm: C(0xb3a183), // packed by the waves, a little damp
 };
 
 const tmpColor = new THREE.Color();
@@ -389,7 +390,9 @@ export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
   const mud = (1 - smoothstep(wl - 1, wl + 2.5, y)) * (1 - rock) * (1 - snow) * (1 - sand);
   out[0] = Math.max(0, 1 - snow - rock - mud - sand);
   out[1] = rock;
-  out[2] = snow + sand; // (one slot: grounddetail.js shows snow up high and sand at the coast)
+  // (one slot: grounddetail.js shows snow up high and sand at the coast). The lower beach is firm,
+  // smooth, wave-packed sand: little of the trampled photo there (the rest of the weight is plain)
+  out[2] = snow + sand * (0.25 + 0.75 * smoothstep(SEA_LEVEL + 1.6, SEA_LEVEL + 3.2, y));
   out[3] = mud;
   return out;
 }
@@ -419,6 +422,7 @@ export function groundColor(x, y, z, slope, target = new THREE.Color()) {
   // the beach and dunes: pale sand, damp and darker where the waves reach (and under the sea)
   if (sand > 0) {
     tmp.copy(COL.sand).lerp(COL.sandShade, n1 * 0.6);
+    tmp.lerp(COL.sandFirm, 1 - smoothstep(SEA_LEVEL + 1.4, SEA_LEVEL + 2.6, y)); // the firm lower beach: tan
     tmp.lerp(COL.sandDamp, 1 - smoothstep(SEA_LEVEL + 0.4, SEA_LEVEL + 1.3, y));
     c.lerp(tmp, sand);
   }

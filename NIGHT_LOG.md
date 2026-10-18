@@ -357,3 +357,8 @@ Behind the beach the dunes now look more like the user's photo: beach grass grow
 between, the ground is lumpier, and short, bushy shore pines with dark rounded crowns are scattered over the sand. They
 thicken into a low coastal forest of pines, hemlock and fir before the tall forest starts. The sand is a warmer beige
 and shows its footprint texture more.
+
+### 48. Footprints on the beach
+Where the trail runs over the sand it's now a line of footprints, a few people's worth, instead of a scuffed strip.
+The lower beach is firm, smooth, tan wave-packed sand (the pocked, trampled look stays higher up), and in sunshine a
+light sea haze hangs low over the beach, so it fades off into the distance like the user's photo.

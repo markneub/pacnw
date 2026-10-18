@@ -648,6 +648,7 @@ function buildCorridorMesh(points, distanceTo) {
   const positions = [];
   const colors = [];
   const treadAttr = [];
+  const printAttr = []; // footprints in the sand: arc length, offset across, how sandy
   const layers = [];
   const lw = [0, 0, 0, 0];
   const indices = [];
@@ -716,6 +717,7 @@ function buildCorridorMesh(points, distanceTo) {
       const alpha = 1 - THREE.MathUtils.smoothstep(Math.abs(u), CUTOUT_HALF + 0.3, CORRIDOR_HALF);
       colors.push(col.r, col.g, col.b, alpha);
       treadAttr.push(t * (1 - 0.7 * snow) * (1 - sandy)); // (less dark grit on trodden snow, none on sand)
+      printAttr.push(i * STEP, u, sandy * (1 - THREE.MathUtils.smoothstep(marshAt(x, z), 0.05, 0.2)));
     }
     if (i > 0) {
       const r0 = (i - 1) * (across + 1);
@@ -731,6 +733,7 @@ function buildCorridorMesh(points, distanceTo) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
   geo.setAttribute('aTread', new THREE.Float32BufferAttribute(treadAttr, 1));
+  geo.setAttribute('aPrint', new THREE.Float32BufferAttribute(printAttr, 3));
   geo.setAttribute('aLayers', new THREE.Float32BufferAttribute(layers, 4));
   geo.setIndex(indices);
   // normals from the ground's own slope at each vertex (computeVertexNormals averaged in the
@@ -769,11 +772,12 @@ function buildCorridorMesh(points, distanceTo) {
     shader.uniforms.uPuddle = shared.uPuddle;
     shader.uniforms.uSnowline = shared.uSnowline;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aTread;\nvarying float vTread;\nvarying vec3 vGroundPos;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTread = aTread;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <common>', '#include <common>\nattribute float aTread;\nattribute vec3 aPrint;\nvarying float vTread;\nvarying vec3 vPrint;\nvarying vec3 vGroundPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTread = aTread;\nvPrint = aPrint;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         varying float vTread;
+        varying vec3 vPrint;
         varying vec3 vGroundPos;
         uniform float uWet;
         uniform float uPuddle;
@@ -792,6 +796,27 @@ function buildCorridorMesh(points, distanceTo) {
         diffuseColor.rgb *= 0.78 + gn * 0.44;
         float grit = gNoise(vGroundPos.xz * 7.0) * 0.6 + gNoise(vGroundPos.xz * 2.2) * 0.4;
         diffuseColor.rgb *= mix(1.0, 0.82 + grit * 0.36, vTread);
+        // on sand: lines of footprints, three walkers' worth, each wandering a little across the
+        // tread (a shadowed hollow with a lit lip on the far side)
+        if (vPrint.z > 0.05 && abs(vPrint.y) < 1.6) {
+          float hollow = 0.0;
+          float lip = 0.0;
+          for (int w = 0; w < 3; w++) {
+            float fw = float(w);
+            float stride = 0.7 + 0.07 * fw;
+            float lane = (fw - 1.0) * 0.5 + 0.18 * sin(vPrint.x * 0.045 + fw * 2.1);
+            float sk = vPrint.x / stride + fw * 0.37;
+            float k = floor(sk + 0.5);
+            float side = mod(k, 2.0) * 2.0 - 1.0;
+            vec2 e = vec2((sk - k) * stride / 0.14, (vPrint.y - lane - side * 0.11) / 0.06);
+            float r = dot(e, e);
+            float keep = step(gHash(vec2(k, fw * 7.0 + 1.0)), 0.85); // some are scuffed out
+            hollow = max(hollow, (1.0 - smoothstep(0.5, 1.0, r)) * keep);
+            lip = max(lip, smoothstep(0.8, 1.05, r) * (1.0 - smoothstep(1.05, 1.8, r)) * step(0.0, e.x) * keep);
+          }
+          float pv = vPrint.z * (1.0 - smoothstep(25.0, 60.0, distance(cameraPosition, vGroundPos)) * 0.5);
+          diffuseColor.rgb *= mix(1.0, 0.72, hollow * pv) * (1.0 + 0.1 * lip * pv);
+        }
         ${wet.color}
         // puddles collect in low spots of the tread in rain, growing as they fill (not up in the snow)
         float pt = 0.76 - 0.16 * uPuddle;
@@ -846,7 +871,7 @@ function buildCorridorMesh(points, distanceTo) {
     const v0 = r0 * rowLen;
     const v1 = (r1 + 1) * rowLen;
     const part = new THREE.BufferGeometry();
-    for (const name of ['position', 'normal', 'color', 'aTread', 'aLayers']) {
+    for (const name of ['position', 'normal', 'color', 'aTread', 'aPrint', 'aLayers']) {
       const attr = geo.attributes[name];
       part.setAttribute(name, new THREE.BufferAttribute(attr.array.slice(v0 * attr.itemSize, v1 * attr.itemSize), attr.itemSize));
     }
@@ -911,6 +936,7 @@ function buildCorridorMesh(points, distanceTo) {
     skirt.setAttribute('position', new THREE.Float32BufferAttribute(sPos, 3));
     skirt.setAttribute('color', new THREE.Float32BufferAttribute(sCol, 4));
     skirt.setAttribute('aTread', new THREE.Float32BufferAttribute(new Float32Array(sPos.length / 3), 1));
+    skirt.setAttribute('aPrint', new THREE.Float32BufferAttribute(new Float32Array(sPos.length), 3));
     skirt.setAttribute('aLayers', new THREE.Float32BufferAttribute(sLay, 4));
     skirt.setIndex(sIdx);
     // lit like the ground it continues: computeVertexNormals averaged the two windings' opposite

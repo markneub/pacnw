@@ -72,6 +72,8 @@ export function installHeightFog() {
       // (in a sun break the low valley mist burns off: across the lake in sun it whited out the
       // far shore 200 m away, worst looking into the sun)
       float fogD = fract(fogNear) * (0.8 + 0.8 * fogPool * (1.0 - 0.7 * fogSun)) * (0.6 + 0.8 * bank);
+      // sea haze: spray from the surf hangs low over the beach in a sun break (terrain.js coastZ ~1000)
+      fogD *= 1.0 + 0.35 * fogSun * smoothstep(760.0, 1000.0, mix(cameraPosition.z, vFogWorld.z, 0.5)) * exp(-max(fogMidY, 0.0) / 30.0);
       float fogFactor = 1.0 - exp(-fogD * fogD * vFogDepth * vFogDepth);
       // sunlit haze: mist glows warm toward the sun (forward scattering), more
       // where the mist is thick, so banks catch the light

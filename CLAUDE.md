@@ -248,7 +248,12 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   spray tinted dark yellow-green (0.4, 0.47, 0.32)) + `shore_pine_lod`; a trees kind, so it gets impostors. Scattered on
   the dunes (sand > 0.3, ground > 5 m: p = 0.16 × sand, scale 0.45–1.15) and the main tree type within 380 m of the
   shore (with fir, hemlock, saplings: the wind-pruned coastal forest). Sand reaches ~190 m inland (±35); back-dune
-  hummocks are stronger. Sand `0xcfc0a0`, detail strength 1.0 (it read flat white in sun). **Driftwood** (`addDriftwood`, hash, no rng):
+  hummocks are stronger. Sand `0xcfc0a0`, detail strength 1.0 (it read flat white in sun).
+  **Beach walk** (the user's third photo): footprints along the trail on sand (trail.js corridor: `aPrint` = arc length,
+  offset across, sandiness; three walkers' alternating oval hollows with a lit lip, some scuffed out, wandering lanes);
+  the lower beach (below ~2.6 m) is firm tan `sandFirm` with only 25% of the trampled photo (grounddetail.js now treats
+  layer weights summing below 1 as plain ground); sea haze: fog density × up to 1.35 low over the coast in a sun break
+  (atmosphere.js fog chunk, z 760–1000). View: `x=40&z=946&yaw=-1.75&pitch=-0.12&weather=sun`. **Driftwood** (`addDriftwood`, hash, no rng):
   `log_leaning` lying along the drift line (s 40–76), mostly along the shore, some piles, scale 0.4–0.9 (8–18 m), a third sunk,
   skipped where the sand rises into it or falls away, on rock or near the trail (~130). Trail stops now trailhead → **Ocean
   beach** (−60, 942) → along the berm → **Dune trail** (300, 948) → marsh → lake → snowfield → basin (3.95 km); on sand the

@@ -168,7 +168,11 @@ export function patchGroundDetail(shader) {
             n = textureGrad(uGDNrm[3], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).xy * 2.0 - 1.0;
             off += w.w * vec3(n.x, 0.0, n.y);
           } else detail += w.w;
-          detail /= max(dot(w, vec4(1.0)), 1e-3);
+          // weights may sum to less than 1: the rest is plain ground with no photo (the firm,
+          // smooth lower beach)
+          float wsum = dot(w, vec4(1.0));
+          detail += max(0.0, 1.0 - wsum);
+          detail /= max(wsum, 1.0);
           diffuseColor.rgb *= mix(vec3(1.0), detail, gdFade);
           gdOffset = off * gdFade * uGDNormal;
         }
