@@ -341,7 +341,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   Assets: forest_leaves_04 (2.2 m tile), aerial_rocks_02 (6 m), snow_02 (3 m), brown_mud_02 (2 m). The per-layer
   `strength` in the manifest scales the photo's contrast (snow 0.45, or its specks read as dirt). `snowCover()` in
   terrain.js is the single sharpened, patchy snow edge used by both `groundColor` and `groundLayers`. If they
-  disagree, needle texture shows up on white snow. Cost: +0 draws, about 10 ms of load (the download overlaps the build).
+  disagree, needle texture shows up on white snow.
+  `snowCover` also sheds snow off steep faces (× 1 − smoothstep(0.4, 0.56, slope + rib noise at 0.09)), so peaks show dark
+  rock ribs with snow in the gullies; `snowAmount` (snowy trees, weather) is untouched, so no tree moved. Sunny haze at
+  altitude: density × (0.62 − 0.45·snowT) (was − 0.22: with exp² fog, peaks 300 m away were white ghosts). Cost: +0 draws, about 10 ms of load (the download overlaps the build).
 - **Close-up surface detail** (`src/surfacedetail.js`): the same idea for objects. Materials `Bark`, `CedarBark`,
   `SnagBark` and `Rock` (near-tier trees, logs, stumps, rocks, cairns, bench; never far LOD trees) get one photo
   albedo+normal layer (bark_brown_02, japanese_cedar_bark, bark_willow_02, lichen_rock in `public/textures/surface/`,

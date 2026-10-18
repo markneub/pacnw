@@ -171,3 +171,8 @@ current hits the stone. Along the way the creek's ripples became finer (they wer
 became thin streaks instead of flat patches, and overcast light no longer puts hard glints on the water.
 Look: `?x=459.5&z=-4.3&yaw=-0.77&pitch=-0.35`, `?x=463&z=-12.7&yaw=3.13&pitch=-0.4`, in sun `?weather=sun&x=233.4&z=-277.5&yaw=2.88&pitch=-0.4`.
 Cost: rocks are instanced boulders (no new draws); the water shader does more work, on creek pixels only.
+
+### 18. Mountains: rock where snow can't hold, clearer air
+Snow no longer covers the steepest faces: past about 50° the peaks show dark rock ribs with snow left in the gullies, as
+real alpine faces do. In sun the high-altitude haze is also much thinner, so the peaks around the high basin stand out
+crisp against the blue instead of fading to white ghosts. Look: `?weather=sun&x=70&z=-900&yaw=0.1`. No cost.
