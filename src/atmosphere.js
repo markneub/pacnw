@@ -69,13 +69,15 @@ export function installHeightFog() {
       vec2 fogP = vFogWorld.xz * 0.018 + vec2(fogFar * 0.011, fogFar * 0.004);
       float bank = fogNoise(fogP) * 0.65 + fogNoise(fogP * 2.7 + 13.1) * 0.35;
       float fogSun = floor(fogNear) / 255.0;
-      float fogD = fract(fogNear) * (0.8 + 0.8 * fogPool) * (0.6 + 0.8 * bank);
+      // (in a sun break the low valley mist burns off: across the lake in sun it whited out the
+      // far shore 200 m away, worst looking into the sun)
+      float fogD = fract(fogNear) * (0.8 + 0.8 * fogPool * (1.0 - 0.7 * fogSun)) * (0.6 + 0.8 * bank);
       float fogFactor = 1.0 - exp(-fogD * fogD * vFogDepth * vFogDepth);
       // sunlit haze: mist glows warm toward the sun (forward scattering), more
       // where the mist is thick, so banks catch the light
       vec3 fogView = normalize(vFogWorld - cameraPosition);
       float fogMie = max(dot(fogView, ${v3(SUN_DIR)}), 0.0);
-      vec3 fogCol = fogColor + ${v3(SUN_COLOR)} * fogSun * (0.28 * pow(fogMie, 6.0) + 0.12 * pow(fogMie, 2.0)) * (0.6 + 0.6 * bank);
+      vec3 fogCol = fogColor + ${v3(SUN_COLOR)} * fogSun * (0.2 * pow(fogMie, 8.0) + 0.06 * pow(fogMie, 2.0)) * (0.6 + 0.6 * bank);
       gl_FragColor.rgb = mix(gl_FragColor.rgb, fogCol, fogFactor);
     #endif`;
 }

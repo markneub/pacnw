@@ -213,7 +213,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   θh = the half vector's tilt from vertical, so sparkles gather into the glitter path by themselves; gain 16 (HDR) plus a
   faint sheen lobe, × `uSun`. σ: lake 0.16 + 0.06·uWet, streams 0.2–0.32 with speed; streams also × canopy toward the sun
   and × (1 − foam). (Whole lit cells read as squares, hence the round points.) Lake rain rings now follow `shared.uRain`
-  (the rain amount), not `uWet`, which stays 0.2 in sun and drew rings on a sunny lake. Views (sun):
+  (the rain amount), not `uWet`, which stays 0.2 in sun and drew rings on a sunny lake. **Smaller sparkles** (the user: "dots are too
+  big"): cells 0.04 m, growing at 0.0025·dist (was 0.06 / 0.004), point radius 0.2 of the cell, gain 22. Views (sun):
   shore `x=279.7&z=416.4&yaw=0.98&pitch=-0.12`. Cost: ALU on water pixels only.
 - **Puddles** (`patchPuddles` in materials.js; terrain + trail tread): `shared.uPuddle` fills toward 1 over ~40 s whenever
   it rains in the valley (1 − sun, or the `?weather` pin) and dries over ~200 s; `uRain` = the rain amount at the player
@@ -444,7 +445,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   disagree, needle texture shows up on white snow.
   `snowCover` also sheds snow off steep faces (× 1 − smoothstep(0.4, 0.56, slope + rib noise at 0.09)), so peaks show dark
   rock ribs with snow in the gullies; `snowAmount` (snowy trees, weather) is untouched, so no tree moved. Sunny haze at
-  altitude: density × (0.62 − 0.45·snowT) (was − 0.22: with exp² fog, peaks 300 m away were white ghosts). Cost: +0 draws, about 10 ms of load (the download overlaps the build).
+  altitude: density × (0.45 − 0.3·snowT) in a full sun break (was 0.62: across the lake, looking into the sun, the far
+  shore's trees were white "as if snowy"; the user). The fog shader also thins the low valley pool by 70% × sun and the
+  forward sun glow in the haze is smaller (0.2μ⁸ + 0.06μ², was 0.28μ⁶ + 0.12μ²). Overcast is unchanged. Cost: +0 draws, about 10 ms of load (the download overlaps the build).
 - **Close-up surface detail** (`src/surfacedetail.js`): the same idea for objects. Materials `Bark`, `CedarBark`,
   `SnagBark` and `Rock` (near-tier trees, logs, stumps, rocks, cairns, bench; never far LOD trees) get one photo
   albedo+normal layer (bark_brown_02, japanese_cedar_bark, bark_willow_02, lichen_rock in `public/textures/surface/`,

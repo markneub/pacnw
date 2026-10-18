@@ -365,7 +365,7 @@ export const GLITTER_GLSL = /* glsl */ `
     vec2 o = vec2(glHash(vec3(c, roll + 0.37)), glHash(vec3(c, roll + 0.71))) * 0.5 + 0.25;
     float d = length(fract(xz / cell) - o);
     // a flash: on when this roll's facet mirrors the sun, brightest mid-life
-    return step(h, pTilt) * smoothstep(0.3, 0.05, d) * smoothstep(0.0, 0.25, life) * smoothstep(1.0, 0.55, life);
+    return step(h, pTilt) * smoothstep(0.2, 0.03, d) * smoothstep(0.0, 0.25, life) * smoothstep(1.0, 0.55, life);
   }
   float glitter(vec3 wp, vec3 toEye, float sigma) {
     vec3 sun = normalize(vec3(${SUN_DIR.x.toFixed(4)}, ${SUN_DIR.y.toFixed(4)}, ${SUN_DIR.z.toFixed(4)}));
@@ -375,13 +375,14 @@ export const GLITTER_GLSL = /* glsl */ `
     // chance that a facet tilts that far, times how many facets per cell flash
     float pTilt = exp(-tan2 / (sigma * sigma)) * 0.3;
     float dist = length(wp - cameraPosition);
-    float lod = log2(max(dist * 0.004, 0.06) / 0.06);
+    // (cells ~0.0025 rad across on screen: at 0.004 the sparkles read as big dots)
+    float lod = log2(max(dist * 0.0025, 0.04) / 0.04);
     float l0 = floor(lod);
-    float cell0 = 0.06 * exp2(l0);
+    float cell0 = 0.04 * exp2(l0);
     float g = mix(glLevel(wp.xz, cell0, pTilt), glLevel(wp.xz + 17.3, cell0 * 2.0, pTilt), fract(lod));
     // a soft sheen along the glitter path, under the sparkles
     float sheen = pow(max(dot(reflect(-toEye, vec3(0.0, 1.0, 0.0)), sun), 0.0), 60.0) * 0.25;
-    return (g * 16.0 + sheen) * uGlSun;
+    return (g * 22.0 + sheen) * uGlSun;
   }
 `;
 export function patchGlitter(shader) {

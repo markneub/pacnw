@@ -278,3 +278,9 @@ and at tight hairpins the trail's surface folded over itself, poking up shards a
 between close legs is spread over the whole gap (at most ~50°), hairpins have flattened landings like a built trail, the
 folded parts of the surface are removed and the surface is lit from the true ground slope. Checked at every spot the
 scan found; no holes. The steepest part of the trail also got gentler (18% grade for the steepest 5%, was 21%).
+
+### 34. Finer lake glitter; no white trees toward the sun (found by the user)
+The sparkles on the water are now smaller points (about half the size). Looking into the sun across the lake, the far
+shore's trees used to wash out to white, as if snowy: the low valley mist was nearly opaque at 200 m and glowed white
+toward the sun. In a sun break the mist now burns off (thinner valley pool, clearer air, a smaller glow around the sun),
+so the far shore reads as green trees in a light haze. Overcast and rain are unchanged.
