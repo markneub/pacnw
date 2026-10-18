@@ -204,3 +204,9 @@ the wider scanned boulders (slabs, long blocks) floated by up to 9 m because the
 near their middle. Now clusters lie along the slope, boulders lean into it as rocks settle on a hillside, and every
 stone is sunk just until no part of its base is above the ground. A new checker (`tools/stonecheck.mjs`) measures it:
 inside the map's rim nothing floats by more than 3 cm. Nothing else moved. Cost: ~0.4 s of load.
+
+### 24. Performance: trimmed needle cards, fewer crossed cards
+Each needle spray was a rectangle that was ~70% transparent, and the phone still shaded every pixel of it. Cards are now
+cut to the spray's outline (a 4–6 sided polygon around the needles), about 45% fewer pixels each, with the needles
+exactly where they were. Firs and hemlocks also have half as many crossed cards (as cedars already did). Before/after
+renders look the same; branches didn't move. Costs ~15% more triangles, which the phone has shown it doesn't mind.

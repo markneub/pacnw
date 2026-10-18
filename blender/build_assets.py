@@ -12,6 +12,7 @@ origin, Z-up in Blender (the glTF exporter converts to Y-up). The object names
 are what the three.js side looks up, so keep them in sync with src/assets.js.
 """
 
+import json
 import math
 import os
 import random
@@ -58,8 +59,16 @@ def is_cards(mat):
     return mat.name.endswith("Cards")
 
 
+# Tight outlines of the spray textures (tools/card_hulls.py): cards are built as these polygons
+# instead of full quads, so the GPU never shades their empty corners (tree cost on phones is fill).
+with open(os.path.join(ROOT, "blender", "card_hulls.json")) as _f:
+    CARD_HULLS = json.load(_f)
+_card_hull = {}  # material name -> outline [(u, v), ...] (or none: a full quad)
+
+
 def card_material(name, image_path):
     """Foliage card material: base colour + alpha from an RGBA image (embedded in the GLB)."""
+    _card_hull[name] = CARD_HULLS.get(os.path.splitext(os.path.basename(image_path))[0])
     if name in _materials:
         return _materials[name]
     mat = bpy.data.materials.new(name)
@@ -386,6 +395,28 @@ def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=Fals
     `fold` > 0 bends it along the u axis into a shallow V (4 tris): each half rises
     fold × its width at the edge, as broadleaf sprays hold their leaves up either side
     of the twig (a flat card seen at eye level was a thin streak)."""
+    hull = _card_hull.get(mat.name) if fold <= 0.0 else None
+    if hull:
+        # the spray's outline: the same mapping as the quad below (u along fwd, flipped by
+        # flip_u; v along side), so UVs, droop and normals match it wherever the needles are
+        corners, us = [], []
+        for u, v in hull:
+            du = (1.0 - u if flip_u else u) - 0.5
+            p = centre + fwd * (du * length) + side * ((v - 0.5) * width)
+            p.z -= droop * max(0.0, du + 0.5) ** 2
+            corners.append(p)
+            us.append((u, v))
+        if flip_u:  # mirrored: keep the winding of the quad
+            corners.reverse()
+            us.reverse()
+        idx = [b.v(p) for p in corners]
+        for i, p in zip(idx, corners):
+            out = Vector((p.x - trunk_xy[0], p.y - trunk_xy[1], 0.0))
+            r = max(out.length, 0.3)
+            n = Vector((0.0, 0.0, 1.0)) if up_normal else (out / r + Vector((0.0, 0.0, 0.65))).normalized()
+            b.custom_normals[i] = tuple(n)
+        b.face(idx, mat, uvs=us)
+        return
     if fold <= 0.0:
         corners = []
         for du, dv in ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)):
@@ -553,7 +584,7 @@ def branchy_fir(M, name, seed=1, snow=False):
     snow=True: frosted needles with snow clumps on the sprays."""
     return branchy_conifer(M, name, M["fir_frost_cards"] if snow else M["fir_cards"], seed, height=30.0,
                            crown_base=10.5, max_radius=3.6, r_trunk=0.62, snow=M["snow_cards"] if snow else None,
-                           moss=None if snow else M["moss_cards"], n_roots=6)
+                           moss=None if snow else M["moss_cards"], n_roots=6, cross=0.35)
 
 
 def branchy_hemlock(M, name, seed=2, snow=False):
@@ -563,7 +594,7 @@ def branchy_hemlock(M, name, seed=2, snow=False):
                            crown_base=4.5, max_radius=4.2, r_trunk=0.5, elev=(-0.3, 0.3), sag=(0.3, 0.5),
                            card_droop=0.3, spacing=(0.42, 0.62), fill=(0.1, 1.15), nod=1.3, flare=1.25,
                            snow=M["snow_cards"] if snow else None, moss=None if snow else M["moss_cards"],
-                           n_roots=5)
+                           n_roots=5, cross=0.35)
 
 
 def branchy_cedar(M, name, seed=3):

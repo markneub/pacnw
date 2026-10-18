@@ -87,6 +87,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   leaves beneath, lobes cut ~1/3 in; the cards are **folded** (`_card(fold=0.45)`: a shallow V along the twig, 4 tris; each
   half rises 0.45 × its width), with more roll, since flat horizontal cards seen at eye level were thin streaks. `fold=0`
   keeps the old code path exactly, so every other asset is byte-identical (checked by hashing the GLB's mesh buffers).
+  **Card outlines + fewer crossed cards (fill cuts):** cards with a spray texture (fir, hemlock, cedar, their frost
+  versions, snow) are built as a tight convex polygon instead of a quad: `tools/card_hulls.py` (run after
+  make_foliage.py) takes every texel with alpha > 0.02, pads it 10 texels for the mip alpha boost, reduces the hull to 4
+  corners by growing it (never cutting in), clips it to the card, and writes `blender/card_hulls.json` (4–6 corners; area
+  0.50–0.61 of the quad, within a few % of the exact hull; 0 visible texels outside). `_card` maps the outline exactly like
+  the quad's corners (flip_u, droop, normals), so the needles land where they did. Fir and hemlock `cross` 0.7 → 0.35 (as
+  cedar); the crossed-card draw is taken either way, so no branch moved (bark buffers byte-identical). Card tris: fir
+  2386 → 3808, hemlock 2560 → 4004, cedar 2670 → 5340. Phone-setting submitted tris spawn 0.94 → 1.09M, forest 0.62 → 0.69M,
+  draws unchanged; shaded card pixels ~−45%. Before/after renders look the same.
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
