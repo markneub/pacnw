@@ -290,7 +290,7 @@ async function init() {
     }
   });
 
-  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail, veg, grass, post };
+  window.__pacnw = { scene, camera, player, weather, heightAt, renderer, trail, veg, grass, post, worldSize: WORLD_SIZE };
 }
 
 let flashTimer;

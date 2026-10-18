@@ -50,7 +50,9 @@ const found = await page.evaluate(async (step) => {
     for (const yaw of [0, Math.PI / 2]) look(p.x, p.y, yaw, -1.2, 6, 'trail');
   }
   // the whole map on a grid, looking straight down from 25 m
-  if (step) for (let z = -980; z <= 980; z += step) for (let x = -980; x <= 980; x += step) look(x, z, 0, -Math.PI / 2 + 0.01, 25, 'grid');
+  // (40 m inside the world's edge: looking down from there sees past the end of the map, which is not a hole)
+  const half = window.__pacnw.worldSize / 2 - 40;
+  if (step) for (let z = -half; z <= half; z += step) for (let x = -half; x <= half; x += step) look(x, z, 0, -Math.PI / 2 + 0.01, 25, 'grid');
   return holes;
 }, STEP);
 
@@ -58,7 +60,7 @@ if (found.length) {
   const byTag = {};
   for (const f of found) byTag[f.tag] = (byTag[f.tag] ?? 0) + 1;
   console.log(`${found.length} views show holes (${Object.entries(byTag).map(([k, v]) => `${k} ${v}`).join(', ')}):`);
-  for (const f of found.slice(0, 40)) console.log(`  ${f.tag} ?x=${f.x}&z=${f.z}&yaw=${f.yaw}&pitch=-0.6  (${f.px} px)`);
+  for (const f of found) console.log(`  ${f.tag} ?x=${f.x}&z=${f.z}&yaw=${f.yaw}&pitch=-0.6  (${f.px} px)`);
 } else console.log('no holes');
 await browser.close();
 process.exit(found.length ? 1 : 0);

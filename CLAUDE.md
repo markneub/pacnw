@@ -360,6 +360,13 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   leaf sheen.) Sharper god-ray shafts (1 m canopy map).
 - Tree cost is fill-bound (see the reverted mid tier): try cutting card overdraw if the frame budget gets tight.
 - Subtle head bob while walking (no option: opinionated).
+- **Next (the user's plan, in order):**
+  1. Landscape rework: a bigger map; snow you can climb up into, with flatter snowy areas (benches, basins, a pass), not
+     only steep snowy slopes. Moves everything (deterministic from SEED): re-run tools/holecheck.mjs, trail QA and the
+     phone bench after. The first full holecheck grid showed 2 views near the north rim (x=-80/-20, z=-920) to re-check.
+  2. Streams of running water cutting through the landscape, natural in look and behaviour.
+  3. Sun glitter on water (streams and the lake): realistic sparkle where the sun's reflection is visible. The user can
+     share reference photos.
 - Deferred by the user (they test with the sound off): sound — footsteps by surface, birdsong in sun breaks, drips after rain.
 
 ## Headless screenshots (how to see the scene)
