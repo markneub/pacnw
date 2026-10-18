@@ -138,10 +138,18 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   stretched along and scrolling with the flow (speed from the fall), soft white-water streaks on steep runs, faint bank
   foam, alpha clearer at the edges; reflection like the lake but the **canopy map darkens the reflected sky** (forest
   creeks mirror the dark canopy) and Fresnel max 0.6. (`uSwTime`, since patchSunlight declares `uTime`.) `?off=water` drops it.
-  **Footbridges** at trail crossings (`trail.crossings`): the bench cut lets the channel through the tread (`cut` near the
-  stream) instead of damming it like a culvert; a Blender `footbridge` (log stringers, uneven `Plank` deck, a pole rail;
-  6.4 m, scaled to the span, moss 0.2) spans bank to bank, **tilted to the grade** (`tilt` placement field → rotation about
-  local Z). `walkAt()` (terrain.js, `setWalkModifier`) puts the player on the deck; player.js uses it. Phone spawn draws
+  **Footbridges** at trail crossings (`trail.crossings`, computed before `benchHeight` from the smoothed `tread`): the bench
+  cut lets the channel through the tread (`cut` near the stream) instead of damming it like a culvert. A Blender
+  `footbridge` (log stringers, uneven `Plank` deck ±0.75 m, a pole rail; 6.4 m, moss 0.2) is **level** and stretched along
+  its length only (`scaleX` placement field): half-length `reach` = (half + 1) / cos(crossing angle, ≥ 0.5) + 1.2 (an angled
+  crossing is longer than the channel is wide: the old span = channel width put the ends in the water, seen by the user),
+  deck = max(tread at both ends, bed + 1.4, rendered ground + 1.0). **Dirt berms** (`bermHeight`, applied as max() in
+  `benchHeight`, in *trail* coordinates: arc length from the crossing and distance from the centreline, since a berm along
+  the bridge's straight axis ended up beside a curving trail): flat top ±1.6 m at deck − 0.04 from 1 m under each deck end
+  outward, a 15% ramp down to the tread (22% read as a steep mound), sides dropping 0.6/m (meets natural ground within
+  BANK_OUTER, inside the corridor mesh), a steep face toward the water under the bridge, and kept out of the channel except
+  under the tread. Pebbles are filtered off them. Clearance 1.25–1.5 m; ends meet the berm within 4 cm. `walkAt()`
+  (terrain.js, `setWalkModifier`) puts the player on the deck (±0.85 m); player.js uses it. (3 crossings now.) Phone spawn draws
   155 → 173.
 - **Rocks in the creeks** (`streams.js` `rocks`, `streamwater.js` `streamRocks(trail)`, `vegetation.js` `addStreamRocks`):
   ~420 along the beds, chosen by `hashU(stream, point)` (no scatter rng): chance 0.14 + 5 × bed fall (≤ 0.59), radius

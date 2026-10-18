@@ -30,6 +30,7 @@ const BANK_OUTER = 4.2;
 const CUTOUT_HALF = 4.7;
 const CORRIDOR_HALF = 5.8;
 const CORRIDOR_STEP = 0.5;
+const STEP = 1.5; // m between centreline points
 const BLEND_SIGMA = 0.7; // how sharply the nearest trail leg takes over (m)
 
 // Routing grid (only covers the area the trail can plausibly use).
@@ -213,7 +214,7 @@ export function buildTrail() {
     const leg = route(heights, side, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
     coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
   }
-  const points = resample(chaikin(coarse, 3), 1.5);
+  const points = resample(chaikin(coarse, 3), STEP);
 
   // Spatial hash of centreline segments for distance queries.
   const HASH = 12;
@@ -307,46 +308,17 @@ export function buildTrail() {
     return sum / n;
   });
 
-  /**
-   * Ground height with the bench cut in. Each nearby centreline segment pulls
-   * the ground toward its tread height. The closest segment dominates (sharp
-   * Gaussian weights), so where switchback legs pass close each tread stays
-   * level and the ground between them becomes a short bank, still continuous.
-   */
-  function benchHeight(x, z, g) {
-    const list = segs.get(cellKey(Math.floor(x / HASH), Math.floor(z / HASH)));
-    if (!list) return g;
-    let acc = 0;
-    let wsum = 0;
-    for (const i of list) {
-      const a = points[i];
-      const b = points[i + 1];
-      const abx = b.x - a.x;
-      const abz = b.y - a.y;
-      const t = THREE.MathUtils.clamp(((x - a.x) * abx + (z - a.y) * abz) / (abx * abx + abz * abz), 0, 1);
-      const d = Math.hypot(x - (a.x + abx * t), z - (a.y + abz * t));
-      if (d >= BANK_OUTER) continue;
-      const keep = THREE.MathUtils.smoothstep(d, BENCH_HALF, BANK_OUTER); // 0 on the tread, 1 outside
-      const w = Math.exp(-(d * d) / (BLEND_SIGMA * BLEND_SIGMA));
-      const hc = tread[i] + (tread[i + 1] - tread[i]) * t;
-      acc += w * (hc - g) * (1 - keep);
-      wsum += w;
-    }
-    const h = wsum > 0 ? g + acc / wsum : g;
-    // where the trail crosses a stream, the stream's channel cuts through the tread (a footbridge
-    // spans it) instead of the tread damming it like a culvert
-    const c = streams().nearest(x, z);
-    if (!c.seg || h <= g) return h;
-    const cut = 1 - THREE.MathUtils.smoothstep(c.d, c.half + 0.4, c.half + 2.2);
-    return h + (g - h) * cut;
-  }
-  setGroundModifier(benchHeight);
-
-  const mesh = buildCorridorMesh(points, distanceTo);
-  setTerrainCutout(...buildCutoutMask(mesh.userData.cover));
-  delete mesh.userData.cover;
-
-  // footbridges where the trail crosses a stream: deck level with the tread on both banks
+  // Footbridges where the trail crosses a stream. Each is level, spans the water along the trail
+  // (an angled crossing is longer than the channel is wide), sits clear of the water, and rests on
+  // a dirt berm at each end that carries the tread up to it (see benchHeight).
+  const treadAt = (i, along) => {
+    const k = THREE.MathUtils.clamp(i + along / STEP, 0, points.length - 1);
+    const k0 = Math.floor(k);
+    const k1 = Math.min(points.length - 1, k0 + 1);
+    return tread[k0] + (tread[k1] - tread[k0]) * (k - k0);
+  };
+  const arc = [0]; // metres along the trail at each point
+  for (let i = 1; i < points.length; i++) arc.push(arc[i - 1] + points[i].distanceTo(points[i - 1]));
   const crossings = [];
   for (let i = 0, wet = false; i < points.length; i++) {
     const c = streams().nearest(points[i].x, points[i].y);
@@ -366,20 +338,98 @@ export function buildTrail() {
       const dx = (b.x - a.x) / l;
       const dz = (b.y - a.y) / l;
       const cm = streams().nearest(points[m].x, points[m].y);
-      const span = 2 * (cm.half + 2.4);
-      const ends = [-1, 1].map((k) => groundAt(points[m].x + dx * k * span / 2, points[m].y + dz * k * span / 2));
-      // the deck follows the trail's grade from bank to bank
-      crossings.push({ x: points[m].x, z: points[m].y, dx, dz, span, deck: (ends[0] + ends[1]) / 2 + 0.06, rise: ends[1] - ends[0] });
+      const half = cm.half;
+      const bed = cm.bed;
+      // the stream's direction there, and how obliquely the trail crosses it
+      const sx = cm.seg.b.x - cm.seg.a.x;
+      const sz = cm.seg.b.z - cm.seg.a.z;
+      const sl = Math.hypot(sx, sz) || 1;
+      const cos = Math.max(0.5, Math.abs((dx * -sz + dz * sx) / sl));
+      const wetAlong = (half + 1.0) / cos; // water and wet gravel, measured along the trail
+      const reach = wetAlong + 1.2; // the bridge's half-length: each end rests ~1 m on its berm
+      const deck = Math.max(treadAt(m, -reach), treadAt(m, reach), bed + 1.4, rawGroundAt(points[m].x, points[m].y) + 1.0) + 0.05;
+      crossings.push({ x: points[m].x, z: points[m].y, s: arc[m], dx, dz, half, reach, deck, span: 2 * reach });
     }
     wet = now;
   }
+  const BERM_TOP = 1.6; // m, half-width of the berm's flat top
+  const BERM_SIDE = 0.6; // side slope (drop per metre), so it meets natural ground within BANK_OUTER
+  const RAMP = 0.15; // the approach ramp's grade (22% read as a steep mound from the trail)
+
+  /**
+   * The berm's surface for a crossing at a point `along` m (along the trail) from the bridge's
+   * middle and `across` m from the centreline, or -Infinity where it doesn't reach. It follows the
+   * trail (a berm straight along the bridge's axis ended up beside the trail where it curves).
+   */
+  function bermHeight(b, along, across, c) {
+    if (across > BANK_OUTER || along > b.reach + 14) return -Infinity;
+    let top = b.deck - 0.04;
+    top -= Math.max(0, along - b.reach) * RAMP; // the ramp down to the tread
+    top -= Math.max(0, b.reach - 1.0 - along) * 1.6; // under the bridge (past ~1 m of bearing): a steep face toward the water
+    top -= Math.max(0, across - BERM_TOP) * BERM_SIDE; // sloped sides
+    // kept out of the channel, except under the tread itself: on an angled crossing that tipped the
+    // walking surface sideways at the bridge ends (the tread's corner there just meets the bank)
+    if (c.seg) top -= Math.max(0, c.half + 1.3 - c.d) * 2.0 * THREE.MathUtils.smoothstep(across, 1.3, 2.2);
+    return top;
+  }
+
+  /**
+   * Ground height with the bench cut in. Each nearby centreline segment pulls
+   * the ground toward its tread height. The closest segment dominates (sharp
+   * Gaussian weights), so where switchback legs pass close each tread stays
+   * level and the ground between them becomes a short bank, still continuous.
+   */
+  function benchHeight(x, z, g) {
+    const list = segs.get(cellKey(Math.floor(x / HASH), Math.floor(z / HASH)));
+    if (!list) return g;
+    let acc = 0;
+    let wsum = 0;
+    let dMin = Infinity;
+    let sMin = 0;
+    for (const i of list) {
+      const a = points[i];
+      const b = points[i + 1];
+      const abx = b.x - a.x;
+      const abz = b.y - a.y;
+      const t = THREE.MathUtils.clamp(((x - a.x) * abx + (z - a.y) * abz) / (abx * abx + abz * abz), 0, 1);
+      const d = Math.hypot(x - (a.x + abx * t), z - (a.y + abz * t));
+      if (d < dMin) {
+        dMin = d;
+        sMin = arc[i] + (arc[i + 1] - arc[i]) * t;
+      }
+      if (d >= BANK_OUTER) continue;
+      const keep = THREE.MathUtils.smoothstep(d, BENCH_HALF, BANK_OUTER); // 0 on the tread, 1 outside
+      const w = Math.exp(-(d * d) / (BLEND_SIGMA * BLEND_SIGMA));
+      const hc = tread[i] + (tread[i + 1] - tread[i]) * t;
+      acc += w * (hc - g) * (1 - keep);
+      wsum += w;
+    }
+    const h = wsum > 0 ? g + acc / wsum : g;
+    // where the trail crosses a stream, the stream's channel cuts through the tread (a footbridge
+    // spans it) instead of the tread damming it like a culvert
+    const c = streams().nearest(x, z);
+    let out = h;
+    if (c.seg && h > g) {
+      const cut = 1 - THREE.MathUtils.smoothstep(c.d, c.half + 0.4, c.half + 2.2);
+      out = h + (g - h) * cut;
+    }
+    // the footbridges' dirt berms: fill up to the berm wherever it stands above the ground
+    for (const b of crossings) out = Math.max(out, bermHeight(b, Math.abs(sMin - b.s), dMin, c));
+    return out;
+  }
+  setGroundModifier(benchHeight);
+
+  const mesh = buildCorridorMesh(points, distanceTo);
+  setTerrainCutout(...buildCutoutMask(mesh.userData.cover));
+  delete mesh.userData.cover;
+
   setWalkModifier((x, z, g) => {
     for (const b of crossings) {
       const ox = x - b.x;
       const oz = z - b.z;
       const along = ox * b.dx + oz * b.dz;
       const across = -ox * b.dz + oz * b.dx;
-      if (Math.abs(along) < b.span / 2 && Math.abs(across) < 0.85) return Math.max(g, b.deck + (b.rise * along) / b.span);
+      if (Math.abs(along) < b.reach && Math.abs(across) < 0.85) return Math.max(g, b.deck);
     }
     return g;
   });

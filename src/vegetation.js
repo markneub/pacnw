@@ -350,7 +350,7 @@ function placeTrailFurniture(trail, add) {
 
   // footbridges over the creeks (the model is 6.4 m long, along local X)
   for (const c of trail.crossings ?? []) {
-    add('footbridge', { x: c.x, y: c.deck, z: c.z, rotY: Math.atan2(-c.dz, c.dx), tilt: Math.atan2(c.rise, c.span), scale: Math.max(1, c.span / 6.2), tint: 0.5 });
+    add('footbridge', { x: c.x, y: c.deck, z: c.z, rotY: Math.atan2(-c.dz, c.dx), scale: 1, scaleX: c.span / 6.4, tint: 0.5 });
   }
 
   const lake = stops.find((s) => s.name === 'lake');
@@ -654,6 +654,11 @@ export function bakeTreeImpostors(renderer, protos, { lowPower }) {
 export function buildVegetation(protos, trail, { impostors = null } = {}) {
   const placements = scatter(trail);
   addStreamRocks(placements, protos, trail);
+  // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
+  for (const name of Object.keys(placements)) {
+    if (!name.startsWith('pebbles')) continue;
+    placements[name] = placements[name].filter((q) => !trail.crossings.some((b) => Math.hypot(q.x - b.x, q.z - b.z) < b.reach + 8));
+  }
   seatStones(placements, protos);
   const canopyAt = bakeCanopy(placements);
   const group = new THREE.Group();
@@ -712,6 +717,7 @@ export function buildVegetation(protos, trail, { impostors = null } = {}) {
       if (it.normal) q.premultiply(tiltQ.setFromUnitVectors(up, normalV.fromArray(it.normal))); // laid on the slope
       if (it.tilt) q.multiply(tiltQ.setFromAxisAngle(zAxis, it.tilt)); // pitched along local X (footbridges on a grade)
       s.setScalar(it.scale);
+      if (it.scaleX) s.x *= it.scaleX; // stretched along local X only (footbridges)
       p.set(it.x, it.y, it.z);
       m.compose(p, q, s).toArray(matrices, i * 16);
       const t = it.tint;

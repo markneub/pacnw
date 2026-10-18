@@ -210,3 +210,9 @@ Each needle spray was a rectangle that was ~70% transparent, and the phone still
 cut to the spray's outline (a 4–6 sided polygon around the needles), about 45% fewer pixels each, with the needles
 exactly where they were. Firs and hemlocks also have half as many crossed cards (as cedars already did). Before/after
 renders look the same; branches didn't move. Costs ~15% more triangles, which the phone has shown it doesn't mind.
+
+### 25. Footbridges: level, clear of the water, on dirt berms (found by the user)
+The footbridges were as long as the creek is wide, but the trail crosses at an angle, so their ends sat in the water, and
+they tilted with the trail. Now each bridge is level, long enough for the angled crossing, 1.25–1.5 m above the water, and
+rests on a dirt berm at each end with sloped sides; the trail ramps gently up the berm to the deck (following the path's
+curve). Loose stones are kept off the berms. Trail checks unchanged (no holes, same grades and cross-slopes).
