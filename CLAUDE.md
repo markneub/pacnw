@@ -239,7 +239,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
     per-instance bounding sphere (precomputed) is in a frustum widened 12° on every side, or that are within 10 m. `updateNear(camera)`
     re-culls when the view turns >8° or moves >1.5 m (widening > trigger, so nothing is ever missing on screen). All parts of a pool
     share one instanceMatrix buffer, so a re-cull uploads it once. Verified with a culled-vs-all render: 0 px differ for turns
-    ≤10°, and the test catches 34°/90° turns. Draws ~37% of candidates. Phone tris at spawn 0.79 → 0.60M (forest 0.69 → 0.47M). The dither uses `discard`, which can cost fill rate on Apple GPUs
+    ≤10°, and the test catches 34°/90° turns. Draws ~37% of candidates. **Front to back:** `cull()` packs (dm², index) keys of
+    the visible instances and heap-sorts them in place (no allocation) before uploading, so each near pool draws nearest first
+    and the depth test rejects hidden alpha-tested card pixels before shading (tree cost is fill). Same pixels (A/B diff within
+    run-to-run noise). `?off=sort`; bench row `sort` ("unsorted near": its "saves" is negative by what sorting saves). Phone tris at spawn 0.79 → 0.60M (forest 0.69 → 0.47M). The dither uses `discard`, which can cost fill rate on Apple GPUs
     (hidden-surface removal), so re-check phone `?perf` after changing tree materials.
   - **A mid tree tier was tried and reverted** (commit 2d55824): `_mid` models (same tree via `mid=True`, every other spray
     at 1.35×, no crossed cards/sticks/stubs/moss/roots) between 20 and 40 m on phones cut spawn tris 0.82 → 0.66M, but the

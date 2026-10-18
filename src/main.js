@@ -9,6 +9,7 @@ import { SNOWLINE, SPAWN, VIEW_DIST, WORLD_SIZE } from './config.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround } from './bake.js';
+import { NearPool } from './detail.js';
 import { PerfOverlay } from './perf.js';
 import { loadGroundDetail } from './grounddetail.js';
 import { patchSunlight, addTrunkMoss } from './materials.js';
@@ -47,6 +48,7 @@ shared.uFernRadius.value = VIEW_DIST.ferns;
 const off = new Set((params.get('off') ?? '').split(',').filter(Boolean));
 patchSunlight.enabled = !off.has('dapple'); // sunlight through the canopy
 addTrunkMoss.enabled = !off.has('moss'); // moss sleeves on trunks
+NearPool.sort = !off.has('sort'); // near trees/ferns drawn front to back
 
 const postOn = !off.has('post');
 // with post-processing the scene renders into an MSAA target, so the canvas itself needs no antialiasing

@@ -191,3 +191,9 @@ The vine maples' leaf sprays were flat, single-colour cut-outs lying horizontall
 bright streaks. The leaves are now shaded (lighter centres, darker edges, mottled, shadowing each other) with deeper lobes,
 and each spray is folded into a shallow V along its twig, as real maple sprays hold their leaves, so you see leaves from
 any angle. Look: `?x=-30&z=420`. Cost: +229 triangles per maple.
+
+### 22. Performance: nearby trees drawn front to back
+The trees are mostly paid for in overlapping needle cards (fill), so nearby trees and ferns are now drawn nearest first:
+the GPU then skips most needle pixels hidden behind closer ones before shading them. The picture is identical. I can't
+measure the gain here (the container renders in software), so it has a bench row: `?bench=sort,trees` compares it
+with the old order ("unsorted near" should come out as a cost).

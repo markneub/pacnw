@@ -18,6 +18,8 @@ import * as THREE from 'three';
  *    updateNear): of those, upload only the ones whose bounding sphere is in a
  *    widened view frustum, plus everything very close. The widening is larger
  *    than the turn that triggers a re-cull, so nothing is ever missing on screen.
+ *    They're uploaded nearest first: alpha-tested cards cost fill, and front to
+ *    back the depth test rejects most hidden card pixels before they're shaded.
  *
  * This is also where expensive close-up assets belong: the pool's size is
  * bounded by the radius, not by the size of the forest.
@@ -30,6 +32,29 @@ const KEEP_NEAR = 10; // m: always drawn, whatever the view (things right beside
 
 const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
 const sphere = new THREE.Sphere();
+
+/** Sort a[0..n) ascending, in place (no allocation, unlike sorting a subarray view). */
+function heapSort(a, n) {
+  const sift = (i, end) => {
+    const v = a[i];
+    for (;;) {
+      let c = i * 2 + 1;
+      if (c >= end) break;
+      if (c + 1 < end && a[c + 1] > a[c]) c++;
+      if (a[c] <= v) break;
+      a[i] = a[c];
+      i = c;
+    }
+    a[i] = v;
+  };
+  for (let i = (n >> 1) - 1; i >= 0; i--) sift(i, n);
+  for (let end = n - 1; end > 0; end--) {
+    const t = a[0];
+    a[0] = a[end];
+    a[end] = t;
+    sift(0, end);
+  }
+}
 
 export class NearPool {
   /**
@@ -71,6 +96,7 @@ export class NearPool {
     this.capacity = this.maxNearby(radius + MARGIN);
     this.candidates = new Int32Array(this.capacity);
     this.nCandidates = 0;
+    this.keys = new Float64Array(this.capacity); // (squared distance, index) packed, for the front-to-back sort
     // all parts share one matrix buffer (uploaded once per cull); colours differ per part
     const shared = new THREE.InstancedBufferAttribute(new Float32Array(this.capacity * 16), 16);
     shared.setUsage(THREE.DynamicDrawUsage);
@@ -143,16 +169,25 @@ export class NearPool {
     const sp = this.spheres;
     const near2 = KEEP_NEAR * KEEP_NEAR;
     const mDst = this.meshes[0].instanceMatrix.array;
-    let n = 0;
+    let nv = 0;
     for (let j = 0; j < this.nCandidates; j++) {
       const i = this.candidates[j];
       const dx = this.xz[i * 2] - cam.x;
       const dz = this.xz[i * 2 + 1] - cam.z;
-      if (dx * dx + dz * dz > near2) {
+      const d2 = dx * dx + dz * dz;
+      if (d2 > near2) {
         sphere.center.set(sp[i * 4], sp[i * 4 + 1], sp[i * 4 + 2]);
         sphere.radius = sp[i * 4 + 3];
         if (!frustum.intersectsSphere(sphere)) continue;
       }
+      // whole dm² above, the instance below (< 2^21 instances; exact in a double)
+      this.keys[nv++] = NearPool.sort ? Math.floor(d2 * 100) * 2097152 + i : i;
+    }
+    const keys = this.keys;
+    if (NearPool.sort) heapSort(keys, nv);
+    let n = 0;
+    for (let j = 0; j < nv; j++) {
+      const i = keys[j] % 2097152;
       // plain copies: subarray() would allocate a view object per call
       for (let e = 0; e < 16; e++) mDst[n * 16 + e] = this.matrices[i * 16 + e];
       for (let p = 0; p < this.meshes.length; p++) {
@@ -176,3 +211,4 @@ export class NearPool {
     }
   }
 }
+NearPool.sort = true; // ?off=sort, bench row 'sort'

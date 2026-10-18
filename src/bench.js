@@ -1,3 +1,4 @@
+import { NearPool } from './detail.js';
 import { groundDetail } from './grounddetail.js';
 import { VIEW_DIST } from './config.js';
 import { shared } from './materials.js';
@@ -28,7 +29,7 @@ const VIEWS = [
  * Options (from the URL, see main.js):
  *  rows   which rows to run, e.g. ['trees', 'grass']; empty = all. Keys: trees,
  *         ferns, rocks, ground, detail, tex, grass, grass50, near40, water, sky,
- *         weather, empty, dpr (all the resolution rows). "full" always runs.
+ *         weather, motes, post, sort, empty, dpr (all the resolution rows). "full" always runs.
  *  views  e.g. ['spawn']; empty = all (spawn, forest, snow)
  *  heat   seconds of flat-out rendering first. Phones slow their GPU after
  *         ~20 s of full load; heat=30 measures that throttled state directly.
@@ -118,6 +119,15 @@ export async function runBench({
       weather.motesOff = true;
       weather.motes.visible = false;
       return () => { [weather.motesOff, weather.motes.visible] = was; };
+    }],
+    // near pools drawn in any order instead of front to back (the 'saves' is then negative: what sorting saves)
+    ['sort', 'unsorted near', () => {
+      NearPool.sort = false;
+      veg.updateNear(camera, true);
+      return () => {
+        NearPool.sort = true;
+        veg.updateNear(camera, true);
+      };
     }],
     ['empty', 'empty scene', () => hide(...scene.children)],
   ];
