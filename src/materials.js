@@ -19,6 +19,7 @@ export const shared = {
   uSunMap: { value: null }, // the same at 1 m, barely blurred: sunlight only (bake.js bakeSunMap)
   uGroundH: { value: null }, // R32F terrain grid heights (main.js), for blending objects into the ground
   uGroundGrid: { value: new THREE.Vector4() }, // min x, min z, step, n
+  uSandMap: { value: null }, // R8 on the terrain grid: open sand (beach, dunes), terrain.js sandMap()
   uGrassMap: { value: null }, // grass.js: density (a) and colour (rgb) per terrain vertex, for the ground's distant tint
   uGrassTint: { value: new THREE.Vector2(16, 28) }, // m: where the grass tufts fade out (the tint fades in)
   uCanopyRect: { value: new THREE.Vector4(-1000, -1000, 2000, 2000) }, // minX, minZ, sizeX, sizeZ
@@ -183,7 +184,7 @@ export function addWindSway(material, strength = 0.012, wet = 0.25, lod = null) 
  * `moss` scales the moss (scanned rocks already have their own); `lod` is the
  * near/far tier for models that have both (see patchLod).
  */
-export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film = 0 } = {}) {
+export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film = 0, bleach = false } = {}) {
   material.onBeforeCompile = (shader) => {
     // (stone gets its rain gloss from the film below: the general damp gloss gave dry rocks a
     // glassy sheen)
@@ -193,6 +194,7 @@ export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film 
     shader.uniforms.uSnowline = shared.uSnowline;
     shader.uniforms.uGcGround = shared.uGroundH;
     shader.uniforms.uGcGrid = shared.uGroundGrid;
+    shader.uniforms.uGcSand = shared.uSandMap;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -218,6 +220,7 @@ export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film 
         uniform float uSnowline;
         uniform highp sampler2D uGcGround;
         uniform vec4 uGcGrid; // min x, min z, step, n
+        uniform sampler2D uGcSand;
         varying vec3 vCoverPos;
         varying vec3 vCoverNormal;
         // the rendered terrain's height (same grid and triangulation as groundAt)
@@ -243,7 +246,11 @@ export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film 
         sp3 += dot(sp3, sp3.yzx + 33.33);
         float speck = fract((sp3.x + sp3.y) * sp3.z);
         vec3 moss = mix(vec3(0.045, 0.085, 0.02), vec3(0.08, 0.13, 0.03), speck);
-        float gcMoss = up * (1.0 - snowy) * ${(0.85 * moss).toFixed(3)}; // read by surfacedetail.js
+        // on the beach and dunes: no moss, sand drifted against things instead of duff, and wood
+        // bleached silver by sun and salt (driftwood)
+        float gcSand = texture2D(uGcSand, ((vCoverPos.xz - uGcGrid.xy) / uGcGrid.z + 0.5) / uGcGrid.w).r;
+        ${bleach ? 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15))) * vec3(1.32, 1.27, 1.18), 0.75 * gcSand);' : ''}
+        float gcMoss = up * (1.0 - snowy) * (1.0 - gcSand) * ${(0.85 * moss).toFixed(3)}; // read by surfacedetail.js
         float gcSnow = up * snowy * ${snow.toFixed(2)};
         diffuseColor.rgb = mix(diffuseColor.rgb, moss, gcMoss);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.89, 0.94), gcSnow);
@@ -258,7 +265,7 @@ export function addGroundCover(material, { moss = 1, lod = null, snow = 1, film 
           float rag = (sin(vCoverPos.x * 5.3 + sin(vCoverPos.z * 4.1) * 2.0) * sin(vCoverPos.z * 4.7 + vCoverPos.x * 1.3)) * 0.12
                     + (fract((bp3.x + bp3.y) * bp3.z) - 0.5) * 0.06;
           gcBase = 1.0 - smoothstep(0.02, 0.38, gcAbove + rag);
-          vec3 duff = mix(vec3(0.075, 0.056, 0.036), vec3(0.05, 0.075, 0.028), speck);
+          vec3 duff = mix(mix(vec3(0.075, 0.056, 0.036), vec3(0.05, 0.075, 0.028), speck), vec3(0.6, 0.53, 0.42) * (0.9 + 0.2 * speck), gcSand);
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(duff, vec3(0.85, 0.89, 0.94), snowy * ${snow.toFixed(2)}), gcBase * 0.9);
           gcMoss = max(gcMoss, gcBase * (1.0 - snowy)); // the surface photo fades under it
           gcSnow = max(gcSnow, gcBase * snowy * ${snow.toFixed(2)});

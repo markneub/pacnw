@@ -136,7 +136,7 @@ function ribbon(pts, si) {
  * numbers per tile, so it wraps), as a normal map: RG = slope (x, y) remapped to 0..1, B = height.
  * The water's detail comes from this instead of value noise, which looked blobby and blocky.
  */
-function waveNormals(size = 256, seed = 7) {
+export function waveNormals(size = 256, seed = 7) {
   let r = seed;
   const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
   const waves = [];
@@ -211,7 +211,7 @@ function waveNormals(size = 256, seed = 7) {
  * sizes, broken up by a soft mask), R = foam density 0..1. Foam is drawn where this exceeds a
  * threshold set by how much white water there should be, so it grows in bubbly lacework.
  */
-function foamTexture(size = 256, seed = 11) {
+export function foamTexture(size = 256, seed = 11) {
   let r = seed;
   const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
   // cellular noise on a g×g grid of jittered points (one per cell; only the 3×3 neighbouring

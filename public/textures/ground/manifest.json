@@ -5,49 +5,61 @@
       "name": "floor",
       "asset": "forest_leaves_04",
       "tile": 2.2,
+      "strength": 1.0,
       "avg": [
         0.22628,
         0.11762,
         0.0461
       ],
-      "url": "https://polyhaven.com/a/forest_leaves_04",
-      "strength": 1.0
+      "url": "https://polyhaven.com/a/forest_leaves_04"
     },
     {
       "name": "rock",
       "asset": "aerial_rocks_02",
       "tile": 6.0,
+      "strength": 0.9,
       "avg": [
         0.16465,
         0.11576,
         0.04591
       ],
-      "url": "https://polyhaven.com/a/aerial_rocks_02",
-      "strength": 0.9
+      "url": "https://polyhaven.com/a/aerial_rocks_02"
     },
     {
       "name": "snow",
       "asset": "snow_02",
       "tile": 3.0,
+      "strength": 0.45,
       "avg": [
         0.37854,
         0.37801,
         0.38809
       ],
-      "url": "https://polyhaven.com/a/snow_02",
-      "strength": 0.45
+      "url": "https://polyhaven.com/a/snow_02"
     },
     {
       "name": "dirt",
       "asset": "brown_mud_02",
       "tile": 2.0,
+      "strength": 0.9,
       "avg": [
         0.07603,
         0.05973,
         0.03938
       ],
-      "url": "https://polyhaven.com/a/brown_mud_02",
-      "strength": 0.9
+      "url": "https://polyhaven.com/a/brown_mud_02"
+    },
+    {
+      "name": "sand",
+      "asset": "aerial_sand",
+      "tile": 5.0,
+      "strength": 0.8,
+      "avg": [
+        0.34694,
+        0.25811,
+        0.22034
+      ],
+      "url": "https://polyhaven.com/a/aerial_sand"
     }
   ]
 }

@@ -10,7 +10,7 @@ colour. Output: public/textures/<set>/.
     python3 tools/fetch_textures.py --search moss forest leaves   # browse candidates
 
 Needs network access to api.polyhaven.com and dl.polyhaven.org, and Pillow.
-Ground layer order must match aLayers in terrain.js: floor, rock, snow, dirt.
+Ground layer order must match aLayers in terrain.js: floor, rock, snow, dirt (+ sand, swapped into snow's slot).
 Surface layer names are looked up by material in src/surfacedetail.js.
 """
 
@@ -33,6 +33,7 @@ SETS = {
         ("rock", "aerial_rocks_02", 6.0, 0.9),    # broken grey rock with moss in the cracks
         ("snow", "snow_02", 3.0, 0.45),           # clean snow; its dark specks need toning down
         ("dirt", "brown_mud_02", 2.0, 0.9),       # wet trail mud
+        ("sand", "aerial_sand", 5.0, 0.8),        # trampled beach sand; shares snow's slot (grounddetail.js)
     ],
     "surface": [
         ("bark", "bark_brown_02", 1.6, 1.0),          # fir/hemlock, logs, stumps: furrows, moss

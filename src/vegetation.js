@@ -4,7 +4,7 @@ import {
   WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, SNOWLINE, TREELINE, SEED, SPAWN,
 } from './config.js';
 import {
-  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt, marshAt, MARSH,
+  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt, marshAt, MARSH, sandAt, coastZ, SEA_LEVEL,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover, addTrunkMoss, shared } from './materials.js';
@@ -206,7 +206,7 @@ function convertMaterial(src, assetName, lod, cache) {
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns' && !pebble) addWindSway(mat, 2.5, undefined, 'fade');
   // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
-  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0 });
+  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0, bleach: /Bark|Wood/.test(src.name) });
   if (cards) patchCards(mat);
   // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
   if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);
@@ -421,6 +421,48 @@ function addLeaners(placements, trail) {
   }
 }
 
+/**
+ * Driftwood: bleached trunks (the leaning snags' model, lying down) thrown up along the drift line
+ * at the top of the beach and the foot of the dunes, mostly lying along the shore, some in
+ * jumbles. By hash along the coast (no scatter rng). Each lies on the sand, half sunk in, and is
+ * skipped where the ground under it would rise into it or fall away, near the trail, or on rock.
+ */
+function addDriftwood(placements, trail) {
+  const out = (placements.log_leaning ||= []);
+  const lim = WORLD_SIZE / 2 - 60;
+  for (let x0 = -lim; x0 < lim; x0 += 6) {
+    const pick = hash2(x0 * 0.71 + 3, 77.1);
+    if (pick > 0.4) continue;
+    const pile = pick < 0.06 ? 3 : 1;
+    for (let k = 0; k < pile; k++) {
+      const u = hash2(x0 + k * 13.1, 5.3 + k);
+      const x = x0 + (hash2(x0, k + 9.7) - 0.5) * 5;
+      const z = coastZ(x) - (40 + 36 * u * u); // mostly near the top of the beach
+      const scale = 0.3 + 0.45 * hash2(x, z + 1) ** 1.5;
+      const len = LEANER.length * scale;
+      const along = hash2(z, x) < 0.75;
+      const a = (along ? 0 : Math.PI / 2) + (hash2(x + 2, z - 3) - 0.5) * (along ? 0.9 : 3);
+      const ux = Math.cos(a);
+      const uz = Math.sin(a);
+      const g0 = groundAt(x, z);
+      const g1 = groundAt(x + ux * len, z + uz * len);
+      const tilt = Math.atan2(g1 - g0, len);
+      let ok = Math.abs(tilt) < 0.35 && g0 > SEA_LEVEL + 1.1 && g1 > SEA_LEVEL + 1.1;
+      for (let t = 0; ok && t <= 1; t += 0.1) {
+        const px = x + ux * len * t;
+        const pz = z + uz * len * t;
+        const r = leanerR(t) * scale;
+        const axis = g0 + 0.25 * LEANER.r0 * scale + (g1 - g0) * t; // (its axis ~r/4 above the sand: a third sunk in)
+        const dg = groundAt(px, pz) - axis;
+        if (dg > 0.5 * r + 0.15 || dg < -0.6 * r - 0.1) ok = false; // buried, or bridging a hollow
+        if (sandAt(px, pz) < 0.7 || trail.distanceTo(px, pz) < TRAIL_WIDTH + 1.2) ok = false;
+      }
+      if (!ok) continue;
+      out.push({ x, y: g0 + 0.25 * LEANER.r0 * scale, z, rotY: Math.atan2(-uz, ux), tilt, scale, tint: u, axis: [ux, uz] });
+    }
+  }
+}
+
 /** Signposts at each stop, a bench at the lake, cairns along the snowy section. */
 function placeTrailFurniture(trail, add) {
   const { points, stops } = trail;
@@ -547,6 +589,7 @@ async function scatter(trail) {
       const z = gz + rng() * cell;
       const h = heightAt(x, z);
       if (h < waterLevelAt(x, z) + 1.5) continue;
+      if (sandAt(x, z) > 0.3) continue; // open sand: the beach and dunes
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.3) continue;
       if (offStream(x, z) < 2.5) continue; // trees stand back from the water
@@ -594,6 +637,7 @@ async function scatter(trail) {
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.5) continue;
       const slope = slopeAt(x, z);
       const r = rng();
+      if (sandAt(x, z) > 0.4 && r > 0.03) continue; // the odd boulder on the beach, no logs or stumps (driftwood instead)
       if (r < 0.12 + slope * 0.5) {
         const name = BOULDERS[Math.floor(rng() * BOULDERS.length)];
         const rotY = rng() * 6.28;
@@ -638,7 +682,7 @@ async function scatter(trail) {
       if (rng() > f * clump * 1.45) continue;
       const h = heightAt(x, z);
       if (h < waterLevelAt(x, z) + 1 || h > SNOWLINE - 25) continue;
-      if (slopeAt(x, z) > 0.35) continue;
+      if (slopeAt(x, z) > 0.35 || sandAt(x, z) > 0.3) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.4) continue;
       if (offStream(x, z) < 0.6) continue;
       add(rng() < 0.5 ? 'fern_a' : 'fern_b', {
@@ -659,7 +703,7 @@ async function scatter(trail) {
       if (rng() > f * patch * 1.1) continue;
       const h = heightAt(x, z);
       if (h < waterLevelAt(x, z) + 1.5 || h > SNOWLINE - 40) continue;
-      if (slopeAt(x, z) > 0.4) continue;
+      if (slopeAt(x, z) > 0.4 || sandAt(x, z) > 0.3) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.6) continue;
       if (offStream(x, z) < 1) continue;
       add('salal', { x, y: groundAt(x, z) - 0.05, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.7, tint: rng() });
@@ -680,7 +724,7 @@ async function scatter(trail) {
       if (rng() > edge * grove * 0.8) continue;
       const h = heightAt(x, z);
       if (h < waterLevelAt(x, z) + 2 || h > 85) continue;
-      if (slopeAt(x, z) > 0.4) continue;
+      if (slopeAt(x, z) > 0.4 || sandAt(x, z) > 0.3) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 1.5) continue;
       if (offStream(x, z) < 2) continue;
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 6) continue;
@@ -703,7 +747,7 @@ async function scatter(trail) {
       const jitter = (rng() - 0.5) * 0.4;
       const scale = 0.85 + rng() * 0.3;
       if (rng() > oldGrowth * 0.6) continue;
-      if (h < waterLevelAt(x, z) + 2 || slopeAt(x, z) > 0.22) continue;
+      if (h < waterLevelAt(x, z) + 2 || slopeAt(x, z) > 0.22 || sandAt(x, z) > 0.3) continue;
       // along the contour (logs settle across the slope)
       const gxH = heightAt(x + 2, z) - heightAt(x - 2, z);
       const gzH = heightAt(x, z + 2) - heightAt(x, z - 2);
@@ -771,7 +815,7 @@ async function scatter(trail) {
       const pick = rng();
       const r = rng();
       const h = heightAt(x, z);
-      if (h < waterLevelAt(x, z) + 0.3) continue;
+      if (h < waterLevelAt(x, z) + 0.3 || sandAt(x, z) > 0.3) continue;
       const slope = slopeAt(x, z);
       const d = trail.distanceTo(x, z);
       if (d < TRAIL_WIDTH * 0.5 + 0.2) continue; // off the tread itself
@@ -832,6 +876,7 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
   addStreamRocks(placements, protos, trail);
   addMarshSnags(placements, trail);
   addLeaners(placements, trail);
+  addDriftwood(placements, trail);
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
   for (const name of Object.keys(placements)) {
     if (!name.startsWith('pebbles')) continue;

@@ -144,7 +144,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (foothills ~50 m → lower snow bench ~150 m, z −420…−680 → upper basin ~225 m, z −820…−1000, walled like a cirque → the pass
   ~280 m) up a corridor around x ≈ 60 that wanders ±120 m; ridged peaks flank it (`flank`) and close in around the basin;
   hills fade to 40% under the benches; the rim starts at 0.39 × WORLD_SIZE. Sun breaks thin the high fog more (density
-  × 0.62 − 0.22·snowT) so the peaks show. Trail stops: trailhead → lake → snowfield (110, −540) → high basin (70, −920);
+  × 0.62 − 0.22·snowT) so the peaks show. The south edge is now the coast (see The coast). Trail stops (before the beach): trailhead → lake → snowfield (110, −540) → high basin (70, −920);
   2.5 km, 1.2 km in snow, grade p50 10% / p95 24%, cross-slope p95 7%. Load (container): vegetation 4.3 → ~9.9 s (twice the
   area). Changing `heightAt`/scatter moved every tree. Views: snowfield `x=90&z=-500&yaw=0.2`, basin `x=70&z=-900&yaw=0.1`,
   looking back down `x=110&z=-640&yaw=3.0` (bench `views=snow` is now the snowfield). Old coordinates north of z ≈ 0 are stale.
@@ -227,6 +227,46 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   rings: density in the marsh down to WATER_LEVEL − 0.35 (out of the water) in noise clumps, ×3.2 tall (`gMarsh` ellipse in
   the vertex shader), olive `SEDGE` going to straw. ~10 dead **snags** on hummocks (`addMarshSnags`, hash on a 9 m grid).
   Views (from the boardwalk): `x=187&z=465`. Gotcha for scripted renders: call `grass.update(camera)` after moving the camera.
+- **The coast** (the user: "add a beach ... opposite the mountains", with Oregon dune photos): `coastZ(x)` (terrain.js,
+  ~1000 ± 60 m, gentle bays) is the shoreline across the whole south; `SEA_LEVEL` 0 (the lake stays at WATER_LEVEL 4).
+  `coastProfile` by s = coastZ − z (inland): sea floor (2.6% for 60 m, then steeper, to −28 m), foreshore 4.2%, a flatter
+  berm to ~2 m (the beach widens/narrows ±22% along x), a foredune face rising ~12 m over ~60 m, hummocky back dunes,
+  blended into the inland hills over s 170–340. The rim is now only east/west/north (`edge = max(|x|, −z)`); at the coast it
+  runs out into the sea as headlands (rimH × smoothstep(−260, 60, s)). `sandAt` (open sand to ~150 m inland, ragged) drives
+  the ground colour (pale `sand`, `sandDamp` below ~1.3 m), the detail layer (slot 2, see Ground detail), no
+  trees/ferns/salal/maples/logs/pebbles on sand (a rare boulder), the trail tread (churned sand, no grit), dune grass and
+  `shared.uSandMap` (R8 on the terrain grid; `unpackAlignment` 1 for its 561-byte rows): `addGroundCover` swaps moss and
+  duff for sand there, and `bleach` (wood materials) greys driftwood silver. `waterLevelAt` is SEA_LEVEL within 220 m of
+  the shore; `openWaterLevel` is the water you'd stand in where water is drawn (lake ellipse, ponds, the sea to the dune
+  toe). **Deep water stops you** (player.js): you can't move to where it's > 1.1 m deep (slides along the edge; the camera
+  stays above the surf). **Dune grass**: the grass map's density on sand (dunes above 3–7 m, patches, not steep faces),
+  `MARRAM` grey-green to straw, ×2.5 tall (`uGrassSand` in the vertex shader). **Driftwood** (`addDriftwood`, hash, no rng):
+  `log_leaning` lying along the drift line (s 40–76), mostly along the shore, some piles, scale 0.3–0.75, a third sunk,
+  skipped where the sand rises into it or falls away, on rock or near the trail (~130). Trail stops now trailhead → **Ocean
+  beach** (−60, 942) → along the berm → **Dune trail** (300, 948) → marsh → lake → snowfield → basin (3.95 km); on sand the
+  A* grade cost is 60% lower so the path goes up the dunes like the photo, not in switchbacks; trail grid MAX_Z 1000. Signs
+  list the 5 nearest stops (`MAX_ROWS`). The HUD says "Ocean beach"/"Dunes". Views (`weather=sun`): berm
+  `x=50&z=962&yaw=3.14&pitch=-0.08`, in the swash `x=50&z=985&yaw=2.9&pitch=-0.12`, dunes `x=80&z=880&yaw=3.0&pitch=-0.15`.
+- **Ocean** (`src/ocean.js`, `?off=water`, bench row `ocean` + opt-in view `beach`): one swell train (10 s, from 0.22 rad
+  west of shore-normal). `bakeCoast` (load, ~0.1 s) marches each 4 m column in from the south edge in 2 m steps
+  accumulating travel time with linear dispersion (Eckart), k_z = √(k² − k_x²) (Snell), into an RGBA32F texture: R travel
+  time, G its value at the column's shoreline (swash timing), B may-draw mask (to 75 m inland); beyond the south edge the
+  time continues analytically (`uODeep`). Per crest n a height `oWaveM(n)` (hash + slow sets). `oSea(d, cycle)`: Green's-law
+  shoaling, a peaked crest leaning forward, breaking where H > 0.78 d (`db`), then a sawtooth bore held to 0.78·0.85 d with
+  foam on its face, the roller and lace behind; whitening crest at the break. `oSwash`: each bore runs up the beach as a
+  parabola in time (quick uprush, slower backwash) to 0.2–0.95 × swell/0.55 m; the sheet is 0.3 × the depth under the
+  run-up edge; after it drains the sand stays glossy (a dark, reflective film, alpha 0.22) for ~3 s. Mesh: a polar grid around
+  the camera (0.35 m rings near, 4% of r beyond, to the far plane; 160/128 segments), centred in `onBeforeRender` (so the
+  bench's camera works), vertices at the surface or under the ground; frustumCulled off, hidden when the camera is > far
+  from the coast. Per pixel: the ground (texelFetch, groundAt's triangulation), the surface height again (so edges and foam
+  are sharp), the normal from dFdx/dFdy of that point (flattened far off) + the streams' `waveNormals` chop; foam = the
+  streams' `foamTexture` thresholded by amount (soft white far off). Water: turbid green-grey in the surf, darker offshore,
+  light through a steepening face; alpha 1 − exp(−depth·k). Reflection: the sky dome's colours (`oSky`: overcast/sunny
+  gradient from the sky's own uniforms, passed in from weather.js) + glitter; composed as R·F + (1−F)(W·a + dst(1−a)) by
+  replacing `opaque_fragment`. Swell amplitude `uOSwell` 0.7 m. Debug trick: output (oFoam, cycle, oFilm) as the colour.
+  Budget (container, `still`): beach view phone 22 draws / 0.13M tris (0.10M with `off=water`), desktop 41 / 0.40M;
+  phone spawn 186 / 1.19M (the grid is drawn whenever the coast is within the far plane; out of sight it's depth-rejected).
+  No phone bench yet: `?bench=ocean&views=beach`.
 - **Lake shore** (lake/pond shader in terrain.js `buildWater`; the user: edges "too straight and geometric"): the flat water
   cut the 5 m terrain triangles along straight lines. Now each water pixel reads the rendered ground under it
   (`shoreGround`, `uGroundH` with groundAt's triangulation) and the water ends where it is 3–30 cm deep by 3-octave value
@@ -482,7 +522,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   api.polyhaven.com + dl.polyhaven.org allowed in the environment's network settings). Without a manifest the
   feature stays off. It compiles in via `patchGroundDetail` + `customProgramCacheKey = groundDetailCacheKey`,
   and textures must load before `warmUp()`. `?off=detail` disables it.
-  Assets: forest_leaves_04 (2.2 m tile), aerial_rocks_02 (6 m), snow_02 (3 m), brown_mud_02 (2 m). The per-layer
+  Assets: forest_leaves_04 (2.2 m tile), aerial_rocks_02 (6 m), snow_02 (3 m), brown_mud_02 (2 m), and **aerial_sand** (5 m:
+  trampled, footprint-pocked sand). Sand shares snow's slot 2 (no extra samplers: the terrain shader is near iOS's 16):
+  `updateGroundDetail(camera, z > 650)` swaps the slot's textures/avg/tile/strength, since snow and sand are never within
+  the 45 m detail range of each other; `groundLayers` puts sand weight in slot 2. The per-layer
   `strength` in the manifest scales the photo's contrast (snow 0.45, or its specks read as dirt). `snowCover()` in
   terrain.js is the single sharpened, patchy snow edge used by both `groundColor` and `groundLayers`. If they
   disagree, needle texture shows up on white snow.

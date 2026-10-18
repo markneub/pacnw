@@ -29,11 +29,12 @@ function along(points, i0, i1) {
   return m;
 }
 
+const MAX_ROWS = 5;
 const miles = (m) => `${Math.max(0.1, m / 1609.34).toFixed(1)} MI.`;
 const label = (s) => TRAIL_STOPS.find((t) => t.name === s.name)?.label ?? s.name;
 
 /**
- * Each stop's sign: a title and [name, distance, dir] rows for every other stop, in trail order.
+ * Each stop's sign: a title and [name, distance, dir] rows for the other stops, in trail order.
  * The board's local +X runs along the trail (vegetation.js placeTrailFurniture), which is the
  * reader's left: dir -1 (left) for stops further along, +1 (right) for those behind.
  */
@@ -41,7 +42,12 @@ export function signTexts(trail) {
   const { points, stops } = trail;
   return stops.map((stop, k) => ({
     title: k === 0 ? 'Cascadia Woods Trail' : label(stop),
-    rows: stops.filter((_, j) => j !== k).map((s) => [label(s), miles(along(points, stop.index, s.index)), s.index > stop.index ? -1 : 1]),
+    // the nearest MAX_ROWS stops by trail distance, listed in trail order (a real junction sign
+    // names what's near, and the board only fits so many lines)
+    rows: stops.filter((_, j) => j !== k)
+      .map((s) => ({ s, m: along(points, stop.index, s.index) }))
+      .sort((p, q) => p.m - q.m).slice(0, MAX_ROWS).sort((p, q) => p.s.index - q.s.index)
+      .map(({ s, m }) => [label(s), miles(m), s.index > stop.index ? -1 : 1]),
   }));
 }
 

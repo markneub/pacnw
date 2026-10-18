@@ -7,7 +7,7 @@ import { loadTextureSet } from './textures.js';
  * ground (and its cost) is unchanged.
  *
  * Four layers, matching the per-vertex `aLayers` weights built in terrain.js /
- * trail.js: [0] forest floor, [1] rock, [2] snow, [3] mud/dirt.
+ * trail.js: [0] forest floor, [1] rock, [2] snow (sand at the coast), [3] mud/dirt.
  *
  * The photo modulates the existing ground colour (albedo / its average), so the
  * painted palette and all baked shading (AO, canopy) keep working and there's
@@ -40,7 +40,10 @@ export async function loadGroundDetail(renderer, { lowPower }) {
   const layers = await loadTextureSet(renderer, 'ground', { lowPower });
   if (!layers) return false;
   const u = groundDetail.uniforms;
-  layers.forEach((layer, i) => {
+  // snow and sand share slot 2 (they're never within the detail range of each other): the
+  // camera's position picks which photo it shows (updateGroundDetail)
+  groundDetail.slot2 = layers.slice(2, 3).concat(layers.filter((l) => l.name === 'sand'));
+  layers.slice(0, 4).forEach((layer, i) => {
     u.uGDAlb.value[i] = layer.alb;
     u.uGDNrm.value[i] = layer.nrm;
     u.uGDAvg.value[i].setRGB(...layer.avg); // linear
@@ -49,8 +52,30 @@ export async function loadGroundDetail(renderer, { lowPower }) {
   });
   if (lowPower) u.uGDRange.value.set(15, 32);
 
+  // upload the sand now too, so swapping it in never stalls a frame
+  for (const l of groundDetail.slot2) {
+    renderer.initTexture(l.alb);
+    renderer.initTexture(l.nrm);
+  }
   groundDetail.enabled = true; // ground materials compile after this (warm-up)
   return true;
+}
+
+/**
+ * Snow's detail slot shows sand near the coast. Snow never lies within the detail range
+ * (≤ 45 m) of the beach or the dunes, so the swap is never seen.
+ */
+export function updateGroundDetail(camera, coastal) {
+  const slot = groundDetail.slot2;
+  if (!slot || slot.length < 2) return;
+  const layer = slot[coastal ? 1 : 0];
+  const u = groundDetail.uniforms;
+  if (u.uGDAlb.value[2] === layer.alb) return;
+  u.uGDAlb.value[2] = layer.alb;
+  u.uGDNrm.value[2] = layer.nrm;
+  u.uGDAvg.value[2].setRGB(...layer.avg);
+  u.uGDTile.value.z = 1 / layer.tile;
+  u.uGDStrength.value.z = layer.strength ?? 1;
 }
 
 /**

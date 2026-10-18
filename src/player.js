@@ -1,6 +1,11 @@
 import * as THREE from 'three';
-import { PLAYER, WORLD_SIZE, WATER_LEVEL } from './config.js';
-import { walkAt as groundAt } from './terrain.js'; // (footbridges included)
+import { PLAYER, WORLD_SIZE } from './config.js';
+import { walkAt as groundAt, openWaterLevel } from './terrain.js'; // (footbridges included)
+
+// Water deeper than this stops you (the lake, ponds and the sea): you can wade out until it's
+// about chest deep, so the eyes (and the camera) always stay above the surf.
+const MAX_WADE = 1.1;
+const waterDepth = (x, z) => openWaterLevel(x, z) - groundAt(x, z);
 
 /**
  * First-person walker: mouse look via pointer lock, WASD/arrows to move,
@@ -97,8 +102,7 @@ export class Player {
       throttle = running ? 1 : Math.min(1, stickLen / 0.8);
     }
 
-    const ground = groundAt(this.pos.x, this.pos.z);
-    const wading = ground < WATER_LEVEL - 0.4;
+    const wading = waterDepth(this.pos.x, this.pos.z) > 0.4;
     let speed = running ? PLAYER.runSpeed : PLAYER.walkSpeed;
     if (wading) speed *= 0.45;
     speed *= throttle;
@@ -111,11 +115,22 @@ export class Player {
     this.vel.z += (dir.z * speed - this.vel.z) * blend;
     this.vel.y -= PLAYER.gravity * dt;
 
+    const px = this.pos.x;
+    const pz = this.pos.z;
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     this.pos.y += this.vel.y * dt;
 
     this.collide(this.pos, PLAYER.radius);
+    // too deep to wade: slide along the edge (keep whichever axis stays in shallow enough water)
+    if (waterDepth(this.pos.x, this.pos.z) > MAX_WADE && waterDepth(this.pos.x, this.pos.z) > waterDepth(px, pz)) {
+      if (waterDepth(this.pos.x, pz) <= MAX_WADE) this.pos.z = pz;
+      else if (waterDepth(px, this.pos.z) <= MAX_WADE) this.pos.x = px;
+      else {
+        this.pos.x = px;
+        this.pos.z = pz;
+      }
+    }
     const lim = WORLD_SIZE / 2 - 5;
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, -lim, lim);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, -lim, lim);

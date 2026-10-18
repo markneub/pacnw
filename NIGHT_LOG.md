@@ -342,3 +342,12 @@ Ferns and salal now have billboard stand-ins, like the far trees: past where the
 in (60 m on a phone) the billboards take over pixel by pixel, and they themselves fade out much further away (about
 140 m on a phone, 240 m on desktop) where a fern is only a few pixels. And grassy ground now takes on the grass's
 colour in the distance, so the 3D tufts fade into green ground instead of bare earth.
+
+### 46. A beach and the ocean (the user's idea, with dune photos)
+The south of the map is now the Pacific coast: the valley runs down through big pale sand dunes covered in beach grass
+to a wide beach, with the rim mountains running out into the sea as headlands at either end. The sea is a new water
+system of its own: the swell bends round to meet the shore, the waves steepen, lean forward and break about 60-100 m
+out, and roll in as lines of whitewater; each one runs up the sand as a thin sheet of swash and drains back, leaving
+the sand glossy for a few seconds. Bigger waves come in sets. Driftwood lies along the top of the beach. The trail now
+goes from the trailhead down through the dunes to the beach, along the sand and back up a dune, then on to the marsh.
+You can wade into any water until it's about chest deep, but no further, so the sea is the natural edge of the map.

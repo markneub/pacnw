@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, WATER_LEVEL } from './config.js';
 import {
-  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt, waterLevelAt, marshAt, MARSH,
+  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt, waterLevelAt, marshAt, MARSH, sandAt, SEA_LEVEL,
 } from './terrain.js';
 import { shared, patchSunlight, sunKey } from './materials.js';
 
@@ -95,6 +95,7 @@ const CELL = 16; // m, for skipping rings with no grass in reach
 const LUSH = new THREE.Color('#566f2e');
 const SEDGE = new THREE.Color(0x6f7a34); // marsh sedge, olive
 const DRY = new THREE.Color('#857f4c');
+const MARRAM = new THREE.Color(0x9a9a62); // dune grass: pale grey-green going to straw
 
 /**
  * Density (alpha) and colour (rgb) per terrain vertex, from the same data as
@@ -144,6 +145,10 @@ function bakeGrassMap(terrain, canopyAt) {
       const m = marshAt(x, z);
       if (m > 0.05) density = Math.max(density, m * smooth(nForest(x * 0.08 + 5, z * 0.08) * 0.5 + 0.5, 0.25, 0.6) * (y > wl - 0.35 ? 1 : 0));
       else if (y < wl + 0.2) density = 0;
+      // the dunes: tussocks of beach grass, thick on the crests and back dunes, none on the beach
+      const sand = sandAt(x, z);
+      const dune = sand * smooth(y, SEA_LEVEL + 3, SEA_LEVEL + 7) * (1 - smooth(slope, 0.15, 0.4));
+      if (sand > 0.02) density = density * (1 - sand) + dune * smooth(nForest(x * 0.06 + 13, z * 0.06 - 4) * 0.5 + 0.5, 0.3, 0.62);
 
       groundColor(x, y, z, slope, col);
       const shade = Math.min(1.2, lum(shaded[k * 3], shaded[k * 3 + 1], shaded[k * 3 + 2]) / Math.max(1e-4, lum(col.r, col.g, col.b)));
@@ -152,6 +157,7 @@ function bakeGrassMap(terrain, canopyAt) {
       grass.copy(LUSH).lerp(DRY, smooth(y, 60, 150) * 0.7 + (1 - meadow) * 0.15).lerp(col, 0.25);
       // marsh sedge: olive, going to straw in patches
       if (m > 0.05) grass.lerp(SEDGE, m * 0.8).lerp(DRY, m * 0.35 * smooth(nForest(x * 0.05 - 9, z * 0.05) * 0.5 + 0.5, 0.45, 0.8));
+      if (sand > 0.02) grass.lerp(MARRAM, sand * 0.85).lerp(DRY, sand * 0.4 * smooth(nForest(x * 0.04, z * 0.04 + 7) * 0.5 + 0.5, 0.4, 0.8));
       grass.multiplyScalar(shade);
       const srgb = grass.convertLinearToSRGB();
       data[k * 4] = Math.min(255, srgb.r * 255);
@@ -334,6 +340,7 @@ function grassMaterial(baked, ring) {
     uGrassMap: { value: baked.map },
     uGrassHeight: { value: baked.height },
     uGrassGrid: { value: new THREE.Vector4(-WORLD_SIZE / 2, -WORLD_SIZE / 2, baked.step, baked.n) },
+    uGrassSand: shared.uSandMap,
   };
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
   mat.envMapIntensity = 0.35; // like the needles: no sky sheen on foliage
@@ -349,6 +356,7 @@ function grassMaterial(baked, ring) {
         uniform vec4 uGrassFade;
         uniform sampler2D uGrassMap;
         uniform sampler2D uGrassHeight;
+        uniform sampler2D uGrassSand;
         uniform vec4 uGrassGrid; // min x, min z, step, n
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
@@ -399,6 +407,7 @@ function grassMaterial(baked, ring) {
         }
         float gHeight = mix(0.7, 1.35, gR3) * mix(0.55, 1.0, gMap.a); // sparse grass is shorter
         gHeight *= 1.0 + 2.2 * gMarsh; // marsh sedge: knee high
+        gHeight *= 1.0 + 1.5 * texture2D(uGrassSand, ((gXZ - uGrassGrid.xy) / uGrassGrid.z + 0.5) / uGrassGrid.w).r; // beach grass on the dunes
         float gA = gR2 * 6.2831853;
         mat2 gRot = mat2(cos(gA), -sin(gA), sin(gA), cos(gA));
         objectNormal.xz = gRot * objectNormal.xz;

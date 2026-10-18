@@ -128,12 +128,21 @@ export function baseHeight(x, z) {
   const north = smoothstep(250, -450, z);
   const range = highCountry(x, z);
 
-  // rim
-  const edge = Math.max(Math.abs(x), Math.abs(z));
+  // rim: mountains on the east, west and north edges (the south is the sea)
+  const edge = Math.max(Math.abs(x), -z);
   const rim = smoothstep(WORLD_SIZE * 0.39, WORLD_SIZE * 0.5, edge);
   const rimH = rim * (140 + ridged(x * 0.003 + 7, z * 0.003 - 3, 4) * 120);
 
-  let h = hills * (1 - 0.6 * north) + range + rimH + detail;
+  let h = hills * (1 - 0.6 * north) + range + detail;
+
+  // the coast: the valley runs down through dunes to a beach and the sea; the rim mountains run
+  // out into the water as headlands at either end of the beach
+  const s = coastZ(x) - z;
+  if (s < 360) {
+    const w = smoothstep(170, 340, s);
+    h = coastProfile(x, z, s) * (1 - w) + h * w;
+    h += rimH * smoothstep(-260, 60, s);
+  } else h += rimH;
 
   // lake basin
   const dl = Math.hypot((x - LAKE.x) * 1.0, (z - LAKE.z) * 1.4);
@@ -149,6 +158,40 @@ export function baseHeight(x, z) {
     h = h * (1 - m) + (WATER_LEVEL - 0.08 + hummock) * m;
   }
   return h;
+}
+
+/** Sea level: the ocean along the south edge (the lake sits higher, at WATER_LEVEL). */
+export const SEA_LEVEL = 0;
+/** z of the shoreline at x: the beach runs east–west across the south of the map, in gentle bays. */
+export function coastZ(x) {
+  return 1000 + nBase(x * 0.0011, 8.1) * 45 + nDetail(x * 0.0042, 2.2) * 14;
+}
+
+/**
+ * Height across the coast at distance s inland of the shoreline (negative out to sea): a sandy
+ * shelf shoaling gently to the beach, the foreshore (~4%), a flatter dry berm, then a foredune
+ * face climbing ~12 m into hummocky back dunes (the inland terrain takes over beyond ~170 m).
+ */
+function coastProfile(x, z, s) {
+  if (s < 0) {
+    const o = -s;
+    const deep = o * 0.026 + Math.max(0, o - 60) * 0.025 + Math.max(0, o - 250) * 0.03;
+    return SEA_LEVEL - Math.min(28, deep) + nDetail(x * 0.02, z * 0.02) * 0.15 * smoothstep(0, 40, o);
+  }
+  s *= 1 + 0.22 * nBase(x * 0.004 - 3, 17.5); // the beach narrows and widens along the coast
+  let h = Math.min(s, 32) * 0.042 + Math.max(0, Math.min(s, 62) - 32) * 0.02;
+  const dn = nDetail(x * 0.012 + 31, z * 0.012 - 9);
+  h += smoothstep(60 + dn * 12, 125 + dn * 15, s) * (11 + dn * 3);
+  h += smoothstep(70, 140, s) * (nDetail(x * 0.035, z * 0.035) * 1.8 + nDetail(x * 0.09 + 5, z * 0.09) * 0.5);
+  return h;
+}
+
+/** 0..1 open sand: the beach and the dunes, giving way to the forest ~150 m inland (ragged). */
+export function sandAt(x, z) {
+  const s = coastZ(x) - z;
+  if (s > 240) return 0;
+  const edge = 150 + nDetail(x * 0.02 + 3, z * 0.02) * 25 + nDetail(x * 0.07, z * 0.07) * 8;
+  return 1 - smoothstep(edge - 15, edge + 15, s);
 }
 
 /** The marsh: 1 in its flat middle, easing to 0 at its edge (an irregular oval by the lake). */
@@ -210,6 +253,21 @@ export function rawGroundAt(x, z) {
   const hd = g[iz * GRID_N + ix + 1];
   if (fx + fz <= 1) return ha + (hd - ha) * fx + (hb - ha) * fz;
   return hc + (hb - hc) * (1 - fx) + (hd - hc) * (1 - fz);
+}
+
+/** Open sand (sandAt) on the terrain grid, as an R8 texture laid out like the height grid (materials.js uSandMap). */
+export function sandMap() {
+  const data = new Uint8Array(GRID_N * GRID_N);
+  for (let iz = 0; iz < GRID_N; iz++) {
+    const z = iz * GRID_STEP - WORLD_SIZE / 2;
+    for (let ix = 0; ix < GRID_N; ix++) data[iz * GRID_N + ix] = Math.round(255 * sandAt(ix * GRID_STEP - WORLD_SIZE / 2, z));
+  }
+  const tex = new THREE.DataTexture(data, GRID_N, GRID_N, THREE.RedFormat);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.unpackAlignment = 1; // (rows of 561 bytes)
+  tex.needsUpdate = true;
+  return tex;
 }
 
 /** The raw height grid behind the terrain mesh: heights[iz * n + ix] at (ix * step - WORLD_SIZE / 2, iz * step - WORLD_SIZE / 2). */
@@ -274,6 +332,9 @@ const COL = {
   snow: C(0xeef2f6),
   snowShade: C(0xc9d4e0),
   alpine: C(0x6d7055),
+  sand: C(0xd6cbb2), // pale dune sand, like the Oregon coast
+  sandDamp: C(0x9b8f78), // below the reach of the waves
+  sandShade: C(0xc2b596),
 };
 
 const tmpColor = new THREE.Color();
@@ -294,7 +355,18 @@ function snowCover(x, z, y, slope) {
 
 /** The open water's level at (x, z): the lake's, or a pond's where one lies (compare with the ground). */
 export function waterLevelAt(x, z) {
+  if (coastZ(x) - z < 220) return SEA_LEVEL; // the coast: the sea (the lake is far inland)
   return Math.max(WATER_LEVEL, streams().pondLevel(x, z));
+}
+
+/**
+ * The level of open water you'd be standing in at (x, z) (the lake, a pond or the sea), or
+ * -Infinity where there's none. Unlike waterLevelAt, only where water is actually drawn.
+ */
+export function openWaterLevel(x, z) {
+  if (coastZ(x) - z < 75) return SEA_LEVEL;
+  if (Math.hypot(x - LAKE.x, (z - LAKE.z) * 1.4) < LAKE.r * 1.6) return WATER_LEVEL;
+  return streams().pondLevel(x, z);
 }
 
 /** 0..1: the stream bed and its wet, stony margin (1 in the channel, fading over the lower bank). */
@@ -311,11 +383,12 @@ export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
   const bed = streamBed(x, z);
   const snow = snowCover(x, z, y, slope) * (1 - bed); // running water keeps its bed clear of snow
   const rock = Math.max(smoothstep(0.22, 0.42, slope), bed) * (1 - snow);
+  const sand = sandAt(x, z) * (1 - rock) * (1 - snow);
   const wl = waterLevelAt(x, z);
-  const mud = (1 - smoothstep(wl - 1, wl + 2.5, y)) * (1 - rock) * (1 - snow);
-  out[0] = Math.max(0, 1 - snow - rock - mud);
+  const mud = (1 - smoothstep(wl - 1, wl + 2.5, y)) * (1 - rock) * (1 - snow) * (1 - sand);
+  out[0] = Math.max(0, 1 - snow - rock - mud - sand);
   out[1] = rock;
-  out[2] = snow;
+  out[2] = snow + sand; // (one slot: grounddetail.js shows snow up high and sand at the coast)
   out[3] = mud;
   return out;
 }
@@ -339,7 +412,15 @@ export function groundColor(x, y, z, slope, target = new THREE.Color()) {
 
   // muddy lake shore
   const wl = waterLevelAt(x, z);
-  c.lerp(COL.mud, 1 - smoothstep(wl - 1, wl + 2.5, y));
+  const sand = sandAt(x, z);
+  c.lerp(COL.mud, (1 - smoothstep(wl - 1, wl + 2.5, y)) * (1 - sand));
+
+  // the beach and dunes: pale sand, damp and darker where the waves reach (and under the sea)
+  if (sand > 0) {
+    tmp.copy(COL.sand).lerp(COL.sandShade, n1 * 0.6);
+    tmp.lerp(COL.sandDamp, 1 - smoothstep(SEA_LEVEL + 0.4, SEA_LEVEL + 1.3, y));
+    c.lerp(tmp, sand);
+  }
 
   // rock on steep faces
   tmp.copy(COL.rock).lerp(COL.rockDark, n1);

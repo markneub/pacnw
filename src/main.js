@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain } from './terrain.js';
+import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain, sandMap, sandAt } from './terrain.js';
 import { onLoadProgress, loadTick, loadTickNow, loadYielded, longestStall } from './loadprogress.js';
 import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors, bakeShrubImpostors } from './vegetation.js';
 import { buildTrail } from './trail.js';
@@ -14,7 +14,7 @@ import { NearPool } from './detail.js';
 import { buildSigns } from './signs.js';
 import { PerfOverlay } from './perf.js';
 import { FramePacer } from './framepacer.js';
-import { loadGroundDetail } from './grounddetail.js';
+import { loadGroundDetail, updateGroundDetail } from './grounddetail.js';
 import { patchSunlight, addTrunkMoss } from './materials.js';
 import { loadSurfaceDetail } from './surfacedetail.js';
 import { loadTextureSet } from './textures.js';
@@ -22,6 +22,7 @@ import { runBench } from './bench.js';
 import { AutoResolution } from './autores.js';
 import { buildGrass } from './grass.js';
 import { buildStreamWater } from './streamwater.js';
+import { buildOcean } from './ocean.js';
 import { Post } from './post.js';
 
 installHeightFog(); // must run before any material compiles
@@ -160,6 +161,7 @@ async function init() {
     ht.needsUpdate = true;
     shared.uGroundH.value = ht;
     shared.uGroundGrid.value.set(-WORLD_SIZE / 2, -WORLD_SIZE / 2, step, n);
+    shared.uSandMap.value = sandMap();
   }
   scene.add(terrain);
   scene.add(buildWater());
@@ -205,6 +207,9 @@ async function init() {
   await loadTickNow(0.85);
 
   const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1 });
+  // the sea and its surf (reflecting the weather's sky)
+  const ocean = off.has('water') ? null : await buildOcean(weather.sky.uniforms, { lowPower, progress: [0.86, 0.98] });
+  if (ocean) scene.add(ocean.mesh);
   const player = new Player(camera, renderer.domElement, veg.collide);
 
   // Spawn in the southern valley looking north toward the mountains.
@@ -216,6 +221,8 @@ async function init() {
   // no sun breaks (always overcast) for ?off=sun and for screenshots, so views stay comparable
   if (off.has('sun') || params.has('still')) weather.sunCycle = false;
   veg.updateNear(camera, true); // fill the near ring before warm-up uploads it
+  ocean?.update(camera);
+  updateGroundDetail(camera, camera.position.z > 650);
 
   for (const kind of ['trees', 'ferns', 'rocks']) if (off.has(kind)) veg.disable(kind);
   for (const name of ['terrain', 'trail', 'lake', 'sky']) {
@@ -320,9 +327,11 @@ async function init() {
 
     player.update(dt);
     weather.update(dt, t, camera);
+    updateGroundDetail(camera, camera.position.z > 650); // (snow's detail slot shows sand at the coast)
 
     veg.updateNear(camera);
     grass?.update(camera);
+    ocean?.update(camera);
     visTimer -= dt;
     if (visTimer <= 0) {
       veg.updateVisibility(camera.position);
@@ -333,7 +342,8 @@ async function init() {
     if (showHud && hudTimer <= 0) {
       hudTimer = 0.25; // DOM text updates are cheap at 4 Hz, wasteful at 60
       const alt = Math.round(player.pos.y);
-      const zone = alt > SNOWLINE + 10 ? 'Subalpine snowfield'
+      const sand = sandAt(player.pos.x, player.pos.z) > 0.5;
+      const zone = sand ? (alt < 4 ? 'Ocean beach' : 'Dunes') : alt > SNOWLINE + 10 ? 'Subalpine snowfield'
         : alt > SNOWLINE - 30 ? 'Upper slopes'
           : alt < 8 ? 'Lakeshore' : 'Temperate rainforest';
       let text = `${zone} · ${alt} m`;

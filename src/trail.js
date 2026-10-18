@@ -3,16 +3,20 @@ import { WATER_LEVEL } from './config.js';
 import { loadTick } from './loadprogress.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
-  streams, setWalkModifier, streamBed, marshAt,
+  streams, setWalkModifier, streamBed, marshAt, waterLevelAt, sandAt,
 } from './terrain.js';
 import { shared, wetChunks, patchSunlight, sunKey, patchPuddles } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 
-// The trail runs from the trailhead at the spawn point, down to a viewpoint on
-// the lake's west shore, then climbs north through the forest onto the lower
-// snow bench and up again into the high basin below the pass.
+// The trail runs from the trailhead at the spawn point south through the dunes to
+// the ocean beach, along the sand and back up through the dunes, north to the
+// marsh boardwalk and a viewpoint on the lake's west shore, then climbs north
+// through the forest onto the lower snow bench and up again into the high basin
+// below the pass.
 export const TRAIL_STOPS = [
   { name: 'trailhead', label: 'Trailhead', x: 22, z: 652 },
+  { name: 'beach', label: 'Ocean beach', x: -60, z: 942 },
+  { name: 'dunes', label: 'Dune trail', x: 300, z: 948 },
   { name: 'marsh', label: 'Marsh boardwalk', x: 160, z: 480 },
   { name: 'lake', label: 'Lake viewpoint', x: 55, z: 385 },
   { name: 'snowfield', label: 'Snowfield', x: 110, z: -540 },
@@ -39,7 +43,7 @@ const CELL = 6;
 const MIN_X = -350;
 const MAX_X = 450;
 const MIN_Z = -1010;
-const MAX_Z = 720;
+const MAX_Z = 1000;
 const NX = Math.floor((MAX_X - MIN_X) / CELL) + 1;
 const NZ = Math.floor((MAX_Z - MIN_Z) / CELL) + 1;
 
@@ -64,7 +68,7 @@ for (let dz = -2; dz <= 2; dz++) {
  */
 const TURN_COST = 40;
 const WET_COST = 60; // m per 6 m cell in or beside a creek
-function route(heights, side, wet, marsh, a, b) {
+function route(heights, side, wet, marsh, level, sand, a, b) {
   const D = MOVES.length;
   const idx = (ix, iz) => iz * NX + ix;
   const toCell = (p) => [Math.round((p.x - MIN_X) / CELL), Math.round((p.z - MIN_Z) / CELL)];
@@ -115,12 +119,13 @@ function route(heights, side, wet, marsh, a, b) {
       const ns = n * D + k;
       if (closed[ns]) continue;
       const h = heights[n];
-      if (h < WATER_LEVEL + 1.2 && !marsh[n]) continue; // (the marsh is crossed on a boardwalk)
+      if (h < level[n] + 1.2 && !marsh[n]) continue; // (the marsh is crossed on a boardwalk)
       const grade = (h - heights[cur]) / dist;
       // steep grades cost a lot more than distance; side-slope makes the
       // tread hard to cut, so avoid traversing cliffs too
-      const steep = Math.max(0, Math.abs(grade) - 0.18);
-      const cost = dist * (1 + 40 * grade * grade + 2500 * steep * steep + 6 * side[n] * side[n]) + (cur === start ? 0 : turn[dir * D + k]) + wet[n] * WET_COST;
+      // (on the dunes a path just goes up the sand, as in the reference photos: grades cost less)
+      const steep = Math.max(0, Math.abs(grade) - 0.18 - 0.1 * sand[n]);
+      const cost = dist * (1 + 40 * (1 - 0.6 * sand[n]) * grade * grade + 2500 * steep * steep + 6 * side[n] * side[n]) + (cur === start ? 0 : turn[dir * D + k]) + wet[n] * WET_COST;
       const ng = g[st] + cost;
       if (ng < g[ns]) {
         g[ns] = ng;
@@ -238,6 +243,8 @@ export async function buildTrail() {
   const side = new Float32Array(NX * NZ);
   const wet = new Float32Array(NX * NZ);
   const marsh = new Uint8Array(NX * NZ);
+  const level = new Float32Array(NX * NZ); // the water level there (the lake's, or the sea's at the coast)
+  const sand = new Float32Array(NX * NZ);
   for (let iz = 0; iz < NZ; iz++) {
     for (let ix = 0; ix < NX; ix++) {
       const x = MIN_X + ix * CELL;
@@ -245,6 +252,8 @@ export async function buildTrail() {
       heights[iz * NX + ix] = heightAt(x, z);
       side[iz * NX + ix] = slopeAt(x, z);
       marsh[iz * NX + ix] = marshAt(x, z) > 0.25 ? 1 : 0;
+      level[iz * NX + ix] = waterLevelAt(x, z);
+      sand[iz * NX + ix] = sandAt(x, z);
       // creeks: stepping into one costs a lot, so the trail crosses once, squarely, rather than
       // following a channel (it once crossed the same creek twice at a hairpin)
       const c = streams().nearest(x, z);
@@ -256,7 +265,7 @@ export async function buildTrail() {
 
   let coarse = [];
   for (let i = 0; i < TRAIL_STOPS.length - 1; i++) {
-    const leg = route(heights, side, wet, marsh, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
+    const leg = route(heights, side, wet, marsh, level, sand, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
     coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
     await loadTick(0.25 + (0.4 * (i + 1)) / (TRAIL_STOPS.length - 1));
   }
@@ -645,6 +654,7 @@ function buildCorridorMesh(points, distanceTo) {
   const dirt = new THREE.Color(0x6b5034);
   const dirtWet = new THREE.Color(0x4a3824);
   const packed = new THREE.Color(0x8d99a8); // trodden, slushy snow reads darker than fresh powder
+  const churned = new THREE.Color(0xb3a58a); // sand scuffed up by boots: a shade darker, no grit
   const soil = new THREE.Color(0x5a4430);
   const col = new THREE.Color();
   const tmp = new THREE.Color();
@@ -676,33 +686,36 @@ function buildCorridorMesh(points, distanceTo) {
       groundColor(x, g, z, naturalSlope, col);
       groundLayers(x, g, z, naturalSlope, lw);
       const snow = snowAmount(x, z, g, 0);
+      const sandy = sandAt(x, z); // (on the beach and dunes: a path of footprints in the sand)
       const d = distanceTo(x, z);
       const cut = Math.abs(y - g);
       tmp.copy(soil).lerp(dirtWet, Math.min(1, cut / 3) * 0.5);
       // (not where a creek runs through the cut: its bed stays wet stone, or the strip's edge showed under the water)
       const bedHere = streamBed(x, z);
-      col.lerp(tmp, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - snow * 0.85) * (1 - bedHere));
+      col.lerp(tmp, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - snow * 0.85) * (1 - bedHere) * (1 - sandy));
 
       const wobble = Math.sin(x * 0.31 + z * 0.17) * 0.18 + Math.sin(x * 0.07 - z * 0.11) * 0.2;
       // (in snow a softer edge and a boot-packed groove down the middle, over the snow's own colour:
       // a flat grey-blue fill read as a painted stripe)
-      const edge = 0.3 + 0.5 * snow;
+      const edge = 0.3 + 0.5 * Math.max(snow, sandy);
       // (no tread under the marsh boardwalk: the marsh runs on beneath it)
       const t = (1 - THREE.MathUtils.smoothstep(d + wobble, TRAIL_WIDTH - edge, TRAIL_WIDTH + edge)) * (1 - THREE.MathUtils.smoothstep(marshAt(x, z), 0.05, 0.2));
       const groove = 1 - Math.min(1, d / TRAIL_WIDTH) ** 2;
       tmp.copy(dirt).lerp(dirtWet, Math.min(1, d / TRAIL_WIDTH) * 0.6);
       tmpSnow.copy(col).lerp(packed, 0.4 + 0.45 * groove);
       tmp.lerp(tmpSnow, snow);
+      tmpSnow.copy(col).lerp(churned, 0.3 + 0.3 * groove);
+      tmp.lerp(tmpSnow, sandy);
       col.lerp(tmp, t);
 
       // detail layers: exposed soil on the banks and the tread itself read as dirt
-      const dirtW = Math.max(t, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - bedHere)) * (1 - snow * 0.85);
+      const dirtW = Math.max(t, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - bedHere)) * (1 - snow * 0.85) * (1 - sandy);
       layers.push(lw[0] * (1 - dirtW), lw[1] * (1 - dirtW), lw[2] * (1 - dirtW), lw[3] * (1 - dirtW) + dirtW);
 
       // fade the strip's outer edge into the terrain beneath
       const alpha = 1 - THREE.MathUtils.smoothstep(Math.abs(u), CUTOUT_HALF + 0.3, CORRIDOR_HALF);
       colors.push(col.r, col.g, col.b, alpha);
-      treadAttr.push(t * (1 - 0.7 * snow)); // (less dark grit on trodden snow)
+      treadAttr.push(t * (1 - 0.7 * snow) * (1 - sandy)); // (less dark grit on trodden snow, none on sand)
     }
     if (i > 0) {
       const r0 = (i - 1) * (across + 1);
