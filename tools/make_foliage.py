@@ -395,11 +395,14 @@ def salal_spray(seed=29):
 def maple_spray(seed=37):
     """
     A vine maple spray seen from above, 1:1 (u along the twig, base at u = 0):
-    opposite pairs of round palmate leaves (7-9 pointed, toothed lobes, pale
-    veins from the leaf base) on short petioles, filling most of the card,
-    fresh bright green with some yellower leaves.
+    opposite pairs of round palmate leaves (7-9 pointed, toothed lobes cut about a
+    third in, pale veins from the leaf base) on short petioles, filling most of
+    the card, fresh bright green with some yellower leaves. Each leaf is shaded
+    (lighter at the centre, darker toward the lobe tips and edges, mottled) and
+    casts a soft shadow on the leaves beneath: flat fills read as cut-out paper.
     """
     rng = random.Random(seed)
+    nrng = np.random.default_rng(seed)
     W = SIZE * SS
     img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -407,23 +410,53 @@ def maple_spray(seed=37):
     twig = [(0.03 * W + 0.8 * W * k / 8, y_mid + math.sin(k * 1.3) * W * 0.015) for k in range(9)]
     for k in range(8):
         d.line([twig[k], twig[k + 1]], fill=(118, 92, 60, 255), width=int((4.0 - 2.0 * k / 8) * SS))
+    # mottling: soft blotches over the whole card, shared by the leaves
+    mottle = box_blur(nrng.random((W, W)).astype(np.float32), 6 * SS)
+    mottle = (mottle - mottle.mean()) / (mottle.std() + 1e-6)
 
     def leaf(cx, cy, R, rot, col):
+        nonlocal img, d
         lobes = rng.choice((7, 9))
         pts = []
         steps = lobes * 8
         for k in range(steps + 1):
             a = rot + TAU * k / steps
             f = (k % 8) / 8.0  # position within a lobe
-            lobe = 0.8 + 0.2 * (1.0 - abs(f - 0.5) * 2.0) ** 2.2  # nearly round: shallow lobes with pointed tips
-            tooth = 0.04 * (1 if k % 2 else -1) * (1.0 - abs(f - 0.5) * 2.0)
+            lobe = 0.66 + 0.34 * (1.0 - abs(f - 0.5) * 2.0) ** 1.5  # lobes cut about a third in, pointed tips
+            tooth = 0.035 * (1 if k % 2 else -1) * (1.0 - abs(f - 0.5) * 2.0)
             r = R * (lobe + tooth)
             pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
-        d.polygon(pts, fill=col + (255,))
-        vein = lerp(col, (200, 215, 140), 0.35)
+        x0, y0 = max(0, int(cx - R * 1.3)), max(0, int(cy - R * 1.3))
+        x1, y1 = min(W, int(cx + R * 1.3) + 1), min(W, int(cy + R * 1.3) + 1)
+        m_img = Image.new("L", (W, W), 0)
+        ImageDraw.Draw(m_img).polygon(pts, fill=255)
+        m = np.asarray(m_img, np.float32)[y0:y1, x0:x1] / 255.0
+        a = np.asarray(img).astype(np.float32)
+        win = a[y0:y1, x0:x1]
+        # the leaf's soft shadow on what's already there (down and to the right of it)
+        off = int(R * 0.12)
+        sh = np.zeros_like(m)
+        sh[off:, off:] = m[:-off or None, :-off or None] if off > 0 else m
+        sh = box_blur(sh, max(1, int(R * 0.06)))
+        win[:, :, :3] *= (1.0 - 0.45 * sh * (win[:, :, 3:4] / 255.0)[:, :, 0])[:, :, None]
+        # the leaf: lighter toward the middle, darker at the rim, mottled
+        yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
+        rr = np.hypot(xx - cx, yy - cy) / R
+        rim = 1.0 - box_blur(m, max(1, int(R * 0.05)))
+        shade = (1.08 - 0.3 * np.clip(rr, 0, 1.2) ** 1.6 - 0.25 * rim) * (1.0 + 0.07 * mottle[y0:y1, x0:x1])
+        leaf_rgb = np.array(col, np.float32)[None, None, :] * shade[:, :, None]
+        win[:, :, :3] = win[:, :, :3] * (1 - m[:, :, None]) + leaf_rgb * m[:, :, None]
+        win[:, :, 3] = np.maximum(win[:, :, 3], m * 255)
+        a[y0:y1, x0:x1] = win
+        img = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGBA")
+        d = ImageDraw.Draw(img)
+        # pale veins from the base to each lobe tip (thin, and fading out toward the tips)
+        vein = lerp(col, (205, 220, 150), 0.3)
         for k in range(lobes):
-            a = rot + TAU * (k + 0.5) / lobes
-            d.line([(cx, cy), (cx + math.cos(a) * R * 0.85, cy + math.sin(a) * R * 0.85)], fill=vein + (255,), width=max(1, SS))
+            va = rot + TAU * (k + 0.5) / lobes
+            for t0, t1, w in ((0.0, 0.45, 2), (0.45, 0.8, 1)):
+                d.line([(cx + math.cos(va) * R * t0, cy + math.sin(va) * R * t0),
+                        (cx + math.cos(va) * R * t1, cy + math.sin(va) * R * t1)], fill=vein + (255,), width=max(1, w * SS // 2))
 
     greens = [(86, 140, 44), (104, 152, 48), (122, 162, 52), (140, 172, 60)]
     for k in range(1, 9):

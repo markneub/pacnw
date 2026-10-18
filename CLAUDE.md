@@ -83,6 +83,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   their random rotation), seated on the mean ground along them minus 0.12 × scale. Random headings poked one end up into
   the air on hillsides (seen by the user). Branch stubs and the nurse logs' torn roots use `_stub` (blunt truncated cones);
   pointed `_stick`s read as thorns. Log ends use `LogEnd` (0.42, 0.37, 0.31): the fresh `Wood` colour read as an orange blob.
+  **Vine maple** leaves: `maple_spray()` shades each leaf (lighter centre, darker rim, mottle) with a soft shadow on the
+  leaves beneath, lobes cut ~1/3 in; the cards are **folded** (`_card(fold=0.45)`: a shallow V along the twig, 4 tris; each
+  half rises 0.45 × its width), with more roll, since flat horizontal cards seen at eye level were thin streaks. `fold=0`
+  keeps the old code path exactly, so every other asset is byte-identical (checked by hashing the GLB's mesh buffers).
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).

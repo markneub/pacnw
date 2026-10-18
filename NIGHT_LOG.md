@@ -185,3 +185,9 @@ snow banked against them, deeper on some sides than others and lit like the snow
 ### 20. The trail through snow
 The trail across the snowfields was a flat grey-blue stripe that looked painted on. It's now trodden snow: a soft-edged,
 slightly greyer groove, most worn down the middle, still easy to follow. Look: `?weather=sun&x=70&z=-900&yaw=0.1`.
+
+### 21. Vine maple leaves
+The vine maples' leaf sprays were flat, single-colour cut-outs lying horizontally, so at eye level they showed as thin
+bright streaks. The leaves are now shaded (lighter centres, darker edges, mottled, shadowing each other) with deeper lobes,
+and each spray is folded into a shallow V along its twig, as real maple sprays hold their leaves, so you see leaves from
+any angle. Look: `?x=-30&z=420`. Cost: +229 triangles per maple.

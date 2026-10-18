@@ -380,24 +380,52 @@ def conifer(name, M, seed, height, crown_base, max_radius, tiers, points,
     return b.build(name, bake_colors=M["lod"] if lod else None)
 
 
-def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=False, up_normal=False):
+def _card(b, mat, centre, fwd, side, length, width, droop, trunk_xy, flip_u=False, up_normal=False, fold=0.0):
     """One foliage card (2 tris): u along `fwd`, v along `side`; the tip end droops.
-    Shading normals point away from the trunk and up, so the crown shades as a volume."""
-    corners = []
-    for du, dv in ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)):
-        p = centre + fwd * (du * length) + side * (dv * width)
-        p.z -= droop * max(0.0, du + 0.5) ** 2
-        corners.append(p)
-    idx = [b.v(p) for p in corners]
-    for i, p in zip(idx, corners):
-        out = Vector((p.x - trunk_xy[0], p.y - trunk_xy[1], 0.0))
-        r = max(out.length, 0.3)
-        n = Vector((0.0, 0.0, 1.0)) if up_normal else (out / r + Vector((0.0, 0.0, 0.65))).normalized()
-        b.custom_normals[i] = tuple(n)
-    us = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-    if flip_u:
-        us = [(1.0 - u, v) for u, v in us]
-    b.face(idx, mat, uvs=us)
+    Shading normals point away from the trunk and up, so the crown shades as a volume.
+    `fold` > 0 bends it along the u axis into a shallow V (4 tris): each half rises
+    fold × its width at the edge, as broadleaf sprays hold their leaves up either side
+    of the twig (a flat card seen at eye level was a thin streak)."""
+    if fold <= 0.0:
+        corners = []
+        for du, dv in ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)):
+            p = centre + fwd * (du * length) + side * (dv * width)
+            p.z -= droop * max(0.0, du + 0.5) ** 2
+            corners.append(p)
+        idx = [b.v(p) for p in corners]
+        for i, p in zip(idx, corners):
+            out = Vector((p.x - trunk_xy[0], p.y - trunk_xy[1], 0.0))
+            r = max(out.length, 0.3)
+            n = Vector((0.0, 0.0, 1.0)) if up_normal else (out / r + Vector((0.0, 0.0, 0.65))).normalized()
+            b.custom_normals[i] = tuple(n)
+        us = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        if flip_u:
+            us = [(1.0 - u, v) for u, v in us]
+        b.face(idx, mat, uvs=us)
+        return
+    vs = (-0.5, 0.0, 0.5)
+    rows = []
+    for du in (-0.5, 0.5):
+        row = []
+        for dv in vs:
+            p = centre + fwd * (du * length) + side * (dv * width)
+            p.z -= droop * max(0.0, du + 0.5) ** 2
+            p.z += fold * abs(dv) * width
+            row.append(p)
+        rows.append(row)
+    idx = [[b.v(p) for p in row] for row in rows]
+    for row_i, row_p in zip(idx, rows):
+        for i, p in zip(row_i, row_p):
+            out = Vector((p.x - trunk_xy[0], p.y - trunk_xy[1], 0.0))
+            r = max(out.length, 0.3)
+            n = Vector((0.0, 0.0, 1.0)) if up_normal else (out / r + Vector((0.0, 0.0, 0.65))).normalized()
+            b.custom_normals[i] = tuple(n)
+    for k in range(len(vs) - 1):
+        v0, v1 = vs[k] + 0.5, vs[k + 1] + 0.5
+        us = [(0.0, v0), (1.0, v0), (1.0, v1), (0.0, v1)]
+        if flip_u:
+            us = [(1.0 - u, v) for u, v in us]
+        b.face([idx[0][k], idx[1][k], idx[1][k + 1], idx[0][k + 1]], mat, uvs=us)
 
 
 def branchy_conifer(M, name, cards, seed, height, crown_base, max_radius, r_trunk,
@@ -774,12 +802,12 @@ def vine_maple(M, name, seed=5, leafy=1.0):
                 cl = rng.uniform(1.1, 1.6)
                 c = p.lerp(tip, 0.6) + Vector((0.0, 0.0, 0.05))
                 fwd = Vector((dir_.x, dir_.y, rng.uniform(-0.12, 0.12))).normalized()
-                sd = Vector((-fwd.y, fwd.x, rng.uniform(-0.15, 0.15))).normalized()
-                _card(b, leaves, c, fwd, sd, cl, cl, 0.08 * cl, (0.0, 0.0), flip_u=rng.random() < 0.5)
+                sd = Vector((-fwd.y, fwd.x, rng.uniform(-0.3, 0.3))).normalized()
+                _card(b, leaves, c, fwd, sd, cl, cl, 0.08 * cl, (0.0, 0.0), flip_u=rng.random() < 0.5, fold=0.45)
                 if rng.random() < 0.6 * leafy:  # a second layer a little lower and turned
                     sd2 = Vector((-sd.y, sd.x, 0.0)).normalized()
                     _card(b, leaves, c + Vector((0.0, 0.0, -0.25)) + dir_ * 0.25, sd2.cross(Vector((0, 0, 1))).normalized(),
-                          sd2, cl * 0.85, cl * 0.85, 0.06 * cl, (0.0, 0.0))
+                          sd2, cl * 0.85, cl * 0.85, 0.06 * cl, (0.0, 0.0), fold=0.45)
             t += rng.uniform(0.04, 0.07)
         # a spray at the stem's tip, drooping
         tipc = at(1.0)
@@ -787,7 +815,7 @@ def vine_maple(M, name, seed=5, leafy=1.0):
             fwd = (at(1.0) - at(0.9)).normalized()
             fwd = Vector((fwd.x, fwd.y, max(-0.4, min(0.2, fwd.z)))).normalized()
             sd = Vector((-fwd.y, fwd.x, 0.0)).normalized()
-            _card(b, leaves, tipc, fwd, sd, 1.0, 1.0, 0.12, (0.0, 0.0))
+            _card(b, leaves, tipc, fwd, sd, 1.0, 1.0, 0.12, (0.0, 0.0), fold=0.45)
     return b.build(name)
 
 
