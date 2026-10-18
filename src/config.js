@@ -1,7 +1,7 @@
 // World-wide tunables. Distances are in metres.
 
-export const WORLD_SIZE = 2000; // terrain spans [-WORLD_SIZE/2, WORLD_SIZE/2] on x and z
-export const TERRAIN_SEGMENTS = 400;
+export const WORLD_SIZE = 2800; // terrain spans [-WORLD_SIZE/2, WORLD_SIZE/2] on x and z
+export const TERRAIN_SEGMENTS = 560; // 5 m cells
 export const WATER_LEVEL = 4;
 export const SNOWLINE = 115; // average altitude where ground snow starts
 export const TREELINE = 230; // trees thin out and stop above this

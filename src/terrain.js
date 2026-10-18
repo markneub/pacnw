@@ -63,24 +63,59 @@ function ridged(x, z, octaves) {
 const LAKE = { x: 170, z: 380, r: 150 };
 
 /**
+ * The high country, north of the valley: a staircase of broad, gentle benches
+ * climbing between ridged peaks. Altitude of the stair (before local relief)
+ * along z, from the foothills to the pass:
+ *   ~50 m foothills (z > 250) → step → the lower snow bench (~150 m, z -420…-680)
+ *   → step → the upper basin (~225 m, z -820…-1000) → step → the pass (~280 m, z < -1100).
+ * The benches are what you can walk out onto in the snow; the peaks are backdrop.
+ */
+const STAIR = [
+  // [start z, end z (north of start), rise m]
+  [250, -260, 70],
+  [-290, -420, 75],
+  [-680, -820, 75],
+  [-1000, -1100, 55],
+];
+/** The corridor of benches runs up the middle; peaks rise either side of it. */
+const BENCH_X = 60;
+
+function highCountry(x, z) {
+  let stair = 0;
+  for (const [a, b, rise] of STAIR) stair += rise * smoothstep(a, b, z);
+  // the corridor wanders a little so the benches aren't a straight avenue
+  const cx = BENCH_X + nBase(z * 0.0012, 3.7) * 120;
+  const side = Math.abs(x - cx);
+  // peaks flank the benches, and close in to the north (and the rim takes over beyond)
+  const north = smoothstep(250, -450, z);
+  // the walls close in around the high basin (a cirque) and the pass beyond it
+  const flank = smoothstep(230, 520, side + smoothstep(-760, -900, z) * 90 + smoothstep(-980, -1250, z) * 140);
+  const peaks = north * flank * (60 + ridged(x * 0.0021, z * 0.0021, 5) * 260);
+  // gentle relief on the benches themselves (rolls and hollows, no cliffs)
+  const relief = north * (1 - flank) * nDetail(x * 0.006 + 11, z * 0.006 - 5) * 7;
+  return stair + peaks + relief;
+}
+
+/**
  * Terrain height at world (x, z). Layout: a low, rolling forested valley in the
- * south (+z) climbing into a ridged, snowy range in the north (-z), with the
- * whole map rimmed by mountains so the edges feel natural.
+ * south (+z) climbing north through a staircase of snowy benches to a pass,
+ * between ridged peaks, with the whole map rimmed by mountains so the edges
+ * feel natural.
  */
 export function heightAt(x, z) {
   const hills = fbm(nBase, x * 0.0016, z * 0.0016, 5) * 32 + 22;
   const detail = nDetail(x * 0.02, z * 0.02) * 1.2;
 
-  // north range
+  // north: benches, then peaks (the hills fade under the benches so they stay walkable)
   const north = smoothstep(250, -450, z);
-  const range = north * (95 + ridged(x * 0.0021, z * 0.0021, 5) * 230);
+  const range = highCountry(x, z);
 
   // rim
   const edge = Math.max(Math.abs(x), Math.abs(z));
-  const rim = smoothstep(WORLD_SIZE * 0.36, WORLD_SIZE * 0.5, edge);
+  const rim = smoothstep(WORLD_SIZE * 0.39, WORLD_SIZE * 0.5, edge);
   const rimH = rim * (140 + ridged(x * 0.003 + 7, z * 0.003 - 3, 4) * 120);
 
-  let h = hills + range + rimH + detail;
+  let h = hills * (1 - 0.6 * north) + range + rimH + detail;
 
   // lake basin
   const dl = Math.hypot((x - LAKE.x) * 1.0, (z - LAKE.z) * 1.4);

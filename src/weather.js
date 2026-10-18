@@ -335,7 +335,8 @@ export class Weather {
     // the light to show in) and warm everything up.
     const fog = this.scene.fog ?? this.fogOff; // ?off=fog keeps updating a detached copy
     fog.color.copy(LOW.fog).lerp(HIGH.fog, snowT).lerp(SUN_FOG, sun * (1 - 0.6 * snowT));
-    const density = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT) * THREE.MathUtils.lerp(1, 0.62, sun);
+    // (sun breaks clear the high country more than the valley: clear mountain air, peaks in view)
+    const density = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT) * THREE.MathUtils.lerp(1, 0.62 - 0.22 * snowT, sun);
     fog.near = Math.round(sun * 255) + Math.min(density, 0.999); // see installHeightFog
     this.hemi.color.copy(LOW.hemiSky).lerp(HIGH.hemiSky, snowT).lerp(SUN_HEMI, sun * 0.6);
     this.hemi.groundColor.copy(LOW.hemiGround).lerp(HIGH.hemiGround, snowT);

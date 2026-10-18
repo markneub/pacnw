@@ -3,8 +3,8 @@
 A small walkable Pacific Northwest world built with three.js. You start in a wet, foggy valley
 of Douglas fir, western hemlock and red cedar with sword ferns, grassy clearings and mossy boulders, beside a misty
 lake. A hiking trail leads from the trailhead at your feet to a lakeside bench, then
-switchbacks north and up. Follow it and the land climbs into a ridged range where the rain turns to sleet, then snow.
-Up there the ground and the trees are snow-covered.
+switchbacks north and up. Follow it and the land climbs where the rain turns to sleet, then snow, out onto a broad
+snowfield in a forest of snow-laden firs, then up again into a high basin walled by peaks, below a pass.
 
 **Play it online:** https://markneub.github.io/pacnw/
 
@@ -47,7 +47,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | --- | --- |
 | `blender/build_assets.py` | Procedurally models trees, ferns, logs and furniture in Blender → `public/models/forest.glb` |
 | `blender/build_rocks.py` | Turns photogrammetry scans into game boulders with two detail levels → `public/models/rocks.glb` |
-| `src/terrain.js` | Height function (valley, lake basin, ridged northern range, mountain rim), vertex-coloured terrain with moss, rock and snow |
+| `src/terrain.js` | Height function (valley, lake basin, a staircase of snowy benches between ridged peaks, mountain rim), vertex-coloured terrain with moss, rock and snow |
 | `src/vegetation.js` | Loads the GLB, scatters ~70k trees/rocks/ferns by altitude, slope and forest-density noise, chunked `InstancedMesh`es with distance culling, trunk collisions |
 | `src/trail.js` | Hiking trail: A* route over the terrain (grade-penalised, so it switchbacks), smoothed and draped as a dirt/packed-snow ribbon; distance queries keep vegetation off the tread; HUD guide to the next stop |
 | `src/materials.js` | Shader patches: wind sway for foliage, moss/snow cover on rocks and logs |

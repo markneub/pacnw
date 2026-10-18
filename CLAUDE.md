@@ -1,7 +1,7 @@
 # Cascadia Woods: notes for Claude
 
-Walkable low-poly Pacific Northwest forest in three.js + Vite. Valley with rain in the south (+z),
-snowy ridged range in the north (−z). See README.md for the file map and controls.
+Walkable low-poly Pacific Northwest forest in three.js + Vite. Valley with rain in the south (+z), climbing north (−z)
+through a staircase of snowy benches between ridged peaks to a high basin under a pass. See README.md for the file map and controls.
 
 ## Commands
 
@@ -95,6 +95,15 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 ## Code map / conventions
 
 - `src/config.js`: world size, `SNOWLINE` (115), `TREELINE`, `SPAWN`, view distances, player tuning.
+- **Map (landscape rework):** 2.8 km square (`WORLD_SIZE` 2800, `TERRAIN_SEGMENTS` 560 = 5 m cells; was 2 km). The valley
+  (spawn, lake, old growth) kept its coordinates; the north is `highCountry()` in terrain.js: a `STAIR` of rises along z
+  (foothills ~50 m → lower snow bench ~150 m, z −420…−680 → upper basin ~225 m, z −820…−1000, walled like a cirque → the pass
+  ~280 m) up a corridor around x ≈ 60 that wanders ±120 m; ridged peaks flank it (`flank`) and close in around the basin;
+  hills fade to 40% under the benches; the rim starts at 0.39 × WORLD_SIZE. Sun breaks thin the high fog more (density
+  × 0.62 − 0.22·snowT) so the peaks show. Trail stops: trailhead → lake → snowfield (110, −540) → high basin (70, −920);
+  2.5 km, 1.2 km in snow, grade p50 10% / p95 24%, cross-slope p95 7%. Load (container): vegetation 4.3 → ~9.9 s (twice the
+  area). Changing `heightAt`/scatter moved every tree. Views: snowfield `x=90&z=-500&yaw=0.2`, basin `x=70&z=-900&yaw=0.1`,
+  looking back down `x=110&z=-640&yaw=3.0` (bench `views=snow` is now the snowfield). Old coordinates north of z ≈ 0 are stale.
 - `src/terrain.js`: `heightAt(x,z)` is the smooth noise height that drives terrain generation and scatter
   decisions. `groundAt(x,z)` is the height of the *rendered* triangulated mesh. Use it for anything that
   must sit on the ground (instances, player feet, trail ribbon). `snowlineAt`/`snowAmount` keep ground snow, snowy-tree choice and rain→snow consistent.
@@ -361,9 +370,7 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
 - Tree cost is fill-bound (see the reverted mid tier): try cutting card overdraw if the frame budget gets tight.
 - Subtle head bob while walking (no option: opinionated).
 - **Next (the user's plan, in order):**
-  1. Landscape rework: a bigger map; snow you can climb up into, with flatter snowy areas (benches, basins, a pass), not
-     only steep snowy slopes. Moves everything (deterministic from SEED): re-run tools/holecheck.mjs, trail QA and the
-     phone bench after. The first full holecheck grid showed 2 views near the north rim (x=-80/-20, z=-920) to re-check.
+  1. (Done: landscape rework, see Map.)
   2. Streams of running water cutting through the landscape, natural in look and behaviour.
   3. Sun glitter on water (streams and the lake): realistic sparkle where the sun's reflection is visible. The user can
      share reference photos.
@@ -382,5 +389,5 @@ snowy ridged range in the north (−z). See README.md for the file map and contr
   `Input.dispatchTouchEvent` (multi-touch works). Without `still`, grab frames via
   `renderer.render(); renderer.domElement.toDataURL()` inside one `evaluate`. `page.screenshot()` does work
   for DOM-only views like the start overlay.
-- Good spots: spawn (default), lake `x=110&z=470&yaw=-0.67`, snowy slope `x=-60&z=-250&yaw=0.4`,
-  high snow `x=-200&z=-450&yaw=2.8`.
+- Good spots: spawn (default), lake `x=110&z=470&yaw=-0.67`, snowfield `x=90&z=-500&yaw=0.2`,
+  high basin `x=70&z=-900&yaw=0.1` (add `&weather=sun`).

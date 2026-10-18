@@ -7,12 +7,13 @@ import { shared, wetChunks, patchSunlight, sunKey } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 
 // The trail runs from the trailhead at the spawn point, down to a viewpoint on
-// the lake's west shore, then climbs north through the forest to the one gentle
-// ridge shoulder above the snowline.
+// the lake's west shore, then climbs north through the forest onto the lower
+// snow bench and up again into the high basin below the pass.
 export const TRAIL_STOPS = [
   { name: 'trailhead', label: 'Trailhead', x: 22, z: 652 },
   { name: 'lake', label: 'Lake viewpoint', x: 55, z: 385 },
-  { name: 'ridge', label: 'Ridge viewpoint', x: 120, z: -510 },
+  { name: 'snowfield', label: 'Snowfield', x: 110, z: -540 },
+  { name: 'basin', label: 'High basin', x: 70, z: -920 },
 ];
 /** Numeric spatial-hash key (no string garbage in per-frame lookups). */
 const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
@@ -34,7 +35,7 @@ const BLEND_SIGMA = 0.7; // how sharply the nearest trail leg takes over (m)
 const CELL = 6;
 const MIN_X = -350;
 const MAX_X = 450;
-const MIN_Z = -620;
+const MIN_Z = -1010;
 const MAX_Z = 720;
 const NX = Math.floor((MAX_X - MIN_X) / CELL) + 1;
 const NZ = Math.floor((MAX_Z - MIN_Z) / CELL) + 1;

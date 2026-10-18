@@ -50,8 +50,8 @@ const found = await page.evaluate(async (step) => {
     for (const yaw of [0, Math.PI / 2]) look(p.x, p.y, yaw, -1.2, 6, 'trail');
   }
   // the whole map on a grid, looking straight down from 25 m
-  // (40 m inside the world's edge: looking down from there sees past the end of the map, which is not a hole)
-  const half = window.__pacnw.worldSize / 2 - 40;
+  // (inside the rim mountains: looking down their steep sides sees past the end of the map, which is not a hole)
+  const half = window.__pacnw.worldSize * 0.39;
   if (step) for (let z = -half; z <= half; z += step) for (let x = -half; x <= half; x += step) look(x, z, 0, -Math.PI / 2 + 0.01, 25, 'grid');
   return holes;
 }, STEP);

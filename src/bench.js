@@ -21,7 +21,7 @@ import { surfaceDetail } from './surfacedetail.js';
 const VIEWS = [
   { key: 'spawn', name: 'spawn', x: null, z: null },
   { key: 'forest', name: 'forest', x: -30, z: 420, yaw: 0.3, pitch: 0 },
-  { key: 'snow', name: 'snowy slope', x: -60, z: -250, yaw: 0.4, pitch: 0 },
+  { key: 'snow', name: 'snowfield', x: 90, z: -500, yaw: 0.2, pitch: 0 },
 ];
 
 /**
