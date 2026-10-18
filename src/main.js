@@ -51,8 +51,9 @@ const postOn = !off.has('post');
 // with post-processing the scene renders into an MSAA target, so the canvas itself needs no antialiasing
 const renderer = new THREE.WebGLRenderer({ antialias: !off.has('aa') && !postOn, powerPreference: 'high-performance' });
 renderer.setPixelRatio(params.has('dpr') ? parseFloat(params.get('dpr'))
-  // phones at 2x: ?bench showed +0.9–4.1 ms over 1.25x, and the user played ?dpr=2 without dropped frames
-  : Math.min(window.devicePixelRatio, lowPower ? 2 : 1.5));
+  // phones at 1.75x: the scene is mostly fill-bound (bench at spawn: full frame 6.9 ms at 2x vs 4.0 at 1.25x,
+  // i.e. ~2.2 ms fixed + ~4.7 ms that scales with pixels), and 1.75x has 77% of 2x's pixels (~5.8 ms)
+  : Math.min(window.devicePixelRatio, lowPower ? 1.75 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.45;
