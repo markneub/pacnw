@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
-  WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, WATER_LEVEL, SNOWLINE, TREELINE, SEED, SPAWN,
+  WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, SNOWLINE, TREELINE, SEED, SPAWN,
 } from './config.js';
 import {
-  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed,
+  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover, addTrunkMoss, shared } from './materials.js';
@@ -316,7 +316,7 @@ function scatter(trail) {
       const x = gx + rng() * cell;
       const z = gz + rng() * cell;
       const h = heightAt(x, z);
-      if (h < WATER_LEVEL + 1.5) continue;
+      if (h < waterLevelAt(x, z) + 1.5) continue;
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.3) continue;
       if (offStream(x, z) < 2.5) continue; // trees stand back from the water
@@ -359,7 +359,7 @@ function scatter(trail) {
       const x = gx + rng() * rockCell;
       const z = gz + rng() * rockCell;
       const h = heightAt(x, z);
-      if (h < WATER_LEVEL - 2) continue;
+      if (h < waterLevelAt(x, z) - 2) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.5) continue;
       const slope = slopeAt(x, z);
       const r = rng();
@@ -405,7 +405,7 @@ function scatter(trail) {
       const clump = nForest(x * 0.05 + 40, z * 0.05 - 17) * 0.5 + 0.5;
       if (rng() > f * clump * 1.45) continue;
       const h = heightAt(x, z);
-      if (h < WATER_LEVEL + 1 || h > SNOWLINE - 25) continue;
+      if (h < waterLevelAt(x, z) + 1 || h > SNOWLINE - 25) continue;
       if (slopeAt(x, z) > 0.35) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.4) continue;
       if (offStream(x, z) < 0.6) continue;
@@ -425,7 +425,7 @@ function scatter(trail) {
       const patch = THREE.MathUtils.smoothstep(nForest(x * 0.028 + 90, z * 0.028 + 11) * 0.5 + 0.5, 0.52, 0.72);
       if (rng() > f * patch * 1.1) continue;
       const h = heightAt(x, z);
-      if (h < WATER_LEVEL + 1.5 || h > SNOWLINE - 40) continue;
+      if (h < waterLevelAt(x, z) + 1.5 || h > SNOWLINE - 40) continue;
       if (slopeAt(x, z) > 0.4) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.6) continue;
       if (offStream(x, z) < 1) continue;
@@ -445,7 +445,7 @@ function scatter(trail) {
       const grove = THREE.MathUtils.smoothstep(nForest(x * 0.02 - 60, z * 0.02 + 33) * 0.5 + 0.5, 0.45, 0.7);
       if (rng() > edge * grove * 0.8) continue;
       const h = heightAt(x, z);
-      if (h < WATER_LEVEL + 2 || h > 85) continue;
+      if (h < waterLevelAt(x, z) + 2 || h > 85) continue;
       if (slopeAt(x, z) > 0.4) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 1.5) continue;
       if (offStream(x, z) < 2) continue;
@@ -468,7 +468,7 @@ function scatter(trail) {
       const jitter = (rng() - 0.5) * 0.4;
       const scale = 0.85 + rng() * 0.3;
       if (rng() > oldGrowth * 0.6) continue;
-      if (h < WATER_LEVEL + 2 || slopeAt(x, z) > 0.22) continue;
+      if (h < waterLevelAt(x, z) + 2 || slopeAt(x, z) > 0.22) continue;
       // along the contour (logs settle across the slope)
       const gxH = heightAt(x + 2, z) - heightAt(x - 2, z);
       const gzH = heightAt(x, z + 2) - heightAt(x, z - 2);
@@ -516,7 +516,7 @@ function scatter(trail) {
       const pick = rng();
       const r = rng();
       const h = heightAt(x, z);
-      if (h < WATER_LEVEL + 0.3) continue;
+      if (h < waterLevelAt(x, z) + 0.3) continue;
       const slope = slopeAt(x, z);
       const d = trail.distanceTo(x, z);
       if (d < TRAIL_WIDTH * 0.5 + 0.2) continue; // off the tread itself

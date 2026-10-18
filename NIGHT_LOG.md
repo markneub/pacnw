@@ -138,3 +138,12 @@ Look: `?weather=rain&x=-5&z=665&yaw=0&pitch=-0.45` (near spawn). Cost: shader wo
 In rain, boulders, stones and cairns now get a patchy film of water on their bare stone (not on the moss): darker and
 glossy, catching the sky, and they dry off when the rain stops. Compare `?weather=rain` with `?weather=clear` at any
 boulder. Cost: a few shader ops on rocks.
+
+### 14. Fix: a creek's 20 m trench near spawn; a forest pond
+While checking god rays I found the west creek had cut a sheer-walled trench up to 20 m deep just north of spawn (around
+`x=-30&z=560`). It drains into a big closed basin west of the lake, and to reach the lake it had to climb a saddle south
+of it; since a stream bed may only fall, it carved straight through. Now water behaves the way it would: small pits along
+a creek are filled in (flat floors), and a big closed basin ends the creek in a **pond** at its low spot, west of the lake.
+All channels are now at most ~3.5 m deep, and banks lie back further where they're deep. The pond glitters in sun like the
+lake. Look: `?weather=sun&x=-345&z=215&yaw=0.98&pitch=-0.15`. Trail checks unchanged (no holes; grades as before).
+Note: this moved trees in the west valley a little (ground heights changed there).

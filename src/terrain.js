@@ -119,7 +119,7 @@ export function heightAt(x, z) {
  * between ridged peaks, with the whole map rimmed by mountains so the edges
  * feel natural.
  */
-function baseHeight(x, z) {
+export function baseHeight(x, z) {
   const hills = fbm(nBase, x * 0.0016, z * 0.0016, 5) * 32 + 22;
   const detail = nDetail(x * 0.02, z * 0.02) * 1.2;
 
@@ -264,6 +264,11 @@ function snowCover(x, z, y, slope) {
  * [forest floor, rock, snow, mud/dirt], summing to 1. Mirrors groundColor().
  */
 /** 0..1: the stream bed and its wet, stony margin (1 in the channel, fading over the lower bank). */
+/** The open water's level at (x, z): the lake's, or a pond's where one lies (compare with the ground). */
+export function waterLevelAt(x, z) {
+  return Math.max(WATER_LEVEL, streams().pondLevel(x, z));
+}
+
 export function streamBed(x, z) {
   const c = streams().nearest(x, z);
   return c.seg ? 1 - smoothstep(c.half + 0.5, c.half + 3.5, c.d) : 0;
@@ -273,7 +278,8 @@ export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
   const bed = streamBed(x, z);
   const snow = snowCover(x, z, y, slope) * (1 - bed); // running water keeps its bed clear of snow
   const rock = Math.max(smoothstep(0.22, 0.42, slope), bed) * (1 - snow);
-  const mud = (1 - smoothstep(WATER_LEVEL - 1, WATER_LEVEL + 2.5, y)) * (1 - rock) * (1 - snow);
+  const wl = waterLevelAt(x, z);
+  const mud = (1 - smoothstep(wl - 1, wl + 2.5, y)) * (1 - rock) * (1 - snow);
   out[0] = Math.max(0, 1 - snow - rock - mud);
   out[1] = rock;
   out[2] = snow;
@@ -299,7 +305,8 @@ export function groundColor(x, y, z, slope, target = new THREE.Color()) {
   c.lerp(COL.alpine, smoothstep(SNOWLINE - 50, SNOWLINE - 5, y) * 0.7);
 
   // muddy lake shore
-  c.lerp(COL.mud, 1 - smoothstep(WATER_LEVEL - 1, WATER_LEVEL + 2.5, y));
+  const wl = waterLevelAt(x, z);
+  c.lerp(COL.mud, 1 - smoothstep(wl - 1, wl + 2.5, y));
 
   // rock on steep faces
   tmp.copy(COL.rock).lerp(COL.rockDark, n1);
@@ -373,7 +380,7 @@ function buildTile(tx, tz) {
       // where rain pools: flat, concave forest floor or mud (not rock, snow, stream beds or the lake)
       const lap = (h(ix - 1, iz) + h(ix + 1, iz) + h(ix, iz - 1) + h(ix, iz + 1)) / 4 - y;
       hollow[j * n + i] = smoothstep(0.02, 0.3, lap) * (1 - smoothstep(0.004, 0.012, 1 - nv.y))
-        * (lw[0] + lw[3]) * smoothstep(WATER_LEVEL + 0.3, WATER_LEVEL + 1.2, y);
+        * (lw[0] + lw[3]) * smoothstep(waterLevelAt(x, z) + 0.3, waterLevelAt(x, z) + 1.2, y);
       colors[k] = c.r;
       colors[k + 1] = c.g;
       colors[k + 2] = c.b;
@@ -489,14 +496,15 @@ export function buildWater() {
     shader.uniforms.uRain = shared.uRain;
     patchGlitter(shader);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vWaterXZ;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWaterXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+      .replace('#include <common>', '#include <common>\nvarying vec2 vWaterXZ;\nvarying float vWaterY;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWaterXZ = (modelMatrix * vec4(transformed, 1.0)).xz;\nvWaterY = (modelMatrix * vec4(transformed, 1.0)).y;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uTime;
         uniform float uWet;
         uniform float uRain;
         varying vec2 vWaterXZ;
+        varying float vWaterY;
         ${GLITTER_GLSL}
         float wHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         vec2 rainRing(vec2 p, float t) {
@@ -544,7 +552,7 @@ export function buildWater() {
           float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(normal, wV), 0.0, 1.0), 5.0);
           reflectedLight.indirectSpecular = refl * fres * 1.15;
           // sun glitter (calm open water: a moderate wave-slope spread; rain roughens it)
-          vec3 glP = vec3(vWaterXZ.x, ${WATER_LEVEL.toFixed(1)}, vWaterXZ.y);
+          vec3 glP = vec3(vWaterXZ.x, vWaterY, vWaterXZ.y);
           reflectedLight.indirectSpecular += ${'vec3(' + [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b].map((v) => v.toFixed(3)).join(', ') + ')'} * glitter(glP, normalize(cameraPosition - glP), 0.16 + 0.06 * uWet);
         }
         #endif`);
@@ -552,6 +560,28 @@ export function buildWater() {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(LAKE.x, WATER_LEVEL, LAKE.z);
   mesh.scale.z = 1 / 1.4;
-  mesh.name = 'lake';
-  return mesh;
+  mesh.name = 'lake water';
+  const group = new THREE.Group();
+  group.name = 'lake';
+  group.add(mesh);
+  // ponds where a stream ends in a closed basin (streams.js): the pond's grid cells plus a ring
+  // around them, at its level; the terrain hides what lies over dry ground
+  for (const p of streams().ponds) {
+    const pos = [];
+    const s = p.cell / 2;
+    const cells = new Set();
+    for (const [x, z] of p.cells) for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) cells.add(`${x + dx * p.cell},${z + dz * p.cell}`);
+    for (const c of cells) {
+      const [x, z] = c.split(',').map(Number);
+      pos.push(x - s, 0, z - s, x - s, 0, z + s, x + s, 0, z + s, x - s, 0, z - s, x + s, 0, z + s, x + s, 0, z - s);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    const pond = new THREE.Mesh(g, mat);
+    pond.position.y = p.level;
+    pond.name = 'pond';
+    group.add(pond);
+  }
+  return group;
 }

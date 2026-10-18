@@ -69,21 +69,135 @@ export function buildStreams(height, { size, waterLevel, lake }) {
     }
   }
 
+  // Depressions on the way: the flood level runs flat across a pit, so a stream following it would
+  // carve a trench through the far rim. Real water fills the pit and spills over. Small pits are
+  // filled with sediment (the ground is raised to the spill level: a flat floor, see fill below); a
+  // big closed basin (over SINK_AREA) swallows the stream instead: it runs down to the basin's low
+  // spot and ends in a pond there.
+  const comp = new Int32Array(n * n).fill(-1);
+  const comps = [];
+  const pitDepth = (k) => level[k] - h[k];
+  function component(k) {
+    if (comp[k] >= 0) return comps[comp[k]];
+    const c = { cells: [], fill: false };
+    comp[k] = comps.length;
+    comps.push(c);
+    const stack = [k];
+    while (stack.length) {
+      const q = stack.pop();
+      c.cells.push(q);
+      const i = q % n;
+      const j = (q - i) / n;
+      for (let d = 0; d < 4; d++) {
+        const ii = i + dirs[d][0];
+        const jj = j + dirs[d][1];
+        if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+        const kk = jj * n + ii;
+        if (comp[kk] < 0 && pitDepth(kk) > 0.05) {
+          comp[kk] = comp[k];
+          stack.push(kk);
+        }
+      }
+    }
+    return c;
+  }
+
   // trace each source down to the lake; a stream ends where it meets one already traced
   const owner = new Int32Array(n * n).fill(-1);
   const flowAcc = new Float32Array(n * n);
   const traces = [];
+  const ponds = [];
   for (const src of SOURCES) {
     let k = Math.round((src.z + half) / GRID) * n + Math.round((src.x + half) / GRID);
     const cells = [];
+    let sink = false;
     while (k >= 0 && owner[k] < 0) {
+      if (pitDepth(k) > 0.05) {
+        const c = component(k);
+        if (c.cells.length * GRID * GRID > SINK_AREA) {
+          sink = true;
+          break;
+        }
+        c.fill = true;
+      }
       cells.push(k);
       owner[k] = traces.length;
       if (down[k] < 0) break;
       k = down[k];
     }
+    if (sink) {
+      // downhill (on the real ground) to the basin's nearest low spot, and a pond there
+      for (;;) {
+        cells.push(k);
+        owner[k] = traces.length;
+        const i = k % n;
+        const j = (k - i) / n;
+        let best = k;
+        for (const [di, dj] of dirs) {
+          const ii = i + di;
+          const jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+          if (h[jj * n + ii] < h[best]) best = jj * n + ii;
+        }
+        if (best === k || owner[best] >= 0) break;
+        k = best;
+      }
+      ponds.push(pondAround(k, h[k] + POND_DEPTH));
+      k = -1;
+    }
     traces.push({ cells, joins: k >= 0 && owner[k] >= 0 && owner[k] !== traces.length ? k : -1 });
   }
+
+  // the cells of a pond: everything below its level connected to its low spot
+  function pondAround(k0, lv) {
+    const cells = [k0];
+    const seenP = new Set(cells);
+    for (let q = 0; q < cells.length; q++) {
+      const i = cells[q] % n;
+      const j = (cells[q] - i) / n;
+      for (let d = 0; d < 4; d++) {
+        const ii = i + dirs[d][0];
+        const jj = j + dirs[d][1];
+        const kk = jj * n + ii;
+        if (ii < 0 || jj < 0 || ii >= n || jj >= n || seenP.has(kk) || h[kk] >= lv) continue;
+        seenP.add(kk);
+        cells.push(kk);
+      }
+    }
+    let x = 0;
+    let z = 0;
+    for (const c of cells) {
+      x += -half + (c % n) * GRID;
+      z += -half + Math.floor(c / n) * GRID;
+    }
+    x /= cells.length;
+    z /= cells.length;
+    let r = 0;
+    for (const c of cells) r = Math.max(r, Math.hypot(-half + (c % n) * GRID - x, -half + Math.floor(c / n) * GRID - z));
+    const xz = cells.map((c) => [-half + (c % n) * GRID, -half + Math.floor(c / n) * GRID]);
+    return { x, z, level: lv, r: r + GRID * 1.5, cells: xz, cell: GRID };
+  }
+
+  // sediment in the small pits on a stream's way: depth to raise each grid point, sampled bilinearly
+  const fillDepth = new Float32Array(n * n);
+  for (const c of comps) if (c.fill) for (const k of c.cells) fillDepth[k] = pitDepth(k);
+  function fillAt(x, z) {
+    const gx = Math.min(n - 1.001, Math.max(0, (x + half) / GRID));
+    const gz = Math.min(n - 1.001, Math.max(0, (z + half) / GRID));
+    const i = Math.floor(gx);
+    const j = Math.floor(gz);
+    const fx = gx - i;
+    const fz = gz - j;
+    const k = j * n + i;
+    const a = fillDepth[k];
+    const b = fillDepth[k + 1];
+    const c = fillDepth[k + n];
+    const d = fillDepth[k + n + 1];
+    if (a + b + c + d === 0) return 0;
+    return (a + (b - a) * fx) * (1 - fz) + (c + (d - c) * fx) * fz;
+  }
+  const filled = (x, z) => height(x, z) + fillAt(x, z);
+
   // drained length so far feeds the width: each trace adds its length to everything downstream
   for (const t of traces) {
     let acc = 0;
@@ -109,9 +223,11 @@ export function buildStreams(height, { size, waterLevel, lake }) {
     for (const p of pts) {
       const width = 1.8 + Math.min(3.2, Math.sqrt(p.acc) * 0.08); // a creek: ~2 m at the spring, ~5 m at the lake
       p.width = width;
-      const ground = height(p.x, p.z);
+      const ground = filled(p.x, p.z);
       bed = Math.min(bed - 0.02, ground - 0.9 - width * 0.12);
       p.bed = bed;
+      // where the channel still runs deep (a smoothed bend over a spur), the banks lie back further
+      p.bank = BANK + Math.max(0, ground - bed - 2.5) * 2.5;
     }
     streams.push({ points: pts });
   }
@@ -126,7 +242,7 @@ export function buildStreams(height, { size, waterLevel, lake }) {
       const b = s.points[i];
       const seg = { a, b };
       segs.push(seg);
-      const reach = Math.max(a.width, b.width) / 2 + BANK + 2;
+      const reach = Math.max(a.width, b.width) / 2 + Math.max(a.bank, b.bank) + 2;
       const gx0 = Math.floor((Math.min(a.x, b.x) - reach) / HASH);
       const gx1 = Math.floor((Math.max(a.x, b.x) + reach) / HASH);
       const gz0 = Math.floor((Math.min(a.z, b.z) - reach) / HASH);
@@ -142,7 +258,7 @@ export function buildStreams(height, { size, waterLevel, lake }) {
   }
 
   // nearest point on any stream: distance, bed level, half width (reused object: no garbage)
-  const near = { d: Infinity, bed: 0, half: 0, t: 0, seg: null };
+  const near = { d: Infinity, bed: 0, half: 0, bank: BANK, t: 0, seg: null };
   function nearest(x, z) {
     near.d = Infinity;
     near.seg = null;
@@ -161,19 +277,27 @@ export function buildStreams(height, { size, waterLevel, lake }) {
         near.seg = seg;
         near.bed = a.bed + (b.bed - a.bed) * t;
         near.half = (a.width + (b.width - a.width) * t) / 2;
+        near.bank = a.bank + (b.bank - a.bank) * t;
       }
     }
     return near;
   }
 
-  /** The terrain height with the channel cut in (never raises the ground). */
+  /** The terrain height with the pits on the streams' way filled and the channel cut in. */
   function carve(x, z, ground) {
+    ground += fillAt(x, z);
     const c = nearest(x, z);
     if (!c.seg) return ground;
-    const u = (c.d - c.half) / BANK; // 0 at the bed's edge, 1 where the bank meets the natural ground
+    const u = (c.d - c.half) / c.bank; // 0 at the bed's edge, 1 where the bank meets the natural ground
     if (u >= 1) return ground;
     const s = u <= 0 ? 0 : u * u * (3 - 2 * u);
-    return Math.min(ground, c.bed + (ground - c.bed) * s + (u <= 0 ? 0 : 0));
+    return Math.min(ground, c.bed + (ground - c.bed) * s);
+  }
+
+  /** The pond's water level at (x, z), or -Infinity outside every pond (callers check the ground). */
+  function pondLevel(x, z) {
+    for (const p of ponds) if (Math.hypot(x - p.x, z - p.z) < p.r) return p.level;
+    return -Infinity;
   }
 
   /** Horizontal distance to the nearest stream's centre line (Infinity far away). */
@@ -181,10 +305,12 @@ export function buildStreams(height, { size, waterLevel, lake }) {
     return nearest(x, z).d;
   }
 
-  return { streams, carve, distance, nearest };
+  return { streams, ponds, carve, distance, nearest, pondLevel, fillAt };
 }
 
-const BANK = 7; // m from the bed's edge to natural ground
+const BANK = 7; // m from the bed's edge to natural ground (more where the channel runs deep)
+const SINK_AREA = 8e4; // m²: a closed basin bigger than this ends a stream (in a pond) instead of being filled
+const POND_DEPTH = 1.5; // m of water over the basin's low spot
 
 function chaikin(pts) {
   const out = [pts[0]];

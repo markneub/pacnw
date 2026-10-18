@@ -109,7 +109,14 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   walls, foothills) trace down until they meet a traced stream (4 survive: main 1.9 km basin → lake, 2 tributaries + a west
   creek that passes between spawn and the lake). Chaikin ×3, resampled every 4 m; width 1.8 → ~5 m with drained length; bed
   level forced to fall downstream. `heightAt` = `streams().carve(baseHeight)`: a flat bed, banks easing back over 7 m
-  (`BANK`), never raising ground. `streamBed()` gives stony, snow-free beds (groundColor/groundLayers → rock layer, grass
+  (`BANK`, wider where still deep: + 2.5 × (depth − 2.5)). **Pits:** the flood level runs flat over a depression, so the
+  falling bed once cut a 20 m sheer trench through the saddle south of the lake. Now each flooded component (level − h >
+  0.05) a trace crosses is either **filled** (sediment: `fillAt` adds level − h, bilinear on the 8 m grid, inside `carve`)
+  or, if bigger than `SINK_AREA` (8 ha), it's a **sink**: the trace stops, runs steepest-descent to the nearest low spot
+  and ends in a **pond** (`ponds`: level = low spot + 1.5 m, cells below it connected to the spot; drawn in `buildWater`
+  with the lake material as cell quads + a ring, the terrain hiding the overlap). The west creek ends in a pond at
+  (−381, 194), r ≈ 40 m. Channel depth now ≤ 3.5 m everywhere. `waterLevelAt(x, z)` (lake or pond) replaces
+  `WATER_LEVEL` in scatter, grass, mud and puddle checks. View: `x=-345&z=215&yaw=0.98&pitch=-0.15` (sun). `streamBed()` gives stony, snow-free beds (groundColor/groundLayers → rock layer, grass
   gone); scatter keeps trees 2.5 m, ferns/salal 0.6–1 m, logs 5 m off the water; pebbles cluster in beds. Water: a ribbon
   per stream, 6 verts across, level = rendered ground + ~0.15 m, falling downstream; half-width = bed + 0.7 m (searching for
   the banks spread it over flat valley floors: the 5 m grid only roughly holds the channel). Shader: 3-octave ripples

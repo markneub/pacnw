@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, WATER_LEVEL } from './config.js';
 import {
-  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt,
+  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt, waterLevelAt,
 } from './terrain.js';
 import { shared, patchSunlight, sunKey } from './materials.js';
 
@@ -134,11 +134,12 @@ function bakeGrassMap(terrain, canopyAt) {
       // dappled sunlight does: under a closed canopy the floor is moss and ferns, not lawn
       const open = 1 - Math.min(1, canopyAt(x, z) * 2.2);
       const meadow = smooth(nForest(x * 0.011 + 31, z * 0.011 - 17) * 0.5 + 0.5, 0.3, 0.75);
-      const shore = 1 - smooth(y, WATER_LEVEL + 3, WATER_LEVEL + 14);
+      const wl = waterLevelAt(x, z);
+      const shore = 1 - smooth(y, wl + 3, wl + 14);
       // no grass through snow (the 5 m map would smear it over the snow edge)
       const snowFree = 1 - smooth(layers[2], 0.03, 0.3);
       let density = layers[0] * snowFree * Math.min(1, 0.03 + 0.97 * open * open * (0.3 + 0.7 * meadow) + 0.8 * shore * open);
-      if (y < WATER_LEVEL + 0.2) density = 0;
+      if (y < wl + 0.2) density = 0;
 
       groundColor(x, y, z, slope, col);
       const shade = Math.min(1.2, lum(shaded[k * 3], shaded[k * 3 + 1], shaded[k * 3 + 2]) / Math.max(1e-4, lum(col.r, col.g, col.b)));
