@@ -83,6 +83,12 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   their random rotation), seated on the mean ground along them minus 0.12 × scale. Random headings poked one end up into
   the air on hillsides (seen by the user). Branch stubs and the nurse logs' torn roots use `_stub` (blunt truncated cones);
   pointed `_stick`s read as thorns. Log ends use `LogEnd` (0.42, 0.37, 0.31): the fresh `Wood` colour read as an orange blob.
+  **Nurse log root wad** (`nurse_log`, own rng `seed + 77`): a thick, lumpy domed plate of soil (R 2.4 r0, half-thickness
+  0.55 m, ragged lobed outline, torn flatter at the bottom; 18 × 7 rings per face + rim) instead of a flat disc; 11 thick
+  roots flare out of the trunk end across the front face, out past the rim, bend back and snap off; 24 torn root ends out
+  of the back; ~35 thin rootlets hanging from the rim. Roots use `RootSoil` too (bark-coloured ones took moss green and
+  read as sticks); `RootSoil` → the surface photo `soil` (brown_mud_02, copied from the ground set; the bark photo made the
+  plate read as a slice of trunk) and moss 0.25. ~3.2k tris (was ~1k).
   **Vine maple** leaves: `maple_spray()` shades each leaf (lighter centre, darker rim, mottle) with a soft shadow on the
   leaves beneath, lobes cut ~1/3 in; the cards are **folded** (`_card(fold=0.45)`: a shallow V along the twig, 4 tris; each
   half rises 0.45 × its width), with more roll, since flat horizontal cards seen at eye level were thin streaks. `fold=0`

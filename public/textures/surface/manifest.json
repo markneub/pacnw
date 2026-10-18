@@ -48,6 +48,18 @@
         0.02992
       ],
       "url": "https://polyhaven.com/a/lichen_rock"
+    },
+    {
+      "name": "soil",
+      "asset": "brown_mud_02",
+      "tile": 1.2,
+      "strength": 1.0,
+      "avg": [
+        0.07603,
+        0.05973,
+        0.03938
+      ],
+      "url": "https://polyhaven.com/a/brown_mud_02"
     }
   ]
 }

@@ -250,3 +250,9 @@ and bigger boulders, standing waves with white crests, and milky, churned water.
 two-section footbridge. Look: `?weather=sun&x=84&z=-6&yaw=0` (stand on the bridge and look up and down the river).
 Also fixed: a straight line across the water at bridge crossings (the trail's soft edge was drawn on top of it).
 Cost: the water shader does a few more texture reads; no new draws. Phone spawn draws 153 → 156.
+
+### 30. Nurse log root wads
+The upturned roots of the big fallen logs were a flat bark-textured disc. They're now what a windthrown tree tears out
+of the ground: a thick, lumpy plate of earth (with a soil photo texture), heavy roots flaring out of the trunk and
+snapping off past the edge, broken root ends poking out of the back, and thin rootlets hanging down. Still to refine:
+the radiating roots can look a bit spiky from some angles.

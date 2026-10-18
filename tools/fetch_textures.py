@@ -39,6 +39,7 @@ SETS = {
         ("cedar", "japanese_cedar_bark", 1.4, 1.0),   # fibrous strips, like western redcedar
         ("snag", "bark_willow_02", 1.6, 1.0),         # weathered silver-grey dead wood
         ("rock", "lichen_rock", 2.5, 0.85),           # dark basalt with grey lichen
+        ("soil", "brown_mud_02", 1.2, 1.0),           # root wads: torn earth
     ],
 }
 SIZES = (1024, 512)

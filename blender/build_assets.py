@@ -888,44 +888,112 @@ def nurse_log(M, name, seed=51, length=18.0, r0=1.1):
         tip = b.v((x + rng.uniform(0.2, 1.4) * (1.0 if i % 3 else 0.4), bend + math.cos(TAU * (i + 0.5) / sides) * r * 0.45,
                    zc + math.sin(TAU * (i + 0.5) / sides) * r * 0.45))
         b.face((loop[j], loop[i], tip), M["log_end"])
-    # root wad at the root end: a ragged vertical plate of soil, both faces
+    # Root wad at the root end: a windthrown tree tears up a thick, lumpy plate of soil with its
+    # roots (a flat disc read as a slice of trunk). The roots are earth-coated too (RootSoil:
+    # bark-coloured roots took the moss shader's green and read as sticks). Thick roots flare out of the trunk end across
+    # the plate's face, bend back at its rim and break off; fine rootlets dangle from the rim;
+    # torn ends poke out of the back. All own rng (seed + 77), so nothing else changes.
+    wr = random.Random(seed + 77)
     loop, x, r, bend, zc = loops[0]
-    R = r0 * 2.5
-    n = 26
-    cx, cz = x - 0.15, R * 0.6  # the plate's centre, standing up out of the ground
-    ring = []
-    for i in range(n):
-        a = TAU * i / n
-        rr = R * rng.uniform(0.62, 1.05) * (0.85 if math.sin(a) < -0.3 else 1.0)  # torn off flatter at the bottom
-        ring.append((math.cos(a) * rr, math.sin(a) * rr))
-    # a fairly flat, ragged plate: front and back faces only slightly domed
-    front = [b.v((cx - 0.05 + rng.uniform(-0.1, 0.1), bend + y, cz + zz)) for y, zz in ring]
-    back = [b.v((cx - 0.45 + rng.uniform(-0.1, 0.1), bend + y * 0.95, cz + zz * 0.95)) for y, zz in ring]
-    fc = b.v((cx + 0.05, bend, cz))
-    bc = b.v((cx - 0.55, bend, cz))
-    for i in range(n):
-        j = (i + 1) % n
-        b.face((fc, front[i], front[j]), M["soil"])  # faces +X (toward the trunk)
-        b.face((bc, back[j], back[i]), M["soil"])  # faces -X
-        b.face((front[i], back[i], back[j], front[j]), M["soil"])  # the rim, outward
-    # close the trunk end against the plate
+    R = r0 * 2.4
+    cx, cz = x - 0.35, R * 0.62  # the plate's centre, standing up out of the ground
+    T = 0.55  # half its thickness at the middle
+    nu, nv = 18, 7  # around, and from the middle out to the rim
+    lump = [[wr.uniform(-1, 1) for _ in range(nu)] for _ in range(4)]
+
+    def radius(a):
+        # ragged outline: a few big lobes and smaller bites, torn off flatter at the bottom
+        rr = 1.0 + 0.12 * math.sin(3 * a + 1.3) + 0.07 * math.sin(7 * a + 0.4) + 0.06 * lump[0][int(a / TAU * nu) % nu]
+        return R * rr * (0.82 if math.sin(a) < -0.35 else 1.0)
+
+    def plate(side):
+        """One face of the plate (side +1: toward the trunk, -1: away), as rings from the middle out."""
+        rows = []
+        for k in range(1, nv + 1):
+            t = k / nv
+            row = []
+            for i in range(nu):
+                a = TAU * i / nu
+                rr = radius(a) * t
+                # domed: thick in the middle, thinning to a ragged torn edge; lumpy all over
+                th = T * (1.0 - t ** 2.2) + 0.08 + 0.12 * lump[1 + (k % 3)][i] * (0.3 + t)
+                row.append(b.v((cx + side * th, bend + math.cos(a) * rr, cz + math.sin(a) * rr)))
+            rows.append(row)
+        centre = b.v((cx + side * (T + 0.08), bend, cz))
+        return centre, rows
+
+    for side in (1, -1):
+        centre, rows = plate(side)
+        for i in range(nu):
+            j = (i + 1) % nu
+            f = (centre, rows[0][i], rows[0][j]) if side > 0 else (centre, rows[0][j], rows[0][i])
+            b.face(f, M["soil"])
+            for k in range(nv - 1):
+                q = (rows[k][i], rows[k + 1][i], rows[k + 1][j], rows[k][j])
+                b.face(q if side > 0 else q[::-1], M["soil"])
+        if side > 0:
+            front_rim = rows[-1]
+        else:
+            back_rim = rows[-1]
+    for i in range(nu):  # the rim between the two faces
+        j = (i + 1) % nu
+        b.face((front_rim[i], back_rim[i], back_rim[j], front_rim[j]), M["soil"])
+    # the trunk flares into the plate: close its end against the soil
     for i in range(sides):
         j = (i + 1) % sides
-        b.face((fc, loop[i], loop[j]), M["log_end"])
-    # roots: torn ends sticking out of the plate's back face and its rim
-    for i in range(16):
-        a = TAU * i / 16 + rng.uniform(-0.15, 0.15)
-        rim = rng.random() < 0.6
-        rr = R * (rng.uniform(0.75, 0.95) if rim else rng.uniform(0.15, 0.6))
-        base = Vector((cx - 0.3, bend + math.cos(a) * rr, cz + math.sin(a) * rr))
-        out = Vector((rng.uniform(-1.0, -0.3), math.cos(a) * (1.0 if rim else 0.4), math.sin(a) * (1.0 if rim else 0.4))).normalized()
-        L = rng.uniform(0.5, 1.3)
-        mid = base + out * (L * 0.5) + Vector((0.0, 0.0, -0.1 * L))
-        r_root = rng.uniform(0.07, 0.13)
-        r_tip = rng.uniform(0.04, 0.07)
-        # torn-off root ends: blunt, not pointed
-        _stub(b, bark, base, mid, r_root, r_root * 0.8)
-        _stub(b, bark, mid - out * 0.05, mid + (out + Vector((0.0, 0.0, -0.3))).normalized() * (L * 0.35), r_root * 0.8, r_tip)
+        b.face((b.v((cx + T + 0.1, bend, cz)), loop[i], loop[j]), M["log_end"])
+
+    def root_chain(pts, r_a, r_b, mat):
+        """A root along a polyline, tapering from r_a to r_b, blunt at the torn end."""
+        n = len(pts) - 1
+        for k in range(n):
+            ra = r_a + (r_b - r_a) * k / n
+            rb = r_a + (r_b - r_a) * (k + 1) / n
+            _stub(b, mat, pts[k], pts[k + 1] + (pts[k + 1] - pts[k]) * 0.04, ra, rb, sides=6)
+
+    def back_surface(a, t):
+        """A point on the back face at angle a, fraction t of the way out to the rim."""
+        th = T * (1.0 - t ** 2.2) + 0.08
+        rr = radius(a) * t
+        return Vector((cx - th, bend + math.cos(a) * rr, cz + math.sin(a) * rr))
+
+    # thick roots: out of the trunk's end across the front face, out past the rim and bent back,
+    # snapped off (these make the outline: a ragged crown of roots around the plate)
+    face_x = cx + T * 0.55
+    for i in range(11):
+        a = TAU * i / 11 + wr.uniform(-0.2, 0.2)
+        if math.sin(a) < -0.6:
+            continue  # (the bottom is buried)
+        d = Vector((0.0, math.cos(a), math.sin(a)))
+        rr = radius(a)
+        pts = [Vector((x + 0.4, bend, zc)) + d * (r * 0.6)]
+        for t in (0.35, 0.65, 0.95):
+            pts.append(Vector((face_x + 0.15 * (1 - t), bend, cz)) + d * (rr * t))
+        reach = wr.uniform(0.5, 1.3)
+        pts.append(pts[-1] + d * reach * 0.6 + Vector((-reach * 0.45, 0.0, -0.1 * reach)))
+        pts.append(pts[-1] + d * reach * 0.25 + Vector((-reach * 0.6, 0.0, -0.35 * reach)))
+        root_chain(pts, wr.uniform(0.18, 0.28), wr.uniform(0.05, 0.09), M["soil"])
+    # torn root ends sticking out of the back, from just under its surface
+    for i in range(24):
+        a = wr.uniform(0, TAU)
+        t = wr.uniform(0.1, 0.85)
+        base = back_surface(a, t) + Vector((0.12, 0.0, 0.0))
+        out = Vector((-1.0, math.cos(a) * (0.3 + t), math.sin(a) * (0.3 + t) - 0.25)).normalized()
+        L = wr.uniform(0.35, 1.2)
+        mid = base + out * (L * 0.55) + Vector((0.0, wr.uniform(-0.1, 0.1), -0.1 * L))
+        root_chain([base, mid, mid + (out + Vector((0.0, 0.0, -0.5))).normalized() * (L * 0.45)],
+                   wr.uniform(0.05, 0.12), wr.uniform(0.025, 0.05), M["soil"])
+    # fine rootlets hanging from the rim and the back, curling down
+    for i in range(40):
+        a = wr.uniform(0, TAU)
+        if math.sin(a) < -0.45:
+            continue
+        d = Vector((0.0, math.cos(a), math.sin(a)))
+        top = back_surface(a, wr.uniform(0.75, 1.0)) + Vector((0.05, 0.0, 0.0))
+        L = wr.uniform(0.5, 1.4)
+        mid = top + d * (L * 0.2) + Vector((-wr.uniform(0.05, 0.3), 0.0, -L * 0.45))
+        end = mid + d * (L * 0.05) + Vector((wr.uniform(-0.15, 0.1), 0.0, -L * 0.55))
+        root_chain([top, mid, end], wr.uniform(0.025, 0.045), 0.015, M["soil"])
     return b.build(name)
 
 

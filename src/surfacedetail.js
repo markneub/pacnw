@@ -23,7 +23,7 @@ import { loadTextureSet } from './textures.js';
 // baked normals; the tiling lichen adds fine grain on top (see `amount`).
 const MATERIAL_LAYER = {
   Bark: 'bark', CedarBark: 'cedar', SnagBark: 'snag', Rock: 'rock', ScanRockA: 'rock', ScanRockB: 'rock',
-  RootSoil: 'bark', // the torn face of a root wad: fibrous, woody earth
+  RootSoil: 'soil', // the torn face of a root wad: earth (the bark photo made it read as a slice of trunk)
 };
 
 export const surfaceDetail = {
