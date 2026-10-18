@@ -23,12 +23,15 @@ export function buildStreamWater(trail) {
     if (!geo) continue;
     const mesh = new THREE.Mesh(geo, mat);
     mesh.name = 'stream';
+    // after the trail's transparent fringe: where the trail crosses, the fringe (sorted by distance
+    // with the water) was drawn over the creek in a straight line across it
+    mesh.renderOrder = 1;
     group.add(mesh);
   }
   return group;
 }
 
-const ACROSS = 6; // vertices across the ribbon
+const ACROSS = 9; // vertices across the ribbon (6 showed as long flat facets)
 const BUCKET = 4; // m of stream per rock-texture column (streams.js places at most 2 rocks per 4 m)
 
 let rockList = null;
@@ -79,7 +82,7 @@ function ribbon(pts, si) {
   const pos = [];
   const flow = []; // dir x, dir z, speed
   const uvs = []; // across (-1..1), along (m)
-  const info = []; // half width (m), stream index
+  const info = []; // half width (m), stream index, rapids (0..1)
   const idx = [];
   let along = 0;
   for (let i = 0; i < n; i++) {
@@ -103,7 +106,7 @@ function ribbon(pts, si) {
       pos.push(pts[i].x - dz * side * r, level[i], pts[i].z + dx * side * r);
       flow.push(dx, dz, speed);
       uvs.push(u, along);
-      info.push(reach[0], si);
+      info.push(reach[0], si, pts[i].rapid || 0);
     }
     if (i > 0) {
       const r0 = (i - 1) * ACROSS;
@@ -115,7 +118,7 @@ function ribbon(pts, si) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('aFlow', new THREE.Float32BufferAttribute(flow, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(info, 2));
+  geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(info, 3));
   geo.setIndex(idx);
   geo.computeVertexNormals();
   // faces must point up: flip the winding if this order made them point down
@@ -126,6 +129,146 @@ function ribbon(pts, si) {
   }
   geo.computeBoundingSphere();
   return geo;
+}
+
+/**
+ * A tileable field of small water waves (heights from a sum of waves whose wave numbers are whole
+ * numbers per tile, so it wraps), as a normal map: RG = slope (x, y) remapped to 0..1, B = height.
+ * The water's detail comes from this instead of value noise, which looked blobby and blocky.
+ */
+function waveNormals(size = 256, seed = 7) {
+  let r = seed;
+  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  const waves = [];
+  for (let k = 0; k < 48; k++) {
+    let kx;
+    let ky;
+    do {
+      kx = Math.round((rnd() * 2 - 1) * 14);
+      ky = Math.round((rnd() * 2 - 1) * 14);
+    } while (kx * kx + ky * ky < 4);
+    const kl = Math.hypot(kx, ky);
+    waves.push({ kx, ky, a: 1 / kl ** 1.6, ph: rnd() * Math.PI * 2 });
+  }
+  const h = new Float32Array(size * size);
+  // sin(kx·x + ky·y + φ) = sin(kx·x)cos(ky·y + φ) + cos(kx·x)sin(ky·y + φ): tables per wave, no sin per texel
+  const sx = new Float32Array(size);
+  const cx = new Float32Array(size);
+  const sy = new Float32Array(size);
+  const cy = new Float32Array(size);
+  for (const w of waves) {
+    for (let i = 0; i < size; i++) {
+      const ax = (w.kx * i / size) * Math.PI * 2;
+      const ay = (w.ky * i / size) * Math.PI * 2 + w.ph;
+      sx[i] = Math.sin(ax) * w.a;
+      cx[i] = Math.cos(ax) * w.a;
+      sy[i] = Math.sin(ay);
+      cy[i] = Math.cos(ay);
+    }
+    for (let y = 0; y < size; y++) {
+      const r = y * size;
+      const syy = sy[y];
+      const cyy = cy[y];
+      for (let x = 0; x < size; x++) h[r + x] += sx[x] * cyy + cx[x] * syy;
+    }
+  }
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of h) {
+    lo = Math.min(lo, v);
+    hi = Math.max(hi, v);
+  }
+  const data = new Uint8Array(size * size * 4);
+  const at = (x, y) => h[((y + size) % size) * size + ((x + size) % size)];
+  let maxS = 0;
+  const sl = new Float32Array(size * size * 2);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const sx = (at(x + 1, y) - at(x - 1, y)) / 2;
+      const sy = (at(x, y + 1) - at(x, y - 1)) / 2;
+      sl[(y * size + x) * 2] = sx;
+      sl[(y * size + x) * 2 + 1] = sy;
+      maxS = Math.max(maxS, Math.abs(sx), Math.abs(sy));
+    }
+  }
+  for (let i = 0; i < size * size; i++) {
+    data[i * 4] = Math.round((sl[i * 2] / maxS * 0.5 + 0.5) * 255);
+    data[i * 4 + 1] = Math.round((sl[i * 2 + 1] / maxS * 0.5 + 0.5) * 255);
+    data[i * 4 + 2] = Math.round(((h[i] - lo) / (hi - lo)) * 255);
+    data[i * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Tileable foam: clusters of bubbles (cellular noise: bright rims around dark cells, at two
+ * sizes, broken up by a soft mask), R = foam density 0..1. Foam is drawn where this exceeds a
+ * threshold set by how much white water there should be, so it grows in bubbly lacework.
+ */
+function foamTexture(size = 256, seed = 11) {
+  let r = seed;
+  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  // cellular noise on a g×g grid of jittered points (one per cell; only the 3×3 neighbouring
+  // cells are searched), wrapped so it tiles
+  const layer = (g) => {
+    const px = new Float32Array(g * g);
+    const py = new Float32Array(g * g);
+    for (let i = 0; i < g * g; i++) {
+      px[i] = rnd();
+      py[i] = rnd();
+    }
+    const out = new Float32Array(size * size);
+    const cell = size / g;
+    let m = 0;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const fx = x / cell;
+        const fy = y / cell;
+        const gx = Math.floor(fx);
+        const gy = Math.floor(fy);
+        let d1 = 9;
+        let d2 = 9;
+        for (let j = -1; j <= 1; j++) {
+          for (let i = -1; i <= 1; i++) {
+            const k = ((gy + j + g) % g) * g + ((gx + i + g) % g);
+            const dx = gx + i + px[k] - fx;
+            const dy = gy + j + py[k] - fy;
+            const d = dx * dx + dy * dy;
+            if (d < d1) {
+              d2 = d1;
+              d1 = d;
+            } else if (d < d2) d2 = d;
+          }
+        }
+        const v = Math.sqrt(d2) - Math.sqrt(d1); // 0 on the cell walls
+        out[y * size + x] = v;
+        if (v > m) m = v;
+      }
+    }
+    for (let i = 0; i < out.length; i++) out[i] = 1 - Math.min(1, out[i] / (m * 0.35)); // 1 on the walls
+    return out;
+  };
+  const big = layer(8);
+  const small = layer(16);
+  const data = new Uint8Array(size * size * 4);
+  for (let i = 0; i < size * size; i++) {
+    const v = Math.min(1, big[i] * 0.6 + small[i] * 0.55);
+    data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(v * 255);
+    data[i * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 function streamMaterial(rockTex) {
@@ -139,6 +282,8 @@ function streamMaterial(rockTex) {
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -4,
   });
+  const waves = waveNormals();
+  const foam = foamTexture();
   mat.onBeforeCompile = (shader) => {
     patchSunlight(shader);
     shader.uniforms.uSwTime = shared.uTime; // (own name: patchSunlight declares uTime)
@@ -147,12 +292,14 @@ function streamMaterial(rockTex) {
     shader.uniforms.uSwCanopyRect = shared.uCanopyRect;
     shader.uniforms.uSwRocks = { value: rockTex };
     shader.uniforms.uSwSun = shared.uSun;
+    shader.uniforms.uSwWaves = { value: waves };
+    shader.uniforms.uSwFoamTex = { value: foam };
     patchGlitter(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec3 aFlow;
-        attribute vec2 aInfo;
-        varying vec2 vSwInfo;
+        attribute vec3 aInfo;
+        varying vec3 vSwInfo;
         varying vec3 vFlow;
         varying vec2 vWUv;
         varying vec3 vWPos;`)
@@ -170,7 +317,9 @@ function streamMaterial(rockTex) {
         ${GLITTER_GLSL}
         uniform highp sampler2D uSwRocks;
         uniform float uSwSun;
-        varying vec2 vSwInfo;
+        uniform sampler2D uSwWaves;
+        uniform sampler2D uSwFoamTex;
+        varying vec3 vSwInfo;
         varying vec3 vFlow;
         varying vec2 vWUv;
         varying vec3 vWPos;
@@ -179,16 +328,13 @@ function streamMaterial(rockTex) {
           vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(swHash(i), swHash(i + vec2(1, 0)), f.x), mix(swHash(i + vec2(0, 1)), swHash(i + vec2(1, 1)), f.x), f.y);
         }
-        // ripples drifting downstream: two layers at different scales and speeds
-        float swRipples(vec2 q, float speed) {
-          // q in metres (across, along). Stretched along the flow, small: wavelets of ~0.1-0.5 m
-          // (metre-scale ones mirrored the sky as big flat white blotches)
-          vec2 a = vec2(q.x * 2.2, q.y * 1.1 - uSwTime * speed * 0.9);
-          vec2 b = vec2(q.x * 5.5 + 4.1, q.y * 2.8 - uSwTime * speed * 1.5);
-          vec2 c = vec2(q.x * 12.0 + 1.7, q.y * 6.5 - uSwTime * speed * 2.3);
-          return swNoise(a) * 0.5 + swNoise(b) * 0.3 + swNoise(c) * 0.2;
-        }
         float swFoam;
+        float swSpeed; // m/s here (fast mid-channel, slow at the banks, faster in the rapids)
+        vec2 swVel;    // the local current (across, along), m/s
+        vec2 swPm;     // this point in the ribbon's frame (across, along), m
+        float swPhase0;
+        float swPhase1;
+        float swMix;
         // Rocks: the (up to) 6 in this and the neighbouring 4 m of stream, in the ribbon's frame:
         // x = across (m), y = along (m, downstream +), z = radius
         vec3 swRk[6];
@@ -225,7 +371,7 @@ function streamMaterial(rockTex) {
           }
           return h;
         }
-        // foam (x) and the sideways shift of the flow (y, m) around the rocks
+        // around the rocks: white water (x) and the current's sideways push (y, m/s per m/s)
         vec2 swRockFlow(vec2 pm, float speed, float sp) {
           vec2 f = vec2(0.0);
           for (int i = 0; i < 6; i++) {
@@ -235,67 +381,100 @@ function streamMaterial(rockTex) {
             vec2 d = dm / R;
             float rn = length(d);
             if (rn > 10.0) continue;
-            // streamlines part around the stone (potential flow round a cylinder) and close up behind
-            f.y += dm.x / (rn * rn + 0.35) * smoothstep(6.0, 1.0, rn) * (d.y < 0.0 ? 1.0 : exp(-d.y * 0.4));
-            // a collar of white water where the current meets the stone
-            // (thin and broken, thickest on the upstream face where the water piles up)
+            // the current parts around the stone (flow round a cylinder) and closes behind it
+            f.y += d.x / (rn * rn + 0.35) * smoothstep(6.0, 1.0, rn) * (d.y < 0.0 ? 1.0 : exp(-d.y * 0.4));
+            // a collar of broken water where the current meets the stone, thickest upstream
             float face = smoothstep(0.6, -0.8, d.y / max(rn, 1e-3));
-            float n = swNoise(vec2(atan(d.y, d.x) * 4.0, rn * 9.0 - uSwTime * speed * 3.0)) * 0.6
-                    + swNoise(vec2(atan(d.y, d.x) * 11.0, rn * 21.0 - uSwTime * speed * 4.0)) * 0.4;
-            // (the stone is narrower at the waterline than its footprint: ~0.8 R)
-            float collar = smoothstep(0.95 + 0.25 * face, 0.75, rn) * smoothstep(0.45, 0.8, n + 0.2 * face);
-            f.x = max(f.x, collar * (0.35 + 0.45 * sp) * (0.3 + 0.7 * face));
-            // a turbulent wake widening downstream, longer on fast water
+            f.x = max(f.x, smoothstep(0.98 + 0.3 * face, 0.75, rn) * (0.35 + 0.65 * face) * (0.4 + 0.6 * sp));
+            // a wake of bubbles behind it, longer on fast water
             if (d.y > 0.0) {
-              // (narrow and short: a trail of bubbles a few radii long, not a sheet of white water)
               float arm = abs(d.x) - (0.55 + 0.15 * d.y);
-              float wake = smoothstep(0.15, -0.35, arm) * exp(-d.y / (1.2 + 2.5 * sp)) * smoothstep(0.6, 1.1, rn);
-              float t = swNoise(vec2(d.x * 7.0, d.y * 1.4 - uSwTime * speed * 1.8)) * 0.6
-                      + swNoise(vec2(d.x * 15.0 + 3.0, d.y * 3.5 - uSwTime * speed * 3.0)) * 0.4;
-              f.x = max(f.x, wake * smoothstep(0.5, 0.8, t) * (0.2 + 0.4 * sp));
-              // the V's arms: a thin line of broken water along each
-              f.x = max(f.x, exp(-arm * arm * 30.0) * exp(-d.y / (1.5 + 3.0 * sp)) * smoothstep(0.45, 0.75, t) * (0.15 + 0.35 * sp));
+              f.x = max(f.x, smoothstep(0.2, -0.4, arm) * exp(-d.y / (1.2 + 3.0 * sp)) * smoothstep(0.6, 1.1, rn) * (0.25 + 0.45 * sp));
             }
           }
           return f;
         }
-        vec2 swRockF;`)
+        vec2 swRockF;
+        // Flow-map advection (two phases half a cycle apart, crossfaded, each restarting where the
+        // other is at full weight, so the pattern streams with the local current without ever
+        // visibly resetting; the cycle is offset per spot so the water doesn't pulse as one)
+        void swPhases() {
+          float cyc = uSwTime / 0.9 + swNoise(swPm * vec2(0.6, 0.25)) * 1.7;
+          swPhase0 = fract(cyc);
+          swPhase1 = fract(cyc + 0.5);
+          swMix = abs(1.0 - 2.0 * swPhase0); // weight of phase 1
+        }
+        vec4 swFlowTex(sampler2D tex, vec2 pm, float tile, vec2 off) {
+          // (the pattern moves at most ~1.7 m/s and ~1.5 m per cycle: pushed further, it smeared
+          // into streaks and swirled around the rocks)
+          vec2 v = swVel * min(1.0, 1.7 / max(length(swVel), 1e-3));
+          vec2 a = (pm - v * swPhase0 * 0.9) / tile + off;
+          vec2 b = (pm - v * swPhase1 * 0.9) / tile + off + 0.5;
+          return mix(texture2D(tex, a), texture2D(tex, b), swMix);
+        }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         {
-          // white water: on fast (steep) runs, streaky along the flow, and a thin line at the banks
-          float speed = vFlow.z;
+          float rapid = vSwInfo.z;
+          float u = vWUv.x;
+          swPm = vec2(u * vSwInfo.x, vWUv.y);
           swLoadRocks();
-          swRockF = swRkN > 0 ? swRockFlow(vec2(vWUv.x * vSwInfo.x, vWUv.y), speed, smoothstep(0.3, 2.0, speed)) : vec2(0.0);
-          vec2 q = vec2(vWUv.x * 2.0 + swRockF.y * 2.0 / vSwInfo.x, vWUv.y);
-          // (long thin streaks broken into flecks: broad noise blobs read as flat white patches)
-          float streaks = swNoise(vec2(q.x * 9.0, q.y * 0.45 - uSwTime * speed * 1.2)) * swNoise(vec2(q.x * 3.5 + 9.0, q.y * 1.1 - uSwTime * speed * 2.0));
-          float fine = swNoise(vec2(q.x * 22.0, q.y * 3.0 - uSwTime * speed * 2.6)) * 0.6 + swNoise(vec2(q.x * 47.0, q.y * 7.0 - uSwTime * speed * 3.4)) * 0.4;
-          swFoam = smoothstep(1.5, 2.5, speed) * smoothstep(0.28, 0.6, streaks) * smoothstep(0.3, 0.75, fine) * 0.5;
-          swFoam = max(swFoam, smoothstep(0.8, 0.98, abs(vWUv.x)) * 0.18 * smoothstep(0.45, 0.9, fine));
-          swFoam = max(swFoam, swRockF.x);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.82, 0.82), swFoam);
+          float base = vFlow.z + 2.6 * rapid;
+          float sp = smoothstep(0.3, 2.5, base);
+          swRockF = swRkN > 0 ? swRockFlow(swPm, base, sp) : vec2(0.0);
+          // the current: fastest mid-channel, dragging at the banks; it wanders in slow eddies
+          // and parts around rocks, so each part of the creek moves at its own pace
+          float profile = 0.3 + 0.7 * (1.0 - u * u);
+          vec2 tq = swPm * vec2(0.45, 0.2) + vec2(0.0, -uSwTime * 0.12 * base);
+          vec2 turb = vec2(swNoise(tq), swNoise(tq + 17.3)) - 0.5;
+          swSpeed = base * profile * (0.8 + 0.5 * turb.y);
+          swVel = vec2(turb.x * 0.5 * base + clamp(swRockF.y, -1.0, 1.0) * 0.3 * base, swSpeed);
+          swPhases();
+          // white water: fast runs and rapids (in drifting patches), standing-wave crests in the
+          // rapids, rocks, and a thin line at the banks; drawn as advected bubbly foam
+          float patches = swNoise(swPm * vec2(0.5, 0.18) + vec2(0.0, -uSwTime * 0.3 * base));
+          float cov = smoothstep(1.4, 3.0, vFlow.z) * (0.15 + 0.5 * patches);
+          // standing waves in the rapids: irregular ridges (not bands straight across), white on top
+          float rn = swNoise(swPm * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise(swPm * vec2(1.7, 1.2) + 8.3) * 0.35;
+          float crest = 1.0 - abs(2.0 * rn - 1.0);
+          cov = max(cov, rapid * (0.1 + 0.7 * smoothstep(0.6, 0.95, crest)) * (0.45 + 0.55 * patches));
+          cov = max(cov, swRockF.x * 1.25);
+          cov = max(cov, smoothstep(0.82, 0.98, abs(u)) * 0.3);
+          // (stretched along the current: white water streaks, round bubbles read as a cow print)
+          vec2 fq = swPm * vec2(1.0, 0.33);
+          float ft = swFlowTex(uSwFoamTex, fq, 1.1, vec2(0.0)).r * 0.6 + swFlowTex(uSwFoamTex, fq, 0.4, vec2(0.31, 0.7)).r * 0.4;
+          swFoam = cov <= 0.001 ? 0.0 : smoothstep(1.0 - cov, 1.0 - cov + 0.3, ft) * min(1.0, cov * 2.5);
+          // rapids: churned, aerated water is milky and lighter between the foam
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.25, 0.24), rapid * 0.55 * (0.5 + 0.5 * patches));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.84, 0.84), swFoam * 0.95);
           // clearer at the edges (you see the stones), deeper colour in the middle; edge fades into the bank
-          diffuseColor.a = mix(0.55, 0.88, 1.0 - abs(vWUv.x)) * (1.0 - smoothstep(0.82, 1.0, abs(vWUv.x)));
-          diffuseColor.a = max(diffuseColor.a, swFoam * 0.9);
+          diffuseColor.a = mix(0.55, 0.9, 1.0 - abs(u)) * (1.0 - smoothstep(0.82, 1.0, abs(u)));
+          diffuseColor.a = max(diffuseColor.a, swFoam * 0.92);
+          // churned, aerated water hides the bed
+          diffuseColor.a = mix(diffuseColor.a, 0.97 * (1.0 - smoothstep(0.9, 1.0, abs(u))), rapid);
         }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
-          vec2 q = vec2(vWUv.x * vSwInfo.x + swRockF.y, vWUv.y);
-          float e = 0.05;
-          float h0 = swRipples(q, vFlow.z);
-          float hx = swRipples(q + vec2(e, 0.0), vFlow.z);
-          float hy = swRipples(q + vec2(0.0, e), vFlow.z);
-          float amp = 0.012 + 0.018 * smoothstep(0.4, 2.0, vFlow.z);
+          // wavelets streaming with the current at two scales; rougher where it's fast
+          vec2 n1 = swFlowTex(uSwWaves, swPm, 1.7, vec2(0.0)).xy * 2.0 - 1.0;
+          vec2 n2 = swFlowTex(uSwWaves, swPm * vec2(1.0, 0.8), 0.55, vec2(0.37, 0.11)).xy * 2.0 - 1.0;
+          float rapid = vSwInfo.z;
+          float base = vFlow.z + 2.6 * rapid;
+          float amp = 0.1 + 0.16 * smoothstep(0.4, 2.5, base) + 0.12 * rapid;
+          vec2 slope = (n1 * 0.6 + n2 * 0.55) * amp * (1.0 + 0.8 * swRockF.x);
+          // rapids: standing waves (they stay put while the water runs through them)
+          // (slopes of the same ridge field as the foam, by finite differences)
+          float r0 = swNoise(swPm * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise(swPm * vec2(1.7, 1.2) + 8.3) * 0.35;
+          float rx = swNoise((swPm + vec2(0.1, 0.0)) * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise((swPm + vec2(0.1, 0.0)) * vec2(1.7, 1.2) + 8.3) * 0.35;
+          float ry = swNoise((swPm + vec2(0.0, 0.1)) * vec2(0.75, 0.55) + 3.1) * 0.65 + swNoise((swPm + vec2(0.0, 0.1)) * vec2(1.7, 1.2) + 8.3) * 0.35;
+          float c0 = 1.0 - abs(2.0 * r0 - 1.0);
+          slope += rapid * 0.55 * vec2((1.0 - abs(2.0 * rx - 1.0)) - c0, (1.0 - abs(2.0 * ry - 1.0)) - c0) / 0.1 * 0.35;
           vec3 along = normalize(vec3(vFlow.x, 0.0, vFlow.y));
           vec3 across = vec3(-along.z, 0.0, along.x);
-          // rougher just downstream of a rock
-          amp *= 1.0 + 1.5 * swRockF.x;
-          vec3 nWorld = vec3(0.0, 1.0, 0.0) - (across * (hx - h0) + along * (hy - h0)) / e * amp;
+          vec3 nWorld = vec3(0.0, 1.0, 0.0) - across * slope.x - along * slope.y;
           if (swRkN > 0) {
-            float sp = smoothstep(0.3, 2.0, vFlow.z);
-            vec2 pm = vec2(vWUv.x * vSwInfo.x, vWUv.y);
-            float r0 = swRockH(pm, sp);
-            nWorld -= across * (swRockH(pm + vec2(0.06, 0.0), sp) - r0) / 0.06 + along * (swRockH(pm + vec2(0.0, 0.06), sp) - r0) / 0.06;
+            float sp = smoothstep(0.3, 2.5, base);
+            float r0 = swRockH(swPm, sp);
+            nWorld -= across * (swRockH(swPm + vec2(0.06, 0.0), sp) - r0) / 0.06 + along * (swRockH(swPm + vec2(0.0, 0.06), sp) - r0) / 0.06;
           }
           nWorld = normalize(nWorld);
           normal = normalize((viewMatrix * vec4(nWorld, 0.0)).xyz);
@@ -325,13 +504,13 @@ function streamMaterial(rockTex) {
           reflectedLight.indirectSpecular = refl * fres * (1.0 - swFoam);
           // the overcast key light is really the whole sky (reflected above): as a point light on
           // smooth water it threw hard glints, masked by the crowns into flat white blotches
-          reflectedLight.directSpecular *= 0.5 * uSwSun;
+          reflectedLight.directSpecular *= 0.5 * uSwSun * (1.0 - swFoam);
           // sun glitter where the sun reaches the water (the canopy along the ray toward it), wider
           // on faster, rougher water
           vec2 toSun = vec2(${(SUN_DIR.x / SUN_DIR.y).toFixed(3)}, ${(SUN_DIR.z / SUN_DIR.y).toFixed(3)}) * 10.0;
           float shade = min(1.0, texture2D(uSwCanopy, (vWPos.xz + toSun - uSwCanopyRect.xy) / uSwCanopyRect.zw).r * 2.4);
           reflectedLight.indirectSpecular += ${'vec3(' + [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b].map((v) => v.toFixed(3)).join(', ') + ')'}
-            * glitter(vWPos, normalize(cameraPosition - vWPos), 0.2 + 0.12 * smoothstep(0.4, 2.0, vFlow.z)) * (1.0 - shade) * (1.0 - swFoam);
+            * glitter(vWPos, normalize(cameraPosition - vWPos), 0.2 + 0.12 * smoothstep(0.4, 2.5, vFlow.z + 2.6 * vSwInfo.z)) * (1.0 - shade) * (1.0 - swFoam);
         }
         #endif`);
   };

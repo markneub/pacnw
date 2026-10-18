@@ -168,6 +168,22 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   turned whole reaches into flat white blotches (found by zeroing the light terms: it was diffuse, i.e. foam). The
   overcast key light no longer gives water direct specular (× 0.5 uSun). Phone spawn draws 173 → 153 (the pit fill/pond moved
   things), tris 0.90 → 0.94M. Views: `x=459.5&z=-4.3&yaw=-0.77&pitch=-0.35`, `x=463&z=-12.7&yaw=3.13&pitch=-0.4`.
+- **Water shading v2** (streamwater.js; the user: "too blocky", "the water moves altogether"): detail is two load-time
+  tileable textures instead of value noise: `waveNormals()` (48 integer-wavenumber sine waves, amplitude k^−1.6, slopes in
+  RG, height in B; separable sin tables, ~40 ms) and `foamTexture()` (cellular noise, bright on the cell walls, 8 + 16
+  cells; ~20 ms). Both are **flow-map advected** (`swFlowTex`: two phases half a ~0.9 s cycle apart, crossfaded, the cycle
+  offset per spot by noise so it never pulses as one) along a **per-pixel current** `swVel`: speed profile across the
+  channel (0.3 at the banks → 1 mid-stream) × slow drifting turbulence noise, plus the push around rocks; displacement is
+  capped at ~1.7 m/s (more smeared into streaks and swirls). Foam = advected foam texture over a threshold set by coverage
+  (fast runs in drifting patches, rapids crests, rock collars/wakes, a thin bank line), stretched 3× along the flow. Ribbon
+  9 verts across (was 6: long flat facets). Gotcha: the trail's transparent **fringe** sorted after the water and painted a
+  straight line across the creek at crossings: stream meshes have `renderOrder` 1.
+- **Rapids** (`streams.js` `RAPIDS` at (112, −8) on the main creek, `p.rapid` 0..1 over ~150 m up / 130 m down): channel
+  ~70% wider (8.5 m), bed 0.6 m deeper, ~2× the rocks and bigger ones (+0.45 r), and the trail is routed to cross there
+  (`WET_COST` × 0.1 in the rapids): a 12.2 m two-piece footbridge (spans > 9 m use two models end to end, 0.5 m overlap).
+  In the shader (`aInfo.z`): base speed + 2.6, standing-wave ridges (|2n − 1| ridge noise: white crests, slopes in the
+  normal), milky aerated colour, alpha → 0.97 (white water hides the bed). Views: on the bridge
+  `x=84&z=0`, looking up/downstream.
 - **Sun glitter** (`GLITTER_GLSL` + `patchGlitter` in materials.js, used by the lake and stream shaders): world-anchored
   cells (6 cm, doubling with distance in blended power-of-two LODs, `0.004·dist`), each holding one round facet point at a
   random spot that re-rolls 3–7×/s (staggered, fading in/out). A facet flashes with probability exp(−tan²θh/σ²) × 0.3,

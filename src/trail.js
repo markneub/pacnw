@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
-  streams, setWalkModifier,
+  streams, setWalkModifier, streamBed,
 } from './terrain.js';
 import { shared, wetChunks, patchSunlight, sunKey, patchPuddles } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
@@ -235,7 +235,7 @@ function resample(pts, spacing) {
 export function buildTrail() {
   const heights = new Float32Array(NX * NZ);
   const side = new Float32Array(NX * NZ);
-  const wet = new Uint8Array(NX * NZ);
+  const wet = new Float32Array(NX * NZ);
   for (let iz = 0; iz < NZ; iz++) {
     for (let ix = 0; ix < NX; ix++) {
       const x = MIN_X + ix * CELL;
@@ -245,7 +245,8 @@ export function buildTrail() {
       // creeks: stepping into one costs a lot, so the trail crosses once, squarely, rather than
       // following a channel (it once crossed the same creek twice at a hairpin)
       const c = streams().nearest(x, z);
-      if (c.seg && c.d < c.half + 4) wet[iz * NX + ix] = 1;
+      // (the rapids, streams.js, are where the trail is meant to cross the main creek: cheap there)
+      if (c.seg && c.d < c.half + 4) wet[iz * NX + ix] = c.seg.a.rapid > 0.3 ? 0.1 : 1;
     }
   }
 
@@ -601,7 +602,9 @@ function buildCorridorMesh(points, distanceTo) {
       const d = distanceTo(x, z);
       const cut = Math.abs(y - g);
       tmp.copy(soil).lerp(dirtWet, Math.min(1, cut / 3) * 0.5);
-      col.lerp(tmp, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - snow * 0.85));
+      // (not where a creek runs through the cut: its bed stays wet stone, or the strip's edge showed under the water)
+      const bedHere = streamBed(x, z);
+      col.lerp(tmp, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - snow * 0.85) * (1 - bedHere));
 
       const wobble = Math.sin(x * 0.31 + z * 0.17) * 0.18 + Math.sin(x * 0.07 - z * 0.11) * 0.2;
       // (in snow a softer edge and a boot-packed groove down the middle, over the snow's own colour:
@@ -615,7 +618,7 @@ function buildCorridorMesh(points, distanceTo) {
       col.lerp(tmp, t);
 
       // detail layers: exposed soil on the banks and the tread itself read as dirt
-      const dirtW = Math.max(t, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75) * (1 - snow * 0.85);
+      const dirtW = Math.max(t, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - bedHere)) * (1 - snow * 0.85);
       layers.push(lw[0] * (1 - dirtW), lw[1] * (1 - dirtW), lw[2] * (1 - dirtW), lw[3] * (1 - dirtW) + dirtW);
 
       // fade the strip's outer edge into the terrain beneath

@@ -239,3 +239,14 @@ the steepest 5% went from 26% to 21% grade). It also avoids walking along creeks
 (4 footbridges now). The dark spots were the hidden curtain under the trail's edge: its lighting was broken (black)
 wherever it peeked above the ground. Fixed, along with thin black lines along the trail edge in the snow. No holes.
 Note: the new route moved trees near the trail, and the sign distances updated with it.
+
+### 29. Creek water rebuilt; a rapids crossing
+The creek water was blocky and moved as one sheet. It's now built from fine wavelets and bubbly foam that stream along
+with a current that varies across the creek: fast in the middle, slow by the banks, wandering in slow eddies and parting
+around rocks, so different parts of the water move at their own pace and nothing visibly loops. White water forms in
+drifting patches on fast runs, as broken collars around rocks and as trails of bubbles behind them.
+One crossing is now a **rapids**: the main creek widens to ~8.5 m over a ~280 m reach just north of the lake, with more
+and bigger boulders, standing waves with white crests, and milky, churned water. The trail crosses it on a longer
+two-section footbridge. Look: `?weather=sun&x=84&z=-6&yaw=0` (stand on the bridge and look up and down the river).
+Also fixed: a straight line across the water at bridge crossings (the trail's soft edge was drawn on top of it).
+Cost: the water shader does a few more texture reads; no new draws. Phone spawn draws 153 → 156.

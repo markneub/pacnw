@@ -350,7 +350,12 @@ function placeTrailFurniture(trail, add) {
 
   // footbridges over the creeks (the model is 6.4 m long, along local X)
   for (const c of trail.crossings ?? []) {
-    add('footbridge', { x: c.x, y: c.deck, z: c.z, rotY: Math.atan2(-c.dz, c.dx), scale: 1, scaleX: c.span / 6.4, tint: 0.5 });
+    // long spans (the rapids) in two lengths end to end, so the planks keep their width
+    const parts = c.span > 9 ? 2 : 1;
+    for (let k = 0; k < parts; k++) {
+      const off = parts === 1 ? 0 : (k - 0.5) * (c.span / 2);
+      add('footbridge', { x: c.x + c.dx * off, y: c.deck, z: c.z + c.dz * off, rotY: Math.atan2(-c.dz, c.dx), scale: 1, scaleX: (c.span / parts + (parts > 1 ? 0.5 : 0)) / 6.4, tint: 0.5 }); // (halves overlap: no gap mid-deck)
+    }
   }
 
   const lake = stops.find((s) => s.name === 'lake');

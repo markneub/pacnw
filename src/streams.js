@@ -218,13 +218,31 @@ export function buildStreams(height, { size, waterLevel, lake }) {
     let pts = cells.map((k) => ({ x: -half + (k % n) * GRID, z: -half + Math.floor(k / n) * GRID, acc: flowAcc[k] }));
     for (let r = 0; r < 3; r++) pts = chaikin(pts);
     pts = resample(pts, SAMPLE);
+    // arc length, and the rapids reach (the main creek only: around RAPIDS, where the trail crosses)
+    let along = 0;
+    let s0 = -1;
+    let best = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      if (i > 0) along += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+      pts[i].s = along;
+      const d = Math.hypot(pts[i].x - RAPIDS.x, pts[i].z - RAPIDS.z);
+      if (streams.length === 0 && d < best && d < 60) {
+        best = d;
+        s0 = along;
+      }
+    }
+    for (const p of pts) {
+      const ds = p.s - s0;
+      p.rapid = s0 < 0 ? 0 : smooth(-RAPIDS.before, -RAPIDS.before + 40, ds) * (1 - smooth(RAPIDS.after - 30, RAPIDS.after, ds));
+    }
     // bed: a little below the natural ground, never rising downstream
     let bed = Infinity;
     for (const p of pts) {
-      const width = 1.8 + Math.min(3.2, Math.sqrt(p.acc) * 0.08); // a creek: ~2 m at the spring, ~5 m at the lake
+      // a creek: ~2 m at the spring, ~5 m at the lake; ~70% wider through the rapids
+      const width = (1.8 + Math.min(3.2, Math.sqrt(p.acc) * 0.08)) * (1 + 0.7 * p.rapid);
       p.width = width;
       const ground = filled(p.x, p.z);
-      bed = Math.min(bed - 0.02, ground - 0.9 - width * 0.12);
+      bed = Math.min(bed - 0.02, ground - 0.9 - width * 0.12 - 0.6 * p.rapid);
       p.bed = bed;
       // where the channel still runs deep (a smoothed bend over a spur), the banks lie back further
       p.bank = BANK + Math.max(0, ground - bed - 2.5) * 2.5;
@@ -239,18 +257,14 @@ export function buildStreams(height, { size, waterLevel, lake }) {
   const rocks = [];
   streams.forEach((st, si) => {
     const pts = st.points;
-    let along = 0;
-    for (let i = 0; i < pts.length; i++) {
-      if (i > 0) along += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
-      pts[i].s = along;
-    }
     for (let i = 3; i < pts.length - 3; i++) {
       const p = pts[i];
       const fall = Math.max(0, (pts[i - 1].bed - pts[i + 1].bed) / (2 * SAMPLE));
       const rnd = (k) => hashU(si * 7919 + i, k);
-      if (rnd(0) > 0.14 + Math.min(0.45, fall * 5)) continue;
+      if (rnd(0) > 0.14 + Math.min(0.45, fall * 5) + 0.5 * p.rapid) continue;
       const half = p.width / 2;
-      const r = Math.min(half * 0.55, 0.3 + 0.6 * rnd(1) * rnd(2) + 0.25 * Math.min(1, fall * 8));
+      // (boulders in the rapids: the current breaks over them)
+      const r = Math.min(half * 0.55, 0.3 + 0.6 * rnd(1) * rnd(2) + 0.25 * Math.min(1, fall * 8) + 0.45 * p.rapid * rnd(7));
       const a = (rnd(3) * 2 - 1) * Math.max(0, half - r * 0.6);
       const ds = (rnd(4) - 0.5) * SAMPLE * 0.8;
       const dx = pts[i + 1].x - pts[i - 1].x;
@@ -340,6 +354,12 @@ export function buildStreams(height, { size, waterLevel, lake }) {
   return { streams, ponds, rocks, carve, distance, nearest, pondLevel, fillAt };
 }
 
+/** The rapids: the main creek's reach around this point (where the trail crosses it) runs wide and fast. */
+const RAPIDS = { x: 112, z: -8, before: 150, after: 130 };
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 const BANK = 7; // m from the bed's edge to natural ground (more where the channel runs deep)
 const SINK_AREA = 8e4; // m²: a closed basin bigger than this ends a stream (in a pond) instead of being filled
 const POND_DEPTH = 1.5; // m of water over the basin's low spot
