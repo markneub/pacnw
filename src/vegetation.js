@@ -119,6 +119,24 @@ function patchCards(mat) {
   const prevKey = mat.customProgramCacheKey;
   mat.onBeforeCompile = (shader, renderer) => {
     prev?.call(mat, shader, renderer);
+    if (maple) {
+      // early fall: where each leaf turns comes from its world position (smooth patches through
+      // the crown, different on every tree), so the one spray texture doesn't repeat its red leaf
+      shader.vertexShader = 'varying vec3 vFallP;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vFallP = transformed;
+        #ifdef USE_INSTANCING
+        vFallP = (instanceMatrix * vec4(transformed, 1.0)).xyz;
+        #endif`);
+      shader.fragmentShader = 'varying vec3 vFallP;\n' + shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec3 q = vFallP * 0.55;
+          float turn = sin(q.x * 1.3 + sin(q.z * 0.9 + q.y * 0.4)) * sin(q.z * 1.1 + q.y * 0.7 + sin(q.x * 0.6)) * 0.5 + 0.5;
+          // the painted autumn leaves (redder than green) fall back to green where turn is low
+          float green = (1.0 - smoothstep(0.35, 0.65, turn)) * smoothstep(0.0, 0.06, diffuseColor.r - diffuseColor.g);
+          float l = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+          diffuseColor.rgb = mix(diffuseColor.rgb, l * vec3(0.45, 1.25, 0.1), green);
+        }`);
+    }
     shader.fragmentShader = '#define CARD_SKY 1.6\n' + shader.fragmentShader
       .replace('#include <alphatest_fragment>', `
         #ifdef USE_MAP

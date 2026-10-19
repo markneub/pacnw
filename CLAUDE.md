@@ -163,7 +163,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   to a point, open base), which up close read as dark poles with cut ends. Now `_limb(b, mat, pts, radii, sides)`: one
   continuous tapered tube along a polyline (frame carried along so rings don't twist, closed to a point past the end):
   stems 9 rings × 6 sides, twigs 3 × 4. Maple near model 2070 → 4434 tris (fill, not tris, is the tree cost). Edge-on
-  card fade is now `smoothstep(0.05, 0.25)` (leaves vanishing off their twigs left bare sticks). Not yet phone-benched. View:
+  card fade is now `smoothstep(0.05, 0.25)` (leaves vanishing off their twigs left bare sticks). Not yet phone-benched.
+  **Early fall** (the user: "break up the green a little"; vine maple is the only deciduous tree): `maple_spray()` colours
+  leaves by its own rng (`seed + 1`, so the layout is unchanged): 66% green, 12% green turning gold/amber at the lobe tips,
+  10% yellow-green, 7% gold, 4% amber, 1% rust. Painted *yellower* than wanted: `CARD_TINT` multiplies in linear light,
+  which pushed orange to red, and red leaves a few metres off read as berries. In `patchCards` (maple only) a smooth
+  world-position pattern (`vFallP`, trig, ~2 m patches, different per tree) turns about half of the painted autumn texels
+  back to green (pixels with r > g → luminance × green), so the one texture doesn't repeat its coloured leaves on every card.
+  Impostors bake the full texture (slightly warmer far off). Gotcha: `vite preview` kept serving the old GLB after a
+  rebuild that changed only texture bytes (same size?): restart it after rebuilding. View:
   `x=-2&z=655&yaw=0.9&pitch=0.6&weather=sun`.
   **Card outlines + fewer crossed cards (fill cuts):** cards with a spray texture (fir, hemlock, cedar, their frost
   versions, snow) are built as a tight convex polygon instead of a quad: `tools/card_hulls.py` (run after

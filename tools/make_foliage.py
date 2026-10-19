@@ -406,6 +406,7 @@ def maple_spray(seed=37):
     """
     rng = random.Random(seed)
     nrng = np.random.default_rng(seed)
+    crng = random.Random(seed + 1)  # early-fall colours: own rng, so the leaf layout is unchanged
     S2 = 2  # supersampling (1024 * 2 work size)
     N = 1024
     W = N * S2
@@ -434,7 +435,7 @@ def maple_spray(seed=37):
         win[:, :, :3] = win[:, :, :3] * (1 - m[:, :, None]) + np.array(col, np.float32) * m[:, :, None]
         win[:, :, 3] = np.maximum(win[:, :, 3], m * 255)
 
-    def leaf(cx, cy, R, base_ang, col):
+    def leaf(cx, cy, R, base_ang, col, rim_col=None):
         """One leaf, its petiole arriving from direction base_ang (radians, image space)."""
         lobes = rng.choice((7, 7, 9, 9, 9))
         sinus = rng.uniform(0.6, 0.72)  # lobes cut about a third in
@@ -510,10 +511,33 @@ def maple_spray(seed=37):
                  * (1.0 + 0.06 * mottle[y0:y1, x0:x1] + 0.025 * fine[y0:y1, x0:x1]))
         base = np.array(col, np.float32)
         vein_col = np.array(lerp(col, (196, 214, 138), 0.32), np.float32)
-        leaf_rgb = base[None, None, :] * shade[:, :, None]
+        leaf_rgb = np.broadcast_to(base[None, None, :], m.shape + (3,)).copy()
+        if rim_col is not None:  # a leaf starting to turn: colour creeping in from the lobe tips
+            turn = np.clip((rr - 0.35) / 0.6, 0, 1)[:, :, None] ** 1.5 * 0.85
+            leaf_rgb = leaf_rgb * (1 - turn) + np.array(rim_col, np.float32) * turn
+        leaf_rgb = leaf_rgb * shade[:, :, None]
         leaf_rgb = leaf_rgb * (1 - 0.55 * veins[:, :, None]) + vein_col[None, None, :] * shade[:, :, None] * 0.55 * veins[:, :, None]
         win[:, :, :3] = win[:, :, :3] * (1 - m[:, :, None]) + leaf_rgb * m[:, :, None]
         win[:, :, 3] = np.maximum(win[:, :, 3], m * 255)
+
+    def autumn(col):
+        """Early fall: most leaves stay green, some turn yellow-green or gold, a few orange or red,
+        and some green ones are just turning at the edges. (Saturated: CARD_TINT mutes them.) Few reds:
+        red edges and leaves shrank to red dots a few metres off and read as berries. Painted yellower than
+        meant: CARD_TINT applies in linear light and pushes warm colours redder (orange came out red)."""
+        r = crng.random()
+        if r < 0.66:
+            return col, None
+        if r < 0.78:
+            return col, crng.choice(((210, 172, 56), (200, 182, 62), (214, 152, 52)))
+        if r < 0.88:
+            return lerp(col, (170, 178, 48), 0.75), None
+        if r < 0.95:
+            return (206, 180, 60), None
+        if r < 0.99:
+            return (214, 150, 54), None
+        # (rare: whole red leaves shrank to red dots a few metres off, read as berries)
+        return (190, 104, 50), None
 
     greens = [(68, 118, 36), (82, 132, 40), (96, 144, 44), (110, 152, 48), (124, 160, 54)]
     twig_col = (112, 84, 56)
@@ -535,7 +559,8 @@ def maple_spray(seed=37):
             stroke([(tx, ty), (cx - math.cos(a) * R * 0.75, cy - math.sin(a) * R * 0.75)], (128, 108, 62), 1.7 * S2)
             col = rng.choice(greens)
             col = tuple(max(0, min(255, c + rng.randint(-8, 8))) for c in col)
-            leaf(cx, cy, R, a + math.pi, col)
+            col, rim = autumn(col)
+            leaf(cx, cy, R, a + math.pi, col, rim)
         if n_tip:
             R = W * 0.04 * scale
             cx, cy = tx + math.cos(dir_a) * R * 1.5, ty + math.sin(dir_a) * R * 1.5
