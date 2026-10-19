@@ -497,7 +497,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   = the fog's own formula (`FOG_POOL_*` exported from atmosphere.js, same bank noise) × extra near the ground (height
   above ground from a half-float terrain-grid texture, `post.setGround`); sunlit = the canopy map + dapple noise sampled where
   the sun ray crosses 7.8/18 m, shifted by the point's height, i.e. exactly the samples of the sunfleck it lands on;
-  phase 0.25 + 1.1μ⁵ + 0.9μ²⁴; half-float; **temporally accumulated** (`resolve`: reproject the history by this pixel's depth with
+  phase 0.25 + 1.1μ⁵ + 0.9μ²⁴; its density is `fog.mist` (weather.js: the overcast density × `MIST_GAIN` 1.7, *not* cleared in
+  sun breaks like the view haze: after the haze went 0.62 → 0.45 the user saw no god rays any more); half-float; **temporally accumulated** (`resolve`: reproject the history by this pixel's depth with
   last frame's view-proj, clamp to the new frame's 4-neighbour range, blend 15% new; reset on resize, a >4 m jump or post off),
   because per-frame jitter + camera-relative steps shimmered while walking (measured 3.8% → 1.2% change per frame); blurred,
   added as (1 − exp(−light × `volStrength` 2.0)) × SUN_COLOR × 0.55: it saturates, because linear accumulation blew an open

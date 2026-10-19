@@ -362,7 +362,7 @@ export class Post {
       v.uCamWorld.value.copy(camera.matrixWorld);
       v.uCamPos.value.setFromMatrixPosition(camera.matrixWorld);
       const fog = scene.fog;
-      v.uDensity.value = fog ? fog.near % 1 : 0.01; // see installHeightFog: fract = density
+      v.uDensity.value = fog?.mist ?? (fog ? fog.near % 1 : 0.01); // weather.js; else installHeightFog's fract = density
       v.uTime.value = fog ? fog.far : 0;
       v.uSun.value = sun;
       v.uFrame.value = (v.uFrame.value + 1) % 64;

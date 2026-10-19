@@ -156,6 +156,7 @@ function createSnow(count = 14000) {
 }
 
 const MOTE_BOX = new THREE.Vector3(16, 8, 16);
+const MIST_GAIN = 1.7; // sunbeam mist (post.js) relative to the overcast fog density
 
 /**
  * Dust motes and seed fluff drifting in the air: invisible in overcast, they
@@ -338,6 +339,9 @@ export class Weather {
     // (sun breaks clear the high country more than the valley: clear mountain air, peaks in view)
     const density = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT) * THREE.MathUtils.lerp(1, 0.45 - 0.3 * snowT, sun); // clear air in sun: at 0.62 the far lake shore whited out looking into the sun; up high, peaks 300 m off were ghosts
     fog.near = Math.round(sun * 255) + Math.min(density, 0.999); // see installHeightFog
+    // the mist the sunbeams show in (post.js) doesn't clear with the haze: clearing it with the
+    // view (0.62 → 0.45) left the shafts too faint to notice
+    fog.mist = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT) * MIST_GAIN;
     this.hemi.color.copy(LOW.hemiSky).lerp(HIGH.hemiSky, snowT).lerp(SUN_HEMI, sun * 0.6);
     this.hemi.groundColor.copy(LOW.hemiGround).lerp(HIGH.hemiGround, snowT);
     this.hemi.intensity = THREE.MathUtils.lerp(LOW.hemiIntensity, HIGH.hemiIntensity, snowT) * (1 - 0.4 * sun); // in sun, direct light dominates
