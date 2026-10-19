@@ -50,7 +50,7 @@ export class Post {
     this.renderer = renderer;
     this.enabled = true;
     this.effects = true; // false: just the scene and the composite (bench row '- rays/glow')
-    this.volStrength = 2.0; // light in the mist (before the saturation curve in the composite)
+    this.volStrength = 6.0; // light in the mist (before the saturation curve in the composite)
     this.size = new THREE.Vector2();
     const rt = (w, h) => new THREE.WebGLRenderTarget(w, h, { depthBuffer: false });
     this.sceneRT = new THREE.WebGLRenderTarget(4, 4, { samples, depthTexture: new THREE.DepthTexture(4, 4) });
@@ -158,7 +158,10 @@ export class Post {
         float c = 1.0 - (1.0 - min(1.0, c1 * 2.4)) * (1.0 - min(1.0, c2 * 2.4));
         vec2 dp = q * 0.45 + vec2(uTime * 0.04, uTime * 0.025);
         float n = vNoise(dp) * 0.6 + vNoise(dp * 2.7 + 7.3) * 0.4;
-        return smoothstep(c - 0.07, c + 0.07, n * 1.15 - 0.08); // crisper than the ground's: beams have edges
+        float lit = smoothstep(c - 0.04, c + 0.04, n * 1.15 - 0.08); // crisper than the ground's: beams have edges
+        // a beam is light through a gap in a dense canopy, with shade all round it; where the
+        // canopy is thin the whole air is lit and only makes a faint veil (it washed the shafts out)
+        return lit * mix(0.15, 1.0, smoothstep(0.25, 0.85, c));
       }
       void main() {
         float depth = texture2D(tDepth, vUv).r;
@@ -184,6 +187,8 @@ export class Post {
           float d = uDensity * (0.8 + 0.8 * pool) * (0.6 + 0.8 * bank) * (above > 0.0 ? 1.0 : 0.0);
           // mist hugs the ground: denser in the lowest few metres
           d *= 1.0 + 1.2 * exp(-max(above, 0.0) / 4.0);
+          // and stays under the crowns: lit air up among and above them was a broad glow
+          d *= exp(-max(above - 6.0, 0.0) / 10.0);
           light += trans * d * stepLen * sunlit(p, above);
           trans *= exp(-d * stepLen);
         }
@@ -280,7 +285,7 @@ export class Post {
         vec3 add = texture2D(tRays, vUv).rgb * uSunColor * uRays * 0.8 + texture2D(tGlow, vUv).rgb * 0.22
           // mist light saturates (an open, sunlit clearing toward the sun added up to white);
           // shafts read by contrast with the shade around them, not by raw brightness
-          + (1.0 - exp(-texture2D(tVol, vUv).rgb * uVol)) * uSunColor * 0.55;
+          + (1.0 - exp(-texture2D(tVol, vUv).rgb * uVol)) * uSunColor * 0.7;
         s = 1.0 - (1.0 - s) * (1.0 - clamp(add, 0.0, 1.0)); // screen blend: light, never clipped
         float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
         // grade: highlights a little warmer in a sun break, shadows a touch cool (moist air)
@@ -382,10 +387,10 @@ export class Post {
       this.hist.reverse(); // hist[0] is now this frame's result
       this.histValid = true;
       this.blur.uniforms.tSrc.value = this.hist[0].texture;
-      this.blur.uniforms.uDir.value.set(this.blurTexel[0] * 0.75, 0);
+      this.blur.uniforms.uDir.value.set(this.blurTexel[0] * 0.5, 0);
       blit(this.blur, this.vB);
       this.blur.uniforms.tSrc.value = this.vB.texture;
-      this.blur.uniforms.uDir.value.set(0, this.blurTexel[1] * 0.75);
+      this.blur.uniforms.uDir.value.set(0, this.blurTexel[1] * 0.5);
       blit(this.blur, this.vA);
       this.prevViewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       this.prevCamPos.copy(camPos);
