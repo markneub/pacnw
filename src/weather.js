@@ -496,7 +496,11 @@ class Ambience {
     }
   }
 
-  /** One synthesised song at a random spot around the listener (no audio files). */
+  /**
+   * One synthesised song at a random spot around the listener (no audio files). Every song is
+   * built from short chirps (quick downward sweeps, ~20-40 ms): long held sine whistles (the
+   * thrush songs tried first) sounded robotic, the chirpy wren trill didn't (the user).
+   */
   sing(t0) {
     const ctx = this.ctx;
     const pan = ctx.createStereoPanner();
@@ -505,59 +509,65 @@ class Ambience {
     const out = ctx.createGain();
     out.gain.value = 0.05 * dist;
     out.connect(pan).connect(this.birdBus);
-    const note = (start, dur, f0, f1, vol = 1, buzz = 0) => {
+    const chirp = (start, dur, f0, f1, vol = 1) => {
       const o = ctx.createOscillator();
-      o.type = 'sine';
       o.frequency.setValueAtTime(f0, start);
       o.frequency.exponentialRampToValueAtTime(f1, start + dur);
       const g = ctx.createGain();
       g.gain.setValueAtTime(0, start);
-      g.gain.linearRampToValueAtTime(vol, start + Math.min(0.03, dur * 0.3));
-      g.gain.setTargetAtTime(0, start + dur * 0.7, dur * 0.12);
-      o.connect(g);
-      if (buzz > 0) {
-        // a fast tremolo makes the varied thrush's burry tone
-        const am = ctx.createGain();
-        am.gain.value = 1 - buzz;
-        const lfo = ctx.createOscillator();
-        lfo.frequency.value = 55 + Math.random() * 30;
-        const depth = ctx.createGain();
-        depth.gain.value = buzz;
-        lfo.connect(depth).connect(am.gain);
-        g.connect(am).connect(out);
-        lfo.start(start);
-        lfo.stop(start + dur + 0.3);
-      } else {
-        g.connect(out);
-      }
+      g.gain.linearRampToValueAtTime(vol, start + Math.min(0.008, dur * 0.3));
+      g.gain.setTargetAtTime(0, start + dur * 0.6, dur * 0.15);
+      o.connect(g).connect(out);
       o.start(start);
-      o.stop(start + dur + 0.3);
+      o.stop(start + dur + 0.1);
     };
+    const jit = (f, a) => f * (1 + (Math.random() * 2 - 1) * a);
     const kind = Math.random();
     let t = t0 + 0.05;
-    if (kind < 0.35) {
-      // varied thrush: one long, burry, slightly falling whistle (then maybe another at a new pitch)
-      const f = 2400 + Math.random() * 2000;
-      note(t, 1.4 + Math.random() * 0.6, f, f * 0.97, 0.9, 0.6);
-      if (Math.random() < 0.4) note(t + 2.6 + Math.random(), 1.5, f * (0.8 + Math.random() * 0.35), f * 0.78, 0.8, 0.6);
-    } else if (kind < 0.7) {
-      // Swainson's thrush: a run of short fluty notes spiralling upward
-      let f = 1600 + Math.random() * 500;
-      const n = 6 + Math.floor(Math.random() * 5);
-      for (let i = 0; i < n; i++) {
-        const d = 0.09 + Math.random() * 0.05;
-        note(t, d, f, f * (1.04 + Math.random() * 0.1), 0.7 + 0.3 * (i / n));
-        t += d + 0.03;
-        f *= 1.06 + Math.random() * 0.06;
-      }
-    } else {
-      // a wren-like tumbling trill: fast chips at shifting pitches
+    if (kind < 0.3) {
+      // wren-like tumbling trill: fast chips at shifting pitches
       const n = 12 + Math.floor(Math.random() * 14);
       let f = 4000 + Math.random() * 1500;
       for (let i = 0; i < n; i++) {
         if (i % 4 === 0) f = 3500 + Math.random() * 3000;
-        note(t, 0.035, f * 1.1, f * 0.85, 0.6);
+        chirp(t, 0.035, f * 1.1, f * 0.85, 0.6);
         t += 0.055 + Math.random() * 0.02;
+      }
+    } else if (kind < 0.55) {
+      // dark-eyed junco: one even, musical trill of identical chips
+      const f = 3800 + Math.random() * 1800;
+      const gap = 0.06 + Math.random() * 0.025;
+      const n = 10 + Math.floor(Math.random() * 9);
+      for (let i = 0; i < n; i++) {
+        chirp(t, 0.03, jit(f * 1.25, 0.01), f * 0.82, 0.45 + 0.25 * Math.sin((Math.PI * i) / n));
+        t += gap;
+      }
+    } else if (kind < 0.8) {
+      // Pacific wren: a long, tumbling run of trills at different pitches and speeds
+      const parts = 3 + Math.floor(Math.random() * 3);
+      for (let p = 0; p < parts; p++) {
+        const f = 4200 + Math.random() * 3200;
+        const gap = 0.035 + Math.random() * 0.03;
+        const n = 4 + Math.floor(Math.random() * 6);
+        const up = Math.random() < 0.5;
+        for (let i = 0; i < n; i++) {
+          const fi = f * (up ? 1 + 0.03 * i : 1 - 0.025 * i);
+          chirp(t, Math.min(0.03, gap * 0.8), jit(fi * 1.15, 0.02), fi * 0.85, 0.5);
+          t += gap;
+        }
+        t += 0.02 + Math.random() * 0.06;
+      }
+    } else {
+      // chickadee-like "chick-a-dee-dee": two high chips, then husky dees made of micro-chirps
+      chirp(t, 0.03, 7200, 5400, 0.55);
+      t += 0.09;
+      chirp(t, 0.025, 6400, 5000, 0.45);
+      t += 0.1;
+      const dees = 2 + Math.floor(Math.random() * 3);
+      const f = 3300 + Math.random() * 500;
+      for (let d = 0; d < dees; d++) {
+        for (let k = 0; k < 11; k++) chirp(t + k * 0.013, 0.016, jit(f * 1.06, 0.03), jit(f * 0.94, 0.03), 0.35 * Math.sin((Math.PI * (k + 0.5)) / 11));
+        t += 0.2;
       }
     }
   }

@@ -464,8 +464,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   lerped by altitude relative to the local snowline, and WebAudio ambience (`Ambience`, all synthesised): rain hiss (×
   rain amount), a **breeze** (noise band 900–2500 Hz, near silent between gusts: the old always-on 220–600 Hz wind band at
   0.12–0.37 gain sounded like a waterfall or pouring rain in sunny weather, the user), and **birdsong** every 3–12 s with
-  probability (1 − rain)(1 − snow)(0.25 + 0.75 sun): varied thrush (long burry whistle: sine × 55–85 Hz tremolo), Swainson's
-  thrush (rising flute spiral), a wren-like trill; random pan and distance, a damped feedback-delay echo.
+  probability (1 − rain)(1 − snow)(0.25 + 0.75 sun), all built from short chirps (sine sweeps 16–35 ms): a wren-like
+  tumbling trill, a junco trill, a Pacific wren run of trills, a chickadee-like call (husky "dees" = micro-chirps every
+  13 ms). Long held whistles (varied/Swainson's thrush) sounded robotic (the user); only the trill sounded good. Random
+  pan and distance, a damped feedback-delay echo. To hear them without the game: render `sing` into an
+  OfflineAudioContext and write a WAV (`Ambience.prototype.sing.call({ ctx, birdBus }, t)`).
 - **Be opinionated (the user's call):** no user-facing options or toggles for how the game feels (head bob, sway, etc.).
   Pick the behaviour and ship it. (`?off=`/`?bench` switches are dev tools, not options.)
 - **Realism direction (agreed): stylized low-poly now ("A"). The long-term goal is near-photoreal *up
