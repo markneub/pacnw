@@ -209,6 +209,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (fast runs in drifting patches, rapids crests, rock collars/wakes, a thin bank line), stretched 3× along the flow. Ribbon
   9 verts across (was 6: long flat facets). Gotcha: the trail's transparent **fringe** sorted after the water and painted a
   straight line across the creek at crossings: stream meshes have `renderOrder` 1.
+  **Waterline** (the user: creek edges "too angular"): the flat ribbon met the 5 m terrain triangles along straight lines.
+  Like the lake shore, each water pixel reads the rendered ground (`swGroundAt`, `uGroundH`) and the water ends where it's
+  2–8 cm deep by 3-octave noise (only toward the banks, |u| > 0.3: the water is just ~0.2 m deep mid-stream), the ribbon's
+  own outline is ragged (|u| 0.62–1.02 by the same noise), shallows are clearer, and the bank foam line follows the
+  waterline. Where the bank is flush with the water (bends), the water now ends instead of lying on the grass.
 - **Rapids** (`streams.js` `RAPIDS` at (112, −8) on the main creek, `p.rapid` 0..1 over ~150 m up / 130 m down): channel
   ~70% wider (8.5 m), bed 0.6 m deeper, ~2× the rocks and bigger ones (+0.45 r), and the trail is routed to cross there
   (`WET_COST` × 0.1 in the rapids): a 12.2 m two-piece footbridge (spans > 9 m use two models end to end, 0.5 m overlap).

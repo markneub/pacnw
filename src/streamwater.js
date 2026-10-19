@@ -294,6 +294,8 @@ function streamMaterial(rockTex) {
     shader.uniforms.uSwSun = shared.uSun;
     shader.uniforms.uSwWaves = { value: waves };
     shader.uniforms.uSwFoamTex = { value: foam };
+    shader.uniforms.uSwGround = shared.uGroundH;
+    shader.uniforms.uSwGrid = shared.uGroundGrid;
     patchGlitter(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
@@ -319,6 +321,8 @@ function streamMaterial(rockTex) {
         uniform float uSwSun;
         uniform sampler2D uSwWaves;
         uniform sampler2D uSwFoamTex;
+        uniform highp sampler2D uSwGround;
+        uniform vec4 uSwGrid; // min x, min z, step, n
         varying vec3 vSwInfo;
         varying vec3 vFlow;
         varying vec2 vWUv;
@@ -327,6 +331,18 @@ function streamMaterial(rockTex) {
         float swNoise(vec2 p) {
           vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(swHash(i), swHash(i + vec2(1, 0)), f.x), mix(swHash(i + vec2(0, 1)), swHash(i + vec2(1, 1)), f.x), f.y);
+        }
+        // the rendered terrain's height under this point (same grid and triangulation as groundAt)
+        float swGroundAt(vec2 xz) {
+          vec2 g = clamp((xz - uSwGrid.xy) / uSwGrid.z, vec2(0.0), vec2(uSwGrid.w - 1.0001));
+          ivec2 i = ivec2(floor(g));
+          vec2 f = g - vec2(i);
+          float ha = texelFetch(uSwGround, i, 0).r;
+          float hb = texelFetch(uSwGround, i + ivec2(0, 1), 0).r;
+          float hc = texelFetch(uSwGround, i + ivec2(1, 1), 0).r;
+          float hd = texelFetch(uSwGround, i + ivec2(1, 0), 0).r;
+          return f.x + f.y <= 1.0 ? ha + (hd - ha) * f.x + (hb - ha) * f.y
+            : hc + (hb - hc) * (1.0 - f.x) + (hd - hc) * (1.0 - f.y);
         }
         float swFoam;
         float swSpeed; // m/s here (fast mid-channel, slow at the banks, faster in the rapids)
@@ -419,6 +435,16 @@ function streamMaterial(rockTex) {
           float rapid = vSwInfo.z;
           float u = vWUv.x;
           swPm = vec2(u * vSwInfo.x, vWUv.y);
+          // The waterline. The flat ribbon meets the 5 m terrain triangles along straight lines, so
+          // the water ends a little before that, where it's (noisy) 2–8 cm deep, and the ribbon's
+          // own outline is ragged too: a wandering edge of little bays and points. (The water is
+          // only ~0.2 m deep mid-stream, so the inner channel keeps its water.)
+          float depth = vWPos.y - swGroundAt(vWPos.xz);
+          float en = swNoise(vWPos.xz * 0.7) * 0.55 + swNoise(vWPos.xz * 2.3 + 7.0) * 0.3 + swNoise(vWPos.xz * 7.0 + 3.0) * 0.15;
+          float edge = 0.02 + 0.06 * en * smoothstep(0.3, 0.7, abs(u)) + 0.008 * sin(uSwTime * 1.3 + en * 11.0);
+          float rim = 1.0 - smoothstep(0.62 + 0.3 * en, 0.72 + 0.3 * en, abs(u));
+          float wet = smoothstep(edge, edge + 0.03, depth) * rim;
+          if (wet < 0.01) discard;
           swLoadRocks();
           float base = vFlow.z + 2.6 * rapid;
           float sp = smoothstep(0.3, 2.5, base);
@@ -442,7 +468,7 @@ function streamMaterial(rockTex) {
             cov = max(cov, rapid * (0.1 + 0.7 * smoothstep(0.6, 0.95, crest)) * (0.45 + 0.55 * patches));
           }
           cov = max(cov, swRockF.x * 1.25);
-          cov = max(cov, smoothstep(0.82, 0.98, abs(u)) * 0.3);
+          cov = max(cov, exp(-pow((depth - edge - 0.03) * 25.0, 2.0)) * rim * 0.3); // a thin line along the waterline
           // (stretched along the current: white water streaks, round bubbles read as a cow print)
           vec2 fq = swPm * vec2(1.0, 0.33);
           float ft = swFlowTex(uSwFoamTex, fq, 1.1, vec2(0.0)).r * 0.6 + swFlowTex(uSwFoamTex, fq, 0.4, vec2(0.31, 0.7)).r * 0.4;
@@ -451,10 +477,12 @@ function streamMaterial(rockTex) {
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.25, 0.24), rapid * 0.55 * (0.5 + 0.5 * patches));
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.84, 0.84), swFoam * 0.95);
           // clearer at the edges (you see the stones), deeper colour in the middle; edge fades into the bank
-          diffuseColor.a = mix(0.55, 0.9, 1.0 - abs(u)) * (1.0 - smoothstep(0.82, 1.0, abs(u)));
+          float shallow = smoothstep(edge, edge + 0.08, depth);
+          diffuseColor.a = mix(0.55, 0.9, 1.0 - abs(u)) * mix(0.6, 1.0, shallow);
           diffuseColor.a = max(diffuseColor.a, swFoam * 0.92);
           // churned, aerated water hides the bed
-          diffuseColor.a = mix(diffuseColor.a, 0.97 * (1.0 - smoothstep(0.9, 1.0, abs(u))), rapid);
+          diffuseColor.a = mix(diffuseColor.a, 0.97, rapid);
+          diffuseColor.a *= wet;
         }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
