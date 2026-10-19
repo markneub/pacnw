@@ -144,7 +144,13 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   from one side, mottled, shadowing the leaves beneath. Coverage 24% of the card (was 33%). `MapleCards` use
   **alpha to coverage** (smooth edges in the 4× MSAA scene target; no effect in the impostor bake) and fade out as the
   triangle turns edge-on (`smoothstep(0.1, 0.35, |face·V|)`, face normal from dFdx/dFdy: edge-on cards were long green
-  streaks). Geometry unchanged (GLB +0.5 MB: the texture). Not yet phone-benched (`?bench=trees`). View:
+  streaks). Not yet phone-benched (`?bench=trees`).
+  **Leaves on wood** (the user: leaves "branching off of thin air"): half the cards were mirrored end to end (`flip_u`), so
+  the painted twig started at the far end; cards were centred partway along their stick; the second, lower layer had no
+  stick at all. Now `spray()` in `vine_maple`: u = 0 at the twig's base, never mirrored, and a real two-piece stick runs
+  under the painted main twig (u 0 → 0.8, following the card's droop); the second layer sits on its own side twig off the
+  first; the tip spray starts at the stem's tip. The painted main twig is pinned to the card's centre line (v = 0.5, the
+  fold) and side twigs/petioles are thicker. Maple 25910 total faces in the GLB (was 24776). View:
   `x=-2&z=655&yaw=0.9&pitch=0.6&weather=sun`.
   **Card outlines + fewer crossed cards (fill cuts):** cards with a spray texture (fir, hemlock, cedar, their frost
   versions, snow) are built as a tight convex polygon instead of a quad: `tools/card_hulls.py` (run after

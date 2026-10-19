@@ -835,33 +835,44 @@ def vine_maple(M, name, seed=5, leafy=1.0):
         pts = [at(i / 6) for i in range(7)]
         for i in range(6):
             _stick(b, bark, pts[i], pts[i + 1] + (pts[i + 1] - pts[i]) * 0.08, r0 * (1.0 - 0.7 * i / 6), sides=5)
-        # twigs + leaf layers from 35% up the stem
+        def spray(base, fwd, sd, cl, droop):
+            """A leaf card whose painted twig (maple_spray.png: along v = 0.5 from u = 0.02 to 0.8)
+            lies on a real twig from `base`: u = 0 at base, never mirrored, so every leaf hangs
+            off wood (cards mirrored end to end or set off along the twig floated in the air)."""
+            _card(b, leaves, base + fwd * (0.5 * cl), fwd, sd, cl, cl, droop, (0.0, 0.0), fold=0.45)
+            along = [base + fwd * (u * cl) - Vector((0.0, 0.0, droop * u * u)) for u in (0.0, 0.4, 0.8)]
+            _stick(b, bark, along[0], along[1], 0.014, sides=4)
+            _stick(b, bark, along[1], along[2], 0.009, sides=4)
+            return along
+
+        # twigs + leaf layers from 30% up the stem
         t = 0.3
         while t < 1.0:
             p = at(t)
             side = Vector((-out.y, out.x, 0.0)) * rng.choice((-1, 1))
             dir_ = (side * rng.uniform(0.6, 1.0) + out * rng.uniform(0.2, 0.7)).normalized()
             tl = rng.uniform(0.5, 1.1)
-            tip = p + dir_ * tl + Vector((0.0, 0.0, rng.uniform(-0.1, 0.15)))
-            _stick(b, bark, p, tip, 0.018, sides=4)
+            rise = rng.uniform(-0.1, 0.15)
             if rng.random() < leafy:
                 cl = rng.uniform(1.1, 1.6)
-                c = p.lerp(tip, 0.6) + Vector((0.0, 0.0, 0.05))
                 fwd = Vector((dir_.x, dir_.y, rng.uniform(-0.12, 0.12))).normalized()
                 sd = Vector((-fwd.y, fwd.x, rng.uniform(-0.3, 0.3))).normalized()
-                _card(b, leaves, c, fwd, sd, cl, cl, 0.08 * cl, (0.0, 0.0), flip_u=rng.random() < 0.5, fold=0.45)
-                if rng.random() < 0.6 * leafy:  # a second layer a little lower and turned
-                    sd2 = Vector((-sd.y, sd.x, 0.0)).normalized()
-                    _card(b, leaves, c + Vector((0.0, 0.0, -0.25)) + dir_ * 0.25, sd2.cross(Vector((0, 0, 1))).normalized(),
-                          sd2, cl * 0.85, cl * 0.85, 0.06 * cl, (0.0, 0.0), fold=0.45)
+                along = spray(p, fwd, sd, cl, 0.08 * cl)
+                if rng.random() < 0.6 * leafy:  # a second layer off a side twig, lower and turned
+                    s2 = Vector((-fwd.y, fwd.x, 0.0)) * rng.choice((-1, 1))
+                    f2 = (s2 + fwd * 0.5 + Vector((0.0, 0.0, -0.35))).normalized()
+                    q = along[1].lerp(along[0], 0.5)
+                    spray(q, f2, Vector((-f2.y, f2.x, 0.0)).normalized(), cl * 0.85, 0.06 * cl)
+            else:  # bare twig (the thinned _lod model)
+                _stick(b, bark, p, p + dir_ * tl + Vector((0.0, 0.0, rise)), 0.018, sides=4)
             t += rng.uniform(0.04, 0.07)
-        # a spray at the stem's tip, drooping
+        # a spray off the stem's tip, drooping
         tipc = at(1.0)
         if rng.random() < leafy + 0.2:
             fwd = (at(1.0) - at(0.9)).normalized()
             fwd = Vector((fwd.x, fwd.y, max(-0.4, min(0.2, fwd.z)))).normalized()
             sd = Vector((-fwd.y, fwd.x, 0.0)).normalized()
-            _card(b, leaves, tipc, fwd, sd, 1.0, 1.0, 0.12, (0.0, 0.0), fold=0.45)
+            spray(tipc, fwd, sd, 1.0, 0.12)
     return b.build(name)
 
 

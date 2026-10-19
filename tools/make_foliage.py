@@ -532,7 +532,7 @@ def maple_spray(seed=37):
             cx = min(W - R * 1.02, max(R * 1.02, cx))
             cy = min(W - R * 1.02, max(R * 1.02, cy))
             a = math.atan2(cy - ty, cx - tx)
-            stroke([(tx, ty), (cx - math.cos(a) * R * 0.75, cy - math.sin(a) * R * 0.75)], (128, 108, 62), 1.3 * S2)
+            stroke([(tx, ty), (cx - math.cos(a) * R * 0.75, cy - math.sin(a) * R * 0.75)], (128, 108, 62), 1.7 * S2)
             col = rng.choice(greens)
             col = tuple(max(0, min(255, c + rng.randint(-8, 8))) for c in col)
             leaf(cx, cy, R, a + math.pi, col)
@@ -547,7 +547,8 @@ def maple_spray(seed=37):
         pts = [(x, y)]
         nodes = []
         for k in range(1, n_nodes + 1):
-            a += rng.uniform(-0.1, 0.1)
+            # the main twig stays on the card's centre line: a real twig runs under it (build_assets.py)
+            a = rng.uniform(-0.015, 0.015) if depth == 0 else a + rng.uniform(-0.1, 0.1)
             seg = length / n_nodes
             x, y = x + math.cos(a) * seg, y + math.sin(a) * seg
             pts.append((x, y))
@@ -560,12 +561,12 @@ def maple_spray(seed=37):
                 for side in (-1, 1):
                     if rng.random() < 0.8:
                         sl = length * rng.uniform(0.34, 0.46) * (1.0 - 0.4 * k / n_nodes)
-                        twig(nx_, ny_, na + side * math.radians(rng.uniform(35, 58)), sl, 3, width * 0.6, scale * 0.9, 1)
+                        twig(nx_, ny_, na + side * math.radians(rng.uniform(35, 58)), sl, 3, width * 0.75, scale * 0.9, 1)
         for (nx_, ny_, na, k) in nodes:
             sc = scale * (1.0 - 0.3 * (k / n_nodes) ** 2)
             leaf_pair(nx_, ny_, na, sc, n_tip=(k == n_nodes))
 
-    twig(0.02 * W, 0.5 * W + rng.uniform(-0.02, 0.02) * W, rng.uniform(-0.04, 0.04), 0.78 * W, 6, 3.4, 1.0, 0)
+    twig(0.02 * W, 0.5 * W, 0.0, 0.78 * W, 6, 5.0, 1.0, 0)
     out = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGBA")
     return finish(out, (N, N))
 
