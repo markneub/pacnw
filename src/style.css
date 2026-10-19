@@ -178,6 +178,20 @@ body.touch #hud {
   z-index: 10;
 }
 
+/* ?perf: the load's step timings on the start screen (main.js) */
+#load-times {
+  position: fixed;
+  left: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #cfe3c4;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+  pointer-events: none;
+}
+
 #bench {
   position: fixed;
   inset: calc(8px + env(safe-area-inset-top)) 8px 8px;

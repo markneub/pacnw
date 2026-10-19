@@ -74,7 +74,11 @@ const COLLIDE = {
  */
 export async function loadPrototypes(urls) {
   const loader = new GLTFLoader();
-  const scenes = await Promise.all(urls.map((url) => loader.loadAsync(url)));
+  return prototypesFrom(await Promise.all(urls.map((url) => loader.loadAsync(url))));
+}
+
+/** The prototypes from already-loaded glTFs (tools/bake_world.mjs parses them in node). */
+export function prototypesFrom(scenes) {
   const roots = scenes.flatMap((gltf) => {
     gltf.scene.updateMatrixWorld(true);
     return [...gltf.scene.children];
@@ -985,12 +989,11 @@ function addSlopeGrowth(placements, trail) {
 }
 
 /**
- * Builds the vegetation as per-chunk InstancedMeshes so far-away chunks can be
- * hidden cheaply, and a spatial hash of trunks/rocks for player collisions.
- * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
- * chunk for all tree types, instead of the *_lod models per type.
+ * Where everything goes: the scatter plus the hand-placed extras, seated on the ground, as
+ * { name: [{ x, y, z, rotY, scale, tint, ... }] }. The slow, deterministic part of loading,
+ * so the world bake (world.js) stores its result.
  */
-export async function buildVegetation(protos, trail, { impostors = null, shrubImpostors = null, exclude = null } = {}) {
+export async function placeVegetation(protos, trail) {
   const placements = await scatter(trail);
   addStreamRocks(placements, protos, trail);
   addMarshSnags(placements, trail);
@@ -998,14 +1001,6 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
   addDriftwood(placements, trail);
   addSlopeGrowth(placements, trail);
   addTalus(placements, trail);
-  // nothing where the cabin stands (filtered, so the scatter's rng sequence stays put)
-  if (exclude) {
-    for (const name of Object.keys(placements)) {
-      if (name === 'signpost') continue;
-      const margin = KIND(name) === 'trees' ? 3.5 : 0.8;
-      placements[name] = placements[name].filter((q) => !exclude(q.x, q.z, margin));
-    }
-  }
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
   for (const name of Object.keys(placements)) {
     if (!name.startsWith('pebbles')) continue;
@@ -1013,6 +1008,26 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
   }
   await loadTick(0.77);
   seatStones(placements, protos);
+  return placements;
+}
+
+/**
+ * Builds the vegetation as per-chunk InstancedMeshes so far-away chunks can be
+ * hidden cheaply, and a spatial hash of trunks/rocks for player collisions.
+ * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
+ * chunk for all tree types, instead of the *_lod models per type.
+ */
+export async function buildVegetation(protos, trail, { impostors = null, shrubImpostors = null, exclude = null, placements: baked = null } = {}) {
+  const placements = baked ?? await placeVegetation(protos, trail);
+  // nothing where the cabin stands (filtered, so the scatter's rng sequence stays put; and after the
+  // world bake, which doesn't know the cabin: every step before is per item, so the order doesn't matter)
+  if (exclude) {
+    for (const name of Object.keys(placements)) {
+      if (name === 'signpost') continue;
+      const margin = KIND(name) === 'trees' ? 3.5 : 0.8;
+      placements[name] = placements[name].filter((q) => !exclude(q.x, q.z, margin));
+    }
+  }
   await loadTick(0.8);
   const canopyAt = bakeCanopy(placements);
   await loadTick(0.82);

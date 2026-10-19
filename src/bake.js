@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WORLD_SIZE } from './config.js';
-import { rawGroundAt } from './terrain.js';
+import { rawGroundAt, terrainGrid } from './terrain.js';
 import { shared } from './materials.js';
 
 // Lighting baked at load time. None of this costs anything per frame: it ends
@@ -206,8 +206,33 @@ export function bakeCanopy(placements) {
 const DIRS = Array.from({ length: 8 }, (_, i) => [Math.cos((i / 8) * Math.PI * 2), Math.sin((i / 8) * Math.PI * 2)]);
 const STEPS = [3, 7, 14, 28, 50];
 
+// horizonAO at every terrain grid vertex, from the world bake (world.js): 255 = 1
+let bakedAO = null;
+
+/** Take horizonAO at the terrain's grid vertices from the world bake (Uint8Array, laid out like the height grid). */
+export function setBakedHorizonAO(grid) {
+  bakedAO = grid;
+}
+
+/** horizonAO at every terrain grid vertex, as bytes (for the world bake). */
+export function horizonAOGrid() {
+  const { n, step } = terrainGrid();
+  const out = new Uint8Array(n * n);
+  for (let iz = 0; iz < n; iz++) {
+    for (let ix = 0; ix < n; ix++) out[iz * n + ix] = Math.round(horizonAO(ix * step - WORLD_SIZE / 2, iz * step - WORLD_SIZE / 2) * 255);
+  }
+  return out;
+}
+
 /** Sky visibility from the terrain alone: hollows and gullies get less light. */
 export function horizonAO(x, z, h0 = rawGroundAt(x, z)) {
+  if (bakedAO) {
+    // a grid vertex (all of the terrain's): the baked value
+    const { n, step } = terrainGrid();
+    const gx = (x + WORLD_SIZE / 2) / step;
+    const gz = (z + WORLD_SIZE / 2) / step;
+    if (Number.isInteger(gx) && Number.isInteger(gz) && gx < n && gz < n && gx >= 0 && gz >= 0) return bakedAO[gz * n + gx] / 255;
+  }
   let occ = 0;
   for (const [dx, dz] of DIRS) {
     let maxSlope = 0;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, WATER_LEVEL } from './config.js';
 import {
-  terrainGrid, cutUniforms, groundColor, groundLayers, nForest, mulberry32, rawGroundAt, waterLevelAt, marshAt, MARSH, sandAt, SEA_LEVEL,
+  terrainGrid, terrainSurface, cutUniforms, nForest, mulberry32, rawGroundAt, waterLevelAt, marshAt, MARSH, sandAt, SEA_LEVEL,
 } from './terrain.js';
 import { rockFieldAt } from './rockyslope.js';
 import { shared, patchSunlight, sunKey } from './materials.js';
@@ -117,6 +117,7 @@ function bakeGrassMap(terrain, canopyAt) {
     }
   });
 
+  const surface = terrainSurface();
   const data = new Uint8Array(n * n * 4);
   const h = (ix, iz) => heights[Math.min(n - 1, Math.max(0, iz)) * n + Math.min(n - 1, Math.max(0, ix))];
   const nv = new THREE.Vector3();
@@ -132,7 +133,7 @@ function bakeGrassMap(terrain, canopyAt) {
       const y = heights[k];
       nv.set(h(ix - 1, iz) - h(ix + 1, iz), 2 * step, h(ix, iz - 1) - h(ix, iz + 1)).normalize();
       const slope = 1 - nv.y;
-      groundLayers(x, y, z, slope, layers);
+      for (let c = 0; c < 4; c++) layers[c] = surface.layers[k * 4 + c]; // (terrain.js groundLayers)
       // the baked canopy is soft and low (a closed crown reads ~0.3-0.5), so stretch it, as the
       // dappled sunlight does: under a closed canopy the floor is moss and ferns, not lawn
       const open = 1 - Math.min(1, canopyAt(x, z) * 2.2);
@@ -152,7 +153,7 @@ function bakeGrassMap(terrain, canopyAt) {
       const dune = sand * smooth(y, SEA_LEVEL + 3, SEA_LEVEL + 7) * (1 - smooth(slope, 0.15, 0.4));
       if (sand > 0.02) density = density * (1 - sand) + 0.75 * dune * smooth(nForest(x * 0.06 + 13, z * 0.06 - 4) * 0.5 + 0.5, 0.3, 0.62);
 
-      groundColor(x, y, z, slope, col);
+      col.fromArray(surface.color, k * 3); // (groundColor)
       const shade = Math.min(1.2, lum(shaded[k * 3], shaded[k * 3 + 1], shaded[k * 3 + 2]) / Math.max(1e-4, lum(col.r, col.g, col.b)));
       // greener by water and in meadows, drier higher up; a little of the
       // ground's own tint so it belongs to the place
@@ -168,6 +169,7 @@ function bakeGrassMap(terrain, canopyAt) {
       data[k * 4 + 3] = Math.round(density * 255);
     }
   }
+  surface.release();
   const tex = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.LinearFilter;

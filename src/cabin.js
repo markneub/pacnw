@@ -273,11 +273,16 @@ function convert(src, cache) {
   return mat;
 }
 
-export async function buildCabin(plan, renderer, { lowPower }) {
-  const [gltf, wood] = await Promise.all([
+/** The cabin's model and wood photo (started early in main.js, so they download during the load). */
+export function loadCabinAssets(renderer, { lowPower }) {
+  return Promise.all([
     new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/cabin.glb`),
     loadTextureSet(renderer, 'cabin', { lowPower }),
   ]);
+}
+
+export async function buildCabin(plan, assets) {
+  const [gltf, wood] = await assets;
   if (wood) {
     U.uCabWood.value = wood[0].alb;
     U.uCabWoodAvg.value.setRGB(...wood[0].avg);

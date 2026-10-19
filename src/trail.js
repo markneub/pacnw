@@ -238,38 +238,13 @@ function resample(pts, spacing) {
 /**
  * Build the trail: route it, then expose the centreline, a mesh draped on the
  * terrain, and distanceTo(x, z) for keeping vegetation off the tread.
+ * `route` is the coarse route (the A* legs, [x0, z0, x1, z1, ...]) from the world bake
+ * (world.js); without it the route is searched here.
  */
-export async function buildTrail() {
-  const heights = new Float32Array(NX * NZ);
-  const side = new Float32Array(NX * NZ);
-  const wet = new Float32Array(NX * NZ);
-  const marsh = new Uint8Array(NX * NZ);
-  const level = new Float32Array(NX * NZ); // the water level there (the lake's, or the sea's at the coast)
-  const sand = new Float32Array(NX * NZ);
-  for (let iz = 0; iz < NZ; iz++) {
-    for (let ix = 0; ix < NX; ix++) {
-      const x = MIN_X + ix * CELL;
-      const z = MIN_Z + iz * CELL;
-      heights[iz * NX + ix] = heightAt(x, z);
-      side[iz * NX + ix] = slopeAt(x, z);
-      marsh[iz * NX + ix] = marshAt(x, z) > 0.25 ? 1 : 0;
-      level[iz * NX + ix] = waterLevelAt(x, z);
-      sand[iz * NX + ix] = sandAt(x, z);
-      // creeks: stepping into one costs a lot, so the trail crosses once, squarely, rather than
-      // following a channel (it once crossed the same creek twice at a hairpin)
-      const c = streams().nearest(x, z);
-      // (the rapids, streams.js, are where the trail is meant to cross the main creek: cheap there)
-      if (c.seg && c.d < c.half + 4) wet[iz * NX + ix] = c.seg.a.rapid > 0.3 ? 0.1 : 1;
-    }
-    await loadTick((0.25 * iz) / NZ);
-  }
-
-  let coarse = [];
-  for (let i = 0; i < TRAIL_STOPS.length - 1; i++) {
-    const leg = route(heights, side, wet, marsh, level, sand, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
-    coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
-    await loadTick(0.25 + (0.4 * (i + 1)) / (TRAIL_STOPS.length - 1));
-  }
+export async function buildTrail({ route: baked = null } = {}) {
+  const coarse = baked ? Array.from({ length: baked.length / 2 }, (_, i) => new THREE.Vector2(baked[2 * i], baked[2 * i + 1]))
+    : await searchRoute();
+  await loadTick(0.65);
   const points = resample(chaikin(coarse, 3), STEP);
 
   // Spatial hash of centreline segments for distance queries.
@@ -562,7 +537,42 @@ export async function buildTrail() {
     return g;
   });
 
-  return { points, stops, distanceTo, guide, mesh, crossings, boardwalk };
+  return { points, stops, distanceTo, guide, mesh, crossings, boardwalk, route: coarse };
+}
+
+/** The A* route between the stops over a grid of the terrain (the slow part of the trail). */
+async function searchRoute() {
+  const heights = new Float32Array(NX * NZ);
+  const side = new Float32Array(NX * NZ);
+  const wet = new Float32Array(NX * NZ);
+  const marsh = new Uint8Array(NX * NZ);
+  const level = new Float32Array(NX * NZ); // the water level there (the lake's, or the sea's at the coast)
+  const sand = new Float32Array(NX * NZ);
+  for (let iz = 0; iz < NZ; iz++) {
+    for (let ix = 0; ix < NX; ix++) {
+      const x = MIN_X + ix * CELL;
+      const z = MIN_Z + iz * CELL;
+      heights[iz * NX + ix] = heightAt(x, z);
+      side[iz * NX + ix] = slopeAt(x, z);
+      marsh[iz * NX + ix] = marshAt(x, z) > 0.25 ? 1 : 0;
+      level[iz * NX + ix] = waterLevelAt(x, z);
+      sand[iz * NX + ix] = sandAt(x, z);
+      // creeks: stepping into one costs a lot, so the trail crosses once, squarely, rather than
+      // following a channel (it once crossed the same creek twice at a hairpin)
+      const c = streams().nearest(x, z);
+      // (the rapids, streams.js, are where the trail is meant to cross the main creek: cheap there)
+      if (c.seg && c.d < c.half + 4) wet[iz * NX + ix] = c.seg.a.rapid > 0.3 ? 0.1 : 1;
+    }
+    await loadTick((0.25 * iz) / NZ);
+  }
+
+  let coarse = [];
+  for (let i = 0; i < TRAIL_STOPS.length - 1; i++) {
+    const leg = route(heights, side, wet, marsh, level, sand, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
+    coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
+    await loadTick(0.25 + (0.4 * (i + 1)) / (TRAIL_STOPS.length - 1));
+  }
+  return coarse;
 }
 
 /**

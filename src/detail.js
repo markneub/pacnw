@@ -116,17 +116,37 @@ export class NearPool {
   /** Upper bound on instances within `r` of any point (square windows over the grid). */
   maxNearby(r) {
     const span = Math.ceil(r / CELL) + 1;
-    let best = 0;
-    for (const k of this.grid.keys()) {
+    // window sums from a summed-area table of the per-cell counts (padded by the window)
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    const cells = [];
+    for (const [k, list] of this.grid) {
       const gx = Math.floor(k / 65536) - 32768;
       const gz = (k % 65536) - 32768;
-      let n = 0;
-      for (let dz = -span; dz <= span; dz++) {
-        for (let dx = -span; dx <= span; dx++) {
-          const list = this.grid.get(cellKey(gx + dx, gz + dz));
-          if (list) n += list.length;
-        }
-      }
+      cells.push(gx, gz, list.length);
+      x0 = Math.min(x0, gx);
+      x1 = Math.max(x1, gx);
+      z0 = Math.min(z0, gz);
+      z1 = Math.max(z1, gz);
+    }
+    if (!cells.length) return 1;
+    x0 -= span;
+    z0 -= span;
+    const w = x1 + span - x0 + 2;
+    const h = z1 + span - z0 + 2;
+    const sat = new Float64Array(w * h); // sat[(z + 1) * w + x + 1] = count over cells <= (x, z)
+    for (let i = 0; i < cells.length; i += 3) sat[(cells[i + 1] - z0 + 1) * w + cells[i] - x0 + 1] = cells[i + 2];
+    for (let z = 1; z < h; z++) {
+      for (let x = 1; x < w; x++) sat[z * w + x] += sat[(z - 1) * w + x] + sat[z * w + x - 1] - sat[(z - 1) * w + x - 1];
+    }
+    const at = (x, z) => sat[(Math.min(z, z1 + span) - z0 + 1) * w + Math.min(x, x1 + span) - x0 + 1];
+    let best = 0;
+    for (let i = 0; i < cells.length; i += 3) {
+      const gx = cells[i];
+      const gz = cells[i + 1];
+      const n = at(gx + span, gz + span) - at(gx - span - 1, gz + span) - at(gx + span, gz - span - 1) + at(gx - span - 1, gz - span - 1);
       if (n > best) best = n;
     }
     return Math.max(1, Math.min(best, this.count));

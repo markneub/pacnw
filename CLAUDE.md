@@ -6,6 +6,21 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 ## Commands
 
 - `npm run dev` / `npm run build` (output `dist/`, `base: './'` so it works under `/pacnw/`)
+- **World bake** (`src/world.js`, `tools/bake_world.mjs`, the `worldBake` plugin in vite.config.js): the build runs the
+  deterministic generation in node (height grid, terrain horizon AO, the trail's A* route, `placeVegetation`: the scatter
+  + extras + `seatStones`, 355k placements) and ships it as `world.bin` (4.9 MB gzip; positions to 1/256 m / mm, angles,
+  scales, normals 16 bit, tints 8 bit; lists < 1000 exact). Keyed by a hash of src/, the two GLBs and the bake script,
+  cached in `.cache/world/` (~35 s to bake). Dev: served only if baked for the current sources, else 404 → the page
+  generates live and the bake runs in the background (next reload is fast). `?world=live` forces live. The cabin's
+  exclusion filter runs after the bake (per-item steps commute). Node loads the GLBs with images stripped
+  (`prototypesFrom`). **Anything that changes generation just works** (the hash changes); but code the bake runs must
+  stay importable in node (no DOM at module load, no JSON imports in its import graph).
+  Load (container, SwiftShader, phone profile): ready 76 → 42 s; CPU steps terrain 2.1 → 1.2, trail 3.3 → 1.3,
+  vegetation 25.5 → 1.7, shading 0.7 → 0.3, grass 0.9 → 0.4 s (grass reuses the terrain's colours/layers:
+  `terrainSurface()`); world.bin fetch + decode 0.4 s. Also: models and the cabin download from the start; the warm-up
+  hides light-free subtrees while compiling (each `compile()` walked the whole visible scene for lights: 1.3 s);
+  `maxNearby` uses a summed-area table (0.4 s). What's left is mostly GPU (impostor bake, shader linking).
+  `?perf` lists the load steps on the start screen too (phones have no console).
 - No tests or linter. Verify changes with `npm run build` plus headless screenshots (below).
 
 ## Deploy

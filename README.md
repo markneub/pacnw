@@ -18,6 +18,11 @@ npm run dev      # http://localhost:5173
 npm run build    # static site in dist/ (relative paths, so it can be hosted from any sub-path)
 ```
 
+The build also bakes the world (terrain heights, the trail's route and every tree, fern and stone placement) in node
+into `dist/world.bin`, so the page loads it instead of generating it (~30 s of the build; cached in `.cache/world/`
+until the sources change). The dev server serves the bake once it has one for the current sources; until then the
+page generates the world itself while it bakes in the background. `?world=live` always generates it in the page.
+
 Controls: click to start · **WASD** move · **Shift** run · mouse look ·
 **R** cycle weather (auto → rain → snow → clear) · **H** toggle HUD · **E** or click to open a door · **Esc** release the mouse.
 
@@ -34,7 +39,7 @@ Add `?off=trees,ferns,...` to switch parts of the scene off (see CLAUDE.md for t
 costs the most on a device.
 
 Add `?perf` to show frame times (average and worst, which is the one to watch for stutter), draw calls
-and triangles, and to log how long each loading step took. The second line shows CPU time per frame,
+and triangles, and how long each loading step took (logged, and listed on the start screen). The second line shows CPU time per frame,
 plus GPU time where the browser can measure it (not Safari/iOS).
 
 `?bench` is the accurate way to measure a device (`?bench=trees,grass&views=spawn&heat=30` runs just those rows at one
@@ -60,6 +65,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `src/grounddetail.js` | Close-up photographic ground detail |
 | `src/surfacedetail.js` | Close-up photographic bark and rock on trees, logs, stumps and boulders |
 | `src/textures.js` | Loads a texture set fetched by `tools/fetch_textures.py` |
+| `src/world.js` + `tools/bake_world.mjs` | The world bake: the slow, deterministic generation (height grid, trail route, scatter) run at build time and loaded as one gzipped file |
 | `src/bake.js` | Lighting baked at load: per-vertex AO on models, canopy shade map, terrain horizon AO |
 | `src/perf.js` | `?perf` overlay |
 | `src/bench.js` | `?bench` device benchmark |

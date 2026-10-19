@@ -9,7 +9,7 @@ import { shared } from './materials.js';
 import { SNOWLINE, SPAWN, VIEW_DIST, WORLD_SIZE } from './config.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { installHeightFog, createEnvironment } from './atmosphere.js';
-import { shadeGround } from './bake.js';
+import { shadeGround, setBakedHorizonAO } from './bake.js';
 import { NearPool } from './detail.js';
 import { buildSigns } from './signs.js';
 import { PerfOverlay } from './perf.js';
@@ -24,7 +24,8 @@ import { buildGrass } from './grass.js';
 import { buildStreamWater } from './streamwater.js';
 import { buildOcean } from './ocean.js';
 import { Post } from './post.js';
-import { planCabin, buildCabin } from './cabin.js';
+import { planCabin, buildCabin, loadCabinAssets } from './cabin.js';
+import { loadWorld } from './world.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -145,6 +146,12 @@ function progress(name) {
 }
 
 async function init() {
+  // the world bake (world.js: height grid, trail route, every placement), made at build time.
+  // ?world=live computes it all here instead (as the dev server does until it has baked).
+  const worldReady = params.get('world') === 'live' ? Promise.resolve(null) : loadWorld(`${import.meta.env.BASE_URL}world.bin`);
+  // the models download meanwhile too (they're needed from the impostor bake on)
+  const protosReady = loadPrototypes(['forest', 'rocks'].map((m) => `${import.meta.env.BASE_URL}models/${m}.glb`));
+  const cabinReady = loadCabinAssets(renderer, { lowPower });
   // close-up ground and bark/rock textures download while the world is being built
   const detailReady = off.has('detail') ? Promise.resolve([false, false])
     : Promise.all([loadGroundDetail(renderer, { lowPower }), loadSurfaceDetail(renderer, { lowPower })]);
@@ -152,7 +159,10 @@ async function init() {
   const rockTexReady = loadTextureSet(renderer, 'rocks', { lowPower, flipY: false });
   progress('terrain');
   await nextFrame();
-  await prepareTerrain();
+  const world = await worldReady;
+  step(world ? 'world bake' : 'world bake (none: computing it)');
+  await prepareTerrain(world?.heights);
+  if (world) setBakedHorizonAO(world.ao); // (the terrain's share of the ground shading)
   const terrain = buildTerrain();
   {
     const { heights, n, step } = terrainGrid(); // the mist pass needs the ground's height
@@ -171,14 +181,14 @@ async function init() {
 
   progress('trail');
   await nextFrame();
-  const trail = await buildTrail();
+  const trail = await buildTrail({ route: world?.route });
   await loadTickNow(0.75);
   scene.add(trail.mesh);
   if (!off.has('water')) scene.add(buildStreamWater(trail)); // (the rocks in it skip the footbridges)
   step('trail');
 
   progress('impostors'); // models + impostor bake
-  const protos = await loadPrototypes(['forest', 'rocks'].map((m) => `${import.meta.env.BASE_URL}models/${m}.glb`));
+  const protos = await protosReady;
   await loadTickNow(0.1);
   // far trees as billboards (?farTrees=lod: the old 3D far models, for comparison)
   const impostors = params.get('farTrees') === 'lod' ? null : await bakeTreeImpostors(renderer, protos, { lowPower });
@@ -188,7 +198,7 @@ async function init() {
   step('tree impostors');
   progress('vegetation'); // the scatter and the instanced chunks
   const cabinPlan = planCabin(trail); // (the scatter keeps clear of it)
-  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, exclude: cabinPlan.blocked });
+  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, exclude: cabinPlan.blocked, placements: world?.placements });
   scene.add(veg.group);
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
   step('vegetation');
@@ -213,7 +223,7 @@ async function init() {
   const ocean = off.has('water') ? null : await buildOcean(weather.sky.uniforms, { lowPower, progress: [0.86, 0.98] });
   if (ocean) scene.add(ocean.mesh);
   // the mountain cabin at the end of the trail (its own model, textures and shaders)
-  const cabin = await buildCabin(cabinPlan, renderer, { lowPower });
+  const cabin = await buildCabin(cabinPlan, cabinReady);
   scene.add(cabin.group);
   if (params.get('door') === 'open') cabin.setOpen(true);
   const player = new Player(camera, renderer.domElement, (pos, r) => {
@@ -263,7 +273,15 @@ async function init() {
   await nextFrame();
   await warmUp();
   step('warm-up');
-  if (params.has('perf')) console.info('load:', timings.join(' · '), `· longest stall ${longestStall().toFixed(0)} ms`);
+  if (params.has('perf')) {
+    const line = `${timings.join(' · ')} · longest stall ${longestStall().toFixed(0)} ms · ready ${(performance.now() / 1000).toFixed(1)} s after navigation`;
+    console.info('load:', line);
+    // and on the start screen, for phones (no console there): one step per line
+    const el = document.createElement('div');
+    el.id = 'load-times';
+    el.textContent = line.split(' · ').join('\n');
+    overlay.appendChild(el);
+  }
 
   await progress(null); // fill the rest where it can be seen, then offer the start
   status.textContent = touch ? 'Tap to start' : 'Click to start';
@@ -410,11 +428,21 @@ async function warmUp() {
   // build blocks right here)
   const drawn = [];
   scene.traverse((o) => { if (o.isMesh || o.isPoints || o.isLine) drawn.push(o); });
+  // (each compile() walks the visible scene for its lights: with thousands of meshes that walk was
+  // ~1.3 s of the load in the container, so the subtrees without lights are hidden meanwhile;
+  // compile() itself doesn't care whether an object is visible)
+  const lightless = scene.children.filter((c) => {
+    let lit = false;
+    c.traverse((o) => { lit ||= o.isLight; });
+    return !lit;
+  });
+  for (const c of lightless) c.visible = false;
   const COMPILE_BATCH = 8;
   for (let i = 0; i < drawn.length; i += COMPILE_BATCH) {
     for (const o of drawn.slice(i, i + COMPILE_BATCH)) renderer.compile(o, camera, scene);
     await loadTick((0.3 * (i + COMPILE_BATCH)) / drawn.length);
   }
+  for (const c of lightless) c.visible = true;
   renderer.compile(scene, camera); // (anything left: the scene's own state)
   // Link the shaders one at a time (the slow part), so the loading bar can follow along. With
   // KHR_parallel_shader_compile they build in the background and we wait on each in turn;

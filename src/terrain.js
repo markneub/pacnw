@@ -239,9 +239,16 @@ function heightGrid() {
   return grid;
 }
 
-/** Fill the height grid ahead of buildTerrain, a row at a time, reporting progress (loadprogress.js). */
-export async function prepareTerrain() {
+/**
+ * Fill the height grid ahead of buildTerrain, a row at a time, reporting progress (loadprogress.js),
+ * or take it ready-made from the world bake (world.js).
+ */
+export async function prepareTerrain(baked = null) {
   if (grid) return;
+  if (baked) {
+    grid = baked;
+    return;
+  }
   const g = new Float32Array(GRID_N * GRID_N);
   for (let iz = 0; iz < GRID_N; iz++) {
     for (let ix = 0; ix < GRID_N; ix++) {
@@ -479,6 +486,15 @@ export function setTerrainCutout(mask, minX, minZ, sizeX, sizeZ) {
 
 const TILES = 8; // per side; each tile is culled on its own
 
+// the ground's colour and detail layers at each grid vertex, as the tiles have them (before
+// shading), kept for the grass map (grass.js), which would otherwise compute them all again
+let surface = null;
+
+/** { color: rgb per grid vertex, layers: 4 per grid vertex } from buildTerrain; release() when done. */
+export function terrainSurface() {
+  return { ...surface, release: () => { surface = null; } };
+}
+
 /**
  * One terrain tile straight from the height grid. Same triangulation as
  * PlaneGeometry (diagonal (ix, iz+1)-(ix+1, iz)), so groundAt() stays exact,
@@ -523,6 +539,11 @@ function buildTile(tx, tz) {
       colors[k] = c.r;
       colors[k + 1] = c.g;
       colors[k + 2] = c.b;
+      const gk = iz * GRID_N + ix;
+      surface.color[gk * 3] = c.r;
+      surface.color[gk * 3 + 1] = c.g;
+      surface.color[gk * 3 + 2] = c.b;
+      surface.layers.set(lw, gk * 4);
     }
   }
   const index = [];
@@ -628,6 +649,7 @@ export function buildTerrain() {
   };
   mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
 
+  surface = { color: new Float32Array(GRID_N * GRID_N * 3), layers: new Float32Array(GRID_N * GRID_N * 4) };
   const group = new THREE.Group();
   group.name = 'terrain';
   for (let tz = 0; tz < TILES; tz++) {
