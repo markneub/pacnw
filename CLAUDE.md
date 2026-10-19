@@ -562,7 +562,13 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   broom, snowshoes. Three objects (`cabin`, `cabin_door` (origin on the hinge), `cabin_interior`), ~5.7k faces, 30 draws
   near (the interior is hidden beyond 45 m). Faces carry their **wood grain** axis as vertex colours (game frame), so the
   shader lays the `rough_wood` photo (`public/textures/cabin`, `fetch_textures.py cabin`) along every log and board.
-  `MeshBuilder.build` asserts no face was dropped (the grain would misalign). Gotchas: board seams and the floor showed
+  `MeshBuilder.build` asserts no face was dropped (the grain would misalign). Cut ends (normal along the grain) take the
+  photo across the grain, fine and faint: with only the two along-grain projections both weights were ~0 and every log
+  end divided out to black (the woodpile's rounds, the corner log ends). The woodpile's snow is `snow_cap` (a lumpy mound
+  following the rounds, rounding over the sides, tapering at the ends; a flat box read as a slab). The shelves (`shelves`):
+  two plank boards on L brackets loaded with preserve jars (contents visible through the glass), tins, a coffee pot,
+  plates, a candle and standing/leaning/lying books, everything resting on its board (the first version had a sparse,
+  evenly spaced row of small items, the short books floating). Gotchas: board seams and the floor showed
   snow/sky through 6–8 mm gaps (now sheathing and a subfloor); the woodpile first covered a window.
   **Interior light, no real lights** (`patchCabin`): each fragment knows its cabin-frame position (`uCabInv`); inside
   (|x| < W, |z| < D, under the roof plane) the sky/env light is × 0.06 + window terms (+ the open door), corners and floor
@@ -605,6 +611,14 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `still`): draws/tris within ±10 / ±0.05M at spawn, lake, forest and both views; vegetation load unchanged. Views (sun):
   `x=165&z=478&yaw=1.8`, `x=424.5&z=-297&yaw=0.6&pitch=-0.2`, bluff `x=125&z=488&yaw=1.6&pitch=0.1`. Phone cost of the
   shader not yet benched (`?bench=ground`).
+  **Patchy until close** (the user): two causes. (1) Past the close-up range the procedural rock alone read as a
+  patchwork of flat greys: the rock photo (`uGDAlb[1]`, triplanar, gradients taken before the branches) now lies on rock
+  pixels at every distance at two big scales (9 m and 23 m tiles, blended, 65% desaturated like the close-up), per-block
+  tone 0.45 → 0.15 and tilt 0.8 → 0.35. +6 texture taps on rock pixels only. (2) The cobble clusters (`pebbles_d`,
+  20-faced stones, photo only within ~32 m) were scaled up to ×3.5 as talus below outcrops and read as grey polygons:
+  now ≤ ×1.5, and the talus is **`addTalus`** (hash, no rng): small scanned boulders (3 variants, scale 0.22–0.55) on a
+  4.5 m grid where the rock field here or 3/7 m uphill says stones gather; 6.4k → 12.3k boulders. Draws: all 9 variants
+  added ~19 on a rocky slope (each variant in a chunk is a draw), 3 add 6 (spawn +3). Load unchanged.
 - **Close-up ground detail** (`src/grounddetail.js`): photographic albedo + normal maps for 4 layers (forest
   floor, rock, snow, mud/dirt), weighted by per-vertex `aLayers` (terrain `groundLayers()`, trail tread/banks →
   dirt), within `uGDRange` (20–45 m desktop, 15–32 m phone). The photo *modulates* the existing colour

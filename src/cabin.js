@@ -177,17 +177,21 @@ function patchCabin(shader, { wood, snow }) {
       cabInside = step(abs(vCabP.x), ${W.toFixed(3)}) * step(abs(vCabP.z), ${D.toFixed(3)}) * step(vCabP.y, cabRoof(vCabP.x) + 0.04) * step(-0.3, vCabP.y);
       ${wood ? `{
         // the wood photo, its grain (the image's vertical) along each log and board: projected on
-        // the two planes that contain the grain axis, blended by the normal
+        // the two planes that contain the grain axis, blended by the normal; cut ends (looking
+        // along the grain) get it across the grain, fine and faint (with only the first two, an
+        // end's weights were both ~0 and it divided out to black: the woodpile's rounds)
         vec3 g = normalize(vGrain + vec3(1e-3, 2e-3, 3e-3));
         vec3 b1 = normalize(cross(g, abs(g.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
         vec3 b2 = cross(g, b1);
         vec3 n = normalize(vCabN);
         float w1 = pow(abs(dot(n, b2)), 4.0);
         float w2 = pow(abs(dot(n, b1)), 4.0);
+        float w3 = pow(abs(dot(n, g)), 4.0);
         float along = dot(vCabP, g) * 0.35;
         vec3 t1 = texture2D(uCabWood, vec2(dot(vCabP, b1), along) * uCabWoodTile).rgb;
         vec3 t2 = texture2D(uCabWood, vec2(dot(vCabP, b2) + 0.37, along) * uCabWoodTile).rgb;
-        vec3 wd = (t1 * w1 + t2 * w2) / max(w1 + w2, 1e-4) / uCabWoodAvg;
+        vec3 t3 = mix(uCabWoodAvg, texture2D(uCabWood, vec2(dot(vCabP, b1), dot(vCabP, b2)) * uCabWoodTile * 2.5).rgb, 0.5);
+        vec3 wd = (t1 * w1 + t2 * w2 + t3 * w3) / max(w1 + w2 + w3, 1e-4) / uCabWoodAvg;
         diffuseColor.rgb *= mix(vec3(1.0), wd, 0.85);
       }` : ''}`)
     .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>

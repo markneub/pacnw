@@ -854,7 +854,9 @@ async function scatter(trail) {
       if (snowAmount(x, z, h, slope) > 0.3) continue;
       const kind = PEBBLES[Math.floor(pick * PEBBLES.length)];
       // on stony slopes the cobbles grow into scree: small talus blocks
-      const talus = kind === 'pebbles_d' ? 1 + 2.5 * stony : 1;
+      // (cobbles stay cobble-sized: blown up ×3.5 into talus, these 20-faced stones read as flat grey
+      // polygons until you got close enough for their photo; the talus is scanned boulders, addTalus)
+      const talus = kind === 'pebbles_d' ? 1 + 0.5 * stony : 1;
       const scale = (0.8 + r * 0.6 / Math.max(p, 0.1)) * talus;
       // the cluster lies on the slope (fitted over its own spread, ~0.8 m × scale): level, its
       // downhill stones floated up to ~2 m over steep ground
@@ -897,6 +899,42 @@ export async function bakeShrubImpostors(renderer, protos, { lowPower }) {
  * on slopes too steep for the forest (0.25-0.55), standing on the ground between the outcrops.
  * Open slopes used to be bare, even felt with stones dotted over them (the user).
  */
+/**
+ * Talus: small scanned boulders where stones gather around and just below the bare rock
+ * (rockyslope.js, the same field as the pebbles; hash, no scatter rng). Scans carry their photo
+ * at every distance, unlike the low-poly cobbles that used to be scaled up for this.
+ */
+const TALUS = ['boulder_a', 'boulder_c', 'boulder_i'];
+function addTalus(placements, trail) {
+  const half = WORLD_SIZE / 2 - 20;
+  const STEP = 4.5;
+  for (let gz = -half; gz < half; gz += STEP) {
+    for (let gx = -half; gx < half; gx += STEP) {
+      const x = gx + hash2(gx - 3.3, gz + 1.1) * STEP;
+      const z = gz + hash2(gx + 2.2, gz - 4.4) * STEP;
+      const hv = hash2(x * 0.7, z * 1.3);
+      if (hv > 0.5) continue; // (cheap out before the terrain lookups)
+      const h = heightAt(x, z);
+      const ux = heightAt(x + 1.5, z) - heightAt(x - 1.5, z);
+      const uz = heightAt(x, z + 1.5) - heightAt(x, z - 1.5);
+      const slope = 1 - 3 / Math.hypot(ux, 3, uz);
+      if (slope < 0.1 || slope > 0.6) continue;
+      let rock = rockFieldAt(x, h, z, slope);
+      const ul = Math.hypot(ux, uz);
+      for (const up of [3, 7]) rock = Math.max(rock, rockFieldAt(x + ux / ul * up, h + ul / 3 * up, z + uz / ul * up, slope) - up * 0.02);
+      const stony = THREE.MathUtils.smoothstep(rock, 0.35, 0.55);
+      if (hv > 0.5 * stony) continue;
+      if (h < waterLevelAt(x, z) + 0.5 || sandAt(x, z) > 0.3 || snowAmount(x, z, h, slope) > 0.3) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 1.5 || offStream(x, z) < 1) continue;
+      const k = hash2(z * 1.7, x * 0.3);
+      // (three of the scans: each variant in a chunk is a draw, and all nine added ~19 on a rocky slope)
+      const name = TALUS[Math.floor(k * TALUS.length)];
+      const scale = 0.22 + 0.33 * hash2(x + 5.5, z - 5.5) ** 1.5;
+      (placements[name] ||= []).push({ x, y: groundAt(x, z), z, rotY: k * 71, scale, tint: hash2(x - 9, z + 9) });
+    }
+  }
+}
+
 function addSlopeGrowth(placements, trail) {
   const half = WORLD_SIZE / 2 - 20;
   const put = (name, p) => (placements[name] ||= []).push(p);
@@ -959,6 +997,7 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
   addLeaners(placements, trail);
   addDriftwood(placements, trail);
   addSlopeGrowth(placements, trail);
+  addTalus(placements, trail);
   // nothing where the cabin stands (filtered, so the scatter's rng sequence stays put)
   if (exclude) {
     for (const name of Object.keys(placements)) {

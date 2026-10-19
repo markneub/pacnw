@@ -120,6 +120,11 @@ export function patchRocky(shader, { tread = false } = {}) {
       void main() {`)
     .replace('#include <color_fragment>', `#include <color_fragment>
       {
+        #ifdef GROUND_DETAIL
+          // (gradients outside the branches below, so the photo's mip levels stay defined)
+          vec3 rkDx = dFdx(vRkPos);
+          vec3 rkDy = dFdy(vRkPos);
+        #endif
         vec3 rn = normalize(vRkN);
         float s = 1.0 - rn.y;
         // not on snow, sand or mud (their layers), nor on a trail's tread
@@ -153,13 +158,37 @@ export function patchRocky(shader, { tread = false } = {}) {
             }
             if (tw.y > 0.05) {
               vec4 b = rkBlocks(p.xz * 0.38 + 57.0);
-              crack += (1.0 - smoothstep(0.0, 0.07, b.x)) * 0.6 * tw.y; id += b.y * 0.6 * tw.y;
-              tilt += vec3(b.z, 0.0, b.w) * 0.25 * tw.y;
+              crack += (1.0 - smoothstep(0.0, 0.07, b.x)) * 0.35 * tw.y; id += b.y * 0.6 * tw.y;
+              tilt += vec3(b.z, 0.0, b.w) * 0.15 * tw.y;
             }
             crack *= far;
             // each block its own shade of grey, broad tonal drifts across the face
-            float tone = id * 0.45 + rkNoise(q * 0.06 + p.y * 0.04) * 0.35 + rkNoise(q * 0.5 + p.y * 0.3) * 0.2;
+            // (each block's own tone, kept small: as a patchwork of flat greys it read as polygons)
+            float tone = id * 0.15 + rkNoise(q * 0.06 + p.y * 0.04) * 0.5 + rkNoise(q * 0.5 + p.y * 0.3) * 0.35;
             vec3 rk = mix(uRkA, uRkB, tone);
+            #ifdef GROUND_DETAIL
+            {
+              // the rock photo at every distance, at two big scales (blended, so it never visibly
+              // repeats): beyond the close-up range the procedural rock alone read as a patchwork
+              // of flat greys until you got close and the photo took over (the user)
+              vec3 bw = pow(abs(rn), vec3(4.0));
+              bw /= bw.x + bw.y + bw.z;
+              vec3 photo = vec3(0.0);
+              for (int k = 0; k < 2; k++) {
+                float sc = k == 0 ? 1.0 / 9.0 : 1.0 / 23.0;
+                vec3 pp = p * sc + float(k) * 0.37;
+                vec3 dx = rkDx * sc;
+                vec3 dy = rkDy * sc;
+                vec3 aX = textureGrad(uGDAlb[1], pp.zy, dx.zy, dy.zy).rgb;
+                vec3 aY = textureGrad(uGDAlb[1], pp.xz, dx.xz, dy.xz).rgb;
+                vec3 aZ = textureGrad(uGDAlb[1], pp.xy, dx.xy, dy.xy).rgb;
+                photo += (aX * bw.x + aY * bw.y + aZ * bw.z) * 0.5;
+              }
+              vec3 rr = photo / uGDAvg[1];
+              rr = mix(vec3(dot(rr, vec3(0.3, 0.5, 0.2))), rr, 0.35); // (as the close-up: grey, not lilac)
+              rk *= mix(vec3(1.0), rr, 0.75);
+            }
+            #endif
             rk *= (1.0 - 0.45 * crack) * (1.0 + 0.15 * step_ * far);
             // dark water streaks running down the faces
             float along = dot(p.xz, normalize(vec2(-rn.z, rn.x) + 1e-4));
@@ -170,7 +199,7 @@ export function patchRocky(shader, { tread = false } = {}) {
             rk = mix(rk, uRkMoss, smoothstep(0.6, 0.85, rn.y) * smoothstep(0.35, 0.7, rkNoise(q * 0.45 + 9.0)) * 0.7);
             diffuseColor.rgb = mix(diffuseColor.rgb, rk * vRkShade, rkMask);
             // relief: every block faces a little differently, ledge tops tilt up
-            vec3 g = tilt * 0.8 * far;
+            vec3 g = tilt * 0.35 * far;
             g -= rn * dot(g, rn); // along the surface only
             rkBump = g * rkMask;
           }

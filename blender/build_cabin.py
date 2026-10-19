@@ -507,7 +507,45 @@ def woodpile(b, M, rng, layout):
             off = rng.uniform(-0.03, 0.03)
             cyl(b, M["bark"], (x0 - 0.25 + off, y, z), (x0 + 0.25 + off, y, z), r, sides=7, cap=M["log_end"], rot=rng.uniform(0, TAU))
             y += 2 * r + 0.01
-    box(b, M["snow"], x0, sum(WOOD_Y) / 2, 0.12 + 4 * 0.21 + 0.16, 0.55, WOOD_Y[1] - WOOD_Y[0] + 0.1, 0.08)
+    snow_cap(b, M, rng, x0 - 0.3, x0 + 0.3, WOOD_Y[0] - 0.02, WOOD_Y[1] + 0.02, 0.12 + 4 * 0.21 + 0.05)
+
+
+def snow_cap(b, M, rng, x0, x1, y0, y1, z0):
+    """
+    Snow lying on top of something long and roughly flat (the woodpile): a soft mound, highest
+    along the middle, sagging between lumps, rounding down over the sides and tapering to nothing
+    at the ends, a little overhang on the open side. A flat white box read as a slab.
+    """
+    NX, NY = 6, 16
+    lumps = [rng.uniform(-1, 1) for _ in range(NY + 1)]
+    top, bot = [], []
+    for j in range(NY + 1):
+        v = j / NY
+        y = y0 + (y1 - y0) * v
+        end = math.sin(math.pi * v) ** 0.35  # tapers off at the ends
+        lump = 1 + 0.25 * (lumps[j] + 0.5 * lumps[max(0, j - 1)]) / 1.5
+        rt, rb = [], []
+        for i in range(NX + 1):
+            u = i / NX * 2 - 1  # across: -1 wall side .. +1 open side
+            h = 0.13 * (1 - u * u) ** 0.6 * end * lump
+            xx = x0 + (x1 - x0) * (i / NX) + (0.03 if u > 0.9 else 0.0)
+            droop = 0.05 * max(0.0, abs(u) - 0.6) / 0.4  # rounds down over the sides
+            rt.append(b.v((xx, y, z0 + 0.04 + h - droop)))
+            rb.append(b.v((xx, y, z0 - 0.04 - droop)))
+        top.append(rt)
+        bot.append(rb)
+    b.grain = (0.0, 1.0, 0.0)
+    for j in range(NY):
+        for i in range(NX):
+            b.face((top[j][i], top[j][i + 1], top[j + 1][i + 1], top[j + 1][i]), M["snow"])
+            b.face((bot[j][i], bot[j + 1][i], bot[j + 1][i + 1], bot[j][i + 1]), M["snow"])
+        for i, side in ((0, -1), (NX, 1)):
+            f = (bot[j][i], bot[j + 1][i], top[j + 1][i], top[j][i])
+            b.face(f if side > 0 else f[::-1], M["snow"])
+    for j, side in ((0, -1), (NY, 1)):
+        for i in range(NX):
+            f = (bot[j][i], bot[j][i + 1], top[j][i + 1], top[j][i])
+            b.face(f if side < 0 else f[::-1], M["snow"])
 
 
 # ---- the door ------------------------------------------------------------------------------
@@ -659,33 +697,99 @@ def table_and_chairs(b, M, rng):
     box(b, M["cloth"], tx - 0.12, ty - 0.35, 0.79, 0.15, 0.215, 0.028)
 
 
+def tilted_box(b, mat, cx, cy, cz, sx, sy, sz, ang):
+    """A box turned by `ang` about the Y axis (a book leaning sideways), its centre at (cx, cy, cz)."""
+    c, s_ = math.cos(ang), math.sin(ang)
+    pts = []
+    for dx, dz in ((-sx / 2, -sz / 2), (sx / 2, -sz / 2), (sx / 2, sz / 2), (-sx / 2, sz / 2)):
+        pts.append((cx + dx * c - dz * s_, cz + dx * s_ + dz * c))
+    b.grain = (0.0, 0.0, 1.0)
+    slab(b, mat, [(px, cy - sy / 2, pz) for px, pz in pts], [(px, cy + sy / 2, pz) for px, pz in pts])
+
+
+def shelves(b, M, rng):
+    """
+    Two plank shelves on the front wall right of the door, on wall brackets, loaded like a cabin
+    pantry: preserve jars (their contents showing through the glass), tins of different sizes, a
+    coffee pot, a stack of plates, a candle, books standing, leaning and lying. Everything rests
+    on its board (the first version had small items floating in a sparse, evenly spaced row).
+    """
+    wall = -D + R + 0.01
+    depth = 0.27
+    yc = wall + depth / 2
+    x0, x1 = 0.7, 2.0
+    boards = (1.18, 1.6)
+    t = 0.035
+    for z in boards:
+        box(b, M["board"], (x0 + x1) / 2, yc, z, x1 - x0, depth, t)
+        for x in (x0 + 0.12, (x0 + x1) / 2, x1 - 0.12):
+            # an L bracket: a cleat on the wall and a diagonal strut under the board
+            box(b, M["trim"], x, wall + 0.015, z - 0.14, 0.04, 0.03, 0.25)
+            ang = math.atan2(0.2, depth - 0.06)
+            L = math.hypot(0.2, depth - 0.06)
+            pts = []
+            for dy, dz in ((-L / 2, -0.02), (L / 2, -0.02), (L / 2, 0.02), (-L / 2, 0.02)):
+                pts.append((wall + 0.03 + (depth - 0.06) / 2 + dy * math.cos(ang) - dz * math.sin(ang),
+                            z - t / 2 - 0.1 + dy * math.sin(ang) + dz * math.cos(ang)))
+            b.grain = (0.0, math.cos(ang), math.sin(ang))
+            slab(b, M["trim"], [(x - 0.018, py, pz) for py, pz in pts], [(x + 0.018, py, pz) for py, pz in pts])
+    contents = [M["blanket"], M["rug"], M["cloth"], M["log_end"]]
+
+    def jar(x, z, r, h):
+        y = yc + rng.uniform(-0.04, 0.05)
+        lathe(b, M["glass"], [(0.0, 0.0), (r, 0.0), (r, h * 0.82), (r * 0.8, h * 0.9), (0.0, h * 0.9)], x, y, z, sides=10)
+        fill = rng.uniform(0.45, 0.8)
+        lathe(b, rng.choice(contents), [(0.0, 0.003), (r * 0.9, 0.003), (r * 0.9, h * fill), (0.0, h * fill)], x, y, z, sides=10)
+        lathe(b, M["tin"], [(0.0, h * 0.88), (r * 0.85, h * 0.88), (r * 0.85, h), (0.0, h)], x, y, z, sides=10)
+
+    def tin_can(x, z, r, h):
+        lathe(b, M["tin"], [(0.0, 0.0), (r, 0.0), (r, h), (0.0, h)], x, yc + rng.uniform(-0.05, 0.05), z, sides=10)
+
+    def books(x, z, n, lean_last=True):
+        cols = [M["blanket"], M["rug"], M["trim"], M["cloth"], M["log_end"]]
+        for k in range(n):
+            h = rng.uniform(0.17, 0.24)
+            w = rng.uniform(0.025, 0.045)
+            box(b, cols[k % len(cols)], x + w / 2, yc - 0.01, z + h / 2, w - 0.003, rng.uniform(0.13, 0.18), h)
+            x += w
+        if lean_last:
+            h = rng.uniform(0.18, 0.22)
+            a = 0.35
+            tilted_box(b, M["rug"], x + math.sin(a) * h / 2 + 0.015, yc - 0.01, z + math.cos(a) * h / 2, 0.03, 0.16, h, a)
+            x += math.sin(a) * h + 0.04
+        return x
+
+    # lower shelf: preserves and tins
+    z = boards[0] + t / 2
+    x = x0 + 0.05
+    for r, h in ((0.05, 0.17), (0.045, 0.13), (0.055, 0.2), (0.045, 0.13)):
+        jar(x + r, z, r, h)
+        x += 2 * r + rng.uniform(0.012, 0.03)
+    x += 0.05
+    for r, h in ((0.04, 0.11), (0.04, 0.11), (0.05, 0.08)):
+        tin_can(x + r, z, r, h)
+        x += 2 * r + 0.01
+    x += 0.06
+    jar(x + 0.06, z, 0.06, 0.22)
+    x += 0.14
+    lathe(b, M["tin"], [(0.0, 0.0), (0.07, 0.0), (0.075, 0.12), (0.05, 0.2), (0.03, 0.23), (0.0, 0.24)], x + 0.08, yc, z, sides=12)  # coffee pot
+    cyl(b, M["iron"], (x + 0.15, yc, z + 0.17), (x + 0.2, yc, z + 0.12), 0.01, sides=5)
+    # upper shelf: books, a stack of plates, a candle in a holder, a lying book on top
+    z = boards[1] + t / 2
+    x = books(x0 + 0.04, z, 7)
+    x += 0.06
+    for k in range(4):
+        lathe(b, M["tin"], [(0.0, 0.0), (0.085, 0.0), (0.11, 0.018), (0.0, 0.018)], x + 0.11, yc, z + k * 0.02, sides=14)
+    x += 0.26
+    lathe(b, M["iron"], [(0.0, 0.0), (0.05, 0.0), (0.05, 0.012), (0.015, 0.02), (0.015, 0.04), (0.0, 0.04)], x + 0.05, yc + 0.03, z, sides=10)
+    lathe(b, M["cloth"], [(0.0, 0.04), (0.012, 0.04), (0.012, 0.15), (0.0, 0.155)], x + 0.05, yc + 0.03, z, sides=8)
+    x += 0.12
+    box(b, M["blanket"], x + 0.11, yc, z + 0.015, 0.2, 0.15, 0.03)
+    box(b, M["trim"], x + 0.12, yc + 0.005, z + 0.042, 0.18, 0.14, 0.025)
+
+
 def shelves_and_counter(b, M, rng):
-    # shelves on the front wall, right of the door
-    y = -D + R + 0.13
-    for z in (1.25, 1.65):
-        box(b, M["board"], 1.35, y, z, 1.25, 0.24, 0.03)
-        for x in (0.85, 1.85):
-            box(b, M["trim"], x, y + 0.02, z - 0.08, 0.03, 0.18, 0.14)
-    xs = 0.82
-    for k in range(7):  # cans, jars, a coffee pot, books
-        kind = k % 4
-        z0 = 1.265 if k < 4 else 1.665
-        if kind == 0:
-            lathe(b, M["tin"], [(0.0, 0.0), (0.04, 0.0), (0.04, 0.11), (0.0, 0.11)], xs, y, z0, sides=8)
-            xs += 0.12
-        elif kind == 1:
-            lathe(b, M["glass"], [(0.0, 0.0), (0.05, 0.0), (0.05, 0.13), (0.03, 0.16), (0.0, 0.16)], xs, y, z0, sides=8)
-            lathe(b, M["rug"], [(0.0, 0.0), (0.045, 0.0), (0.045, 0.07), (0.0, 0.07)], xs, y, z0 + 0.005, sides=8)
-            xs += 0.13
-        elif kind == 2:
-            for j in range(4):
-                box(b, [M["blanket"], M["rug"], M["trim"], M["cloth"]][j], xs + j * 0.035, y, z0 + 0.1, 0.03, 0.17, 0.2 - j * 0.015)
-            xs += 0.17
-        else:
-            lathe(b, M["tin"], [(0.0, 0.0), (0.07, 0.0), (0.06, 0.15), (0.04, 0.2), (0.0, 0.21)], xs, y, z0, sides=10)
-            xs += 0.15
-        if k == 3:
-            xs = 0.82
+    shelves(b, M, rng)
     # wash counter under the right window: a plank top on legs, an enamel basin, a bucket below
     cx, cy = W - R - 0.27, WINDOWS[1][1]
     box(b, M["wood"], cx, cy, 0.85, 0.5, 0.95, 0.04)
