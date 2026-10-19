@@ -133,6 +133,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   leaves beneath, lobes cut ~1/3 in; the cards are **folded** (`_card(fold=0.45)`: a shallow V along the twig, 4 tris; each
   half rises 0.45 × its width), with more roll, since flat horizontal cards seen at eye level were thin streaks. `fold=0`
   keeps the old code path exactly, so every other asset is byte-identical (checked by hashing the GLB's mesh buffers).
+  **Maple leaves v2** (the user, walking under them on a phone: "cartoonish and blocky"): the spray had ~20 star-shaped
+  leaves ~35 cm across. `maple_spray()` is now 1024² (2× supersampled): a twig with opposite side twigs and opposite leaf
+  pairs on petioles, ~70 near-round palmate leaves 12–20 cm across (7–9 broad lobes with short points, double-toothed
+  edges, a notch at the petiole, main + side veins), each foreshortened along a random tilt axis, cupped/folded and lit
+  from one side, mottled, shadowing the leaves beneath. Coverage 24% of the card (was 33%). `MapleCards` use
+  **alpha to coverage** (smooth edges in the 4× MSAA scene target; no effect in the impostor bake) and fade out as the
+  triangle turns edge-on (`smoothstep(0.1, 0.35, |face·V|)`, face normal from dFdx/dFdy: edge-on cards were long green
+  streaks). Geometry unchanged (GLB +0.5 MB: the texture). Not yet phone-benched (`?bench=trees`). View:
+  `x=-2&z=655&yaw=0.9&pitch=0.6&weather=sun`.
   **Card outlines + fewer crossed cards (fill cuts):** cards with a spray texture (fir, hemlock, cedar, their frost
   versions, snow) are built as a tight convex polygon instead of a quad: `tools/card_hulls.py` (run after
   make_foliage.py) takes every texel with alpha > 0.02, pads it 10 texels for the mip alpha boost, reduces the hull to 4

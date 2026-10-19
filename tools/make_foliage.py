@@ -394,87 +394,180 @@ def salal_spray(seed=29):
 
 def maple_spray(seed=37):
     """
-    A vine maple spray seen from above, 1:1 (u along the twig, base at u = 0):
-    opposite pairs of round palmate leaves (7-9 pointed, toothed lobes cut about a
-    third in, pale veins from the leaf base) on short petioles, filling most of
-    the card, fresh bright green with some yellower leaves. Each leaf is shaded
-    (lighter at the centre, darker toward the lobe tips and edges, mottled) and
-    casts a soft shadow on the leaves beneath: flat fills read as cut-out paper.
+    A vine maple spray seen from above, 1:1 at 1024 px (u along the twig, base at u = 0):
+    a slender twig with short side twigs, carrying opposite pairs of leaves on long
+    petioles. Leaves are near-round and palmate (7-9 shallow, pointed lobes, finely
+    double-toothed edges, veins from the petiole to each lobe tip with fainter side
+    veins), 10-20 cm across on the card, smaller toward the tips. Each leaf is tilted
+    (foreshortened along a random axis), cupped and folded along its veins (lobes
+    alternately lighter/darker), lit from one side, mottled, and casts a soft shadow
+    on the leaves beneath. The first version's few big flat stars read as cartoon
+    cut-outs up close (the user, walking under the maples).
     """
     rng = random.Random(seed)
     nrng = np.random.default_rng(seed)
-    W = SIZE * SS
-    img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    y_mid = W / 2
-    twig = [(0.03 * W + 0.8 * W * k / 8, y_mid + math.sin(k * 1.3) * W * 0.015) for k in range(9)]
-    for k in range(8):
-        d.line([twig[k], twig[k + 1]], fill=(118, 92, 60, 255), width=int((4.0 - 2.0 * k / 8) * SS))
-    # mottling: soft blotches over the whole card, shared by the leaves
-    mottle = box_blur(nrng.random((W, W)).astype(np.float32), 6 * SS)
+    S2 = 2  # supersampling (1024 * 2 work size)
+    N = 1024
+    W = N * S2
+    img = np.zeros((W, W, 4), np.float32)
+    mottle = box_blur(nrng.random((W, W)).astype(np.float32), 5 * S2)
     mottle = (mottle - mottle.mean()) / (mottle.std() + 1e-6)
+    fine = box_blur(nrng.random((W, W)).astype(np.float32), S2)
+    fine = (fine - fine.mean()) / (fine.std() + 1e-6)
+    light = (-0.55, -0.65)  # direction the light comes from (image x, y), normalised below
+    ll = math.hypot(*light)
+    light = (light[0] / ll, light[1] / ll)
 
-    def leaf(cx, cy, R, rot, col):
-        nonlocal img, d
-        lobes = rng.choice((7, 9))
+    def stroke(pts, col, width):
+        """Draw a polyline (twig, petiole) straight into the image."""
+        x0 = int(max(0, min(p[0] for p in pts) - width - 2)); x1 = int(min(W, max(p[0] for p in pts) + width + 3))
+        y0 = int(max(0, min(p[1] for p in pts) - width - 2)); y1 = int(min(W, max(p[1] for p in pts) + width + 3))
+        if x1 <= x0 or y1 <= y0:
+            return
+        m_img = Image.new("L", (x1 - x0, y1 - y0), 0)
+        dd = ImageDraw.Draw(m_img)
+        for k in range(len(pts) - 1):
+            dd.line([(pts[k][0] - x0, pts[k][1] - y0), (pts[k + 1][0] - x0, pts[k + 1][1] - y0)], fill=255,
+                    width=max(1, int(round(width))))
+        m = np.asarray(m_img, np.float32) / 255.0
+        win = img[y0:y1, x0:x1]
+        win[:, :, :3] = win[:, :, :3] * (1 - m[:, :, None]) + np.array(col, np.float32) * m[:, :, None]
+        win[:, :, 3] = np.maximum(win[:, :, 3], m * 255)
+
+    def leaf(cx, cy, R, base_ang, col):
+        """One leaf, its petiole arriving from direction base_ang (radians, image space)."""
+        lobes = rng.choice((7, 7, 9, 9, 9))
+        sinus = rng.uniform(0.6, 0.72)  # lobes cut about a third in
+        tilt_ax = rng.uniform(0, TAU)
+        squash = rng.uniform(0.55, 1.0)  # foreshortened: the leaf tilts away from the camera
+        cup = rng.uniform(-0.25, 0.35)
+        rot = base_ang  # lobes point away from the petiole; the notch at the petiole
         pts = []
-        steps = lobes * 8
-        for k in range(steps + 1):
-            a = rot + TAU * k / steps
-            f = (k % 8) / 8.0  # position within a lobe
-            lobe = 0.66 + 0.34 * (1.0 - abs(f - 0.5) * 2.0) ** 1.5  # lobes cut about a third in, pointed tips
-            tooth = 0.035 * (1 if k % 2 else -1) * (1.0 - abs(f - 0.5) * 2.0)
-            r = R * (lobe + tooth)
-            pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
-        x0, y0 = max(0, int(cx - R * 1.3)), max(0, int(cy - R * 1.3))
-        x1, y1 = min(W, int(cx + R * 1.3) + 1), min(W, int(cy + R * 1.3) + 1)
-        m_img = Image.new("L", (W, W), 0)
-        ImageDraw.Draw(m_img).polygon(pts, fill=255)
-        m = np.asarray(m_img, np.float32)[y0:y1, x0:x1] / 255.0
-        a = np.asarray(img).astype(np.float32)
-        win = a[y0:y1, x0:x1]
-        # the leaf's soft shadow on what's already there (down and to the right of it)
-        off = int(R * 0.12)
+        steps = lobes * 24
+        tooth_ph = rng.uniform(0, 1)
+        for k in range(steps):
+            a = TAU * k / steps
+            f = (a / TAU * lobes + 0.5) % 1.0  # 0.5 = lobe tip, 0/1 = sinus
+            tip = (1.0 - abs(f - 0.5) * 2.0)
+            # broad, rounded lobes with a short point, narrow V sinuses between them
+            lobe = sinus + (1.0 - sinus) * (0.86 * (1.0 - (1.0 - tip) ** 2) + 0.14 * tip ** 6)
+            # a deep notch where the petiole joins (the cordate base)
+            da = math.atan2(math.sin(a), math.cos(a))
+            notch = 1.0 - 0.28 * math.exp(-(da / 0.22) ** 2)
+            # double teeth: big teeth with small ones between
+            t1 = ((a / TAU * lobes * 6 + tooth_ph) % 1.0)
+            t2 = ((a / TAU * lobes * 12 + tooth_ph) % 1.0)
+            tooth = 0.045 * (1.0 - t1) + 0.018 * (1.0 - t2)
+            r = R * (lobe * notch + tooth * (0.4 + 0.6 * tip))
+            # local frame: angle 0 points back toward the petiole
+            pa = a + rot + math.pi
+            px, py = math.cos(pa) * r, math.sin(pa) * r
+            # foreshorten along tilt_ax
+            ca, sa = math.cos(tilt_ax), math.sin(tilt_ax)
+            u_, v_ = px * ca + py * sa, -px * sa + py * ca
+            u_ *= squash
+            pts.append((cx + u_ * ca - v_ * sa, cy + u_ * sa + v_ * ca))
+        x0, y0 = max(0, int(cx - R * 1.25)), max(0, int(cy - R * 1.25))
+        x1, y1 = min(W, int(cx + R * 1.25) + 1), min(W, int(cy + R * 1.25) + 1)
+        if x1 <= x0 or y1 <= y0:
+            return
+        m_img = Image.new("L", (x1 - x0, y1 - y0), 0)
+        ImageDraw.Draw(m_img).polygon([(x - x0, y - y0) for x, y in pts], fill=255)
+        m = np.asarray(m_img, np.float32) / 255.0
+        win = img[y0:y1, x0:x1]
+        # the leaf's soft shadow on what's already there (away from the light)
+        off = max(1, int(R * 0.14))
         sh = np.zeros_like(m)
-        sh[off:, off:] = m[:-off or None, :-off or None] if off > 0 else m
-        sh = box_blur(sh, max(1, int(R * 0.06)))
-        win[:, :, :3] *= (1.0 - 0.45 * sh * (win[:, :, 3:4] / 255.0)[:, :, 0])[:, :, None]
-        # the leaf: lighter toward the middle, darker at the rim, mottled
+        sh[off:, off:] = m[:-off, :-off]
+        sh = box_blur(sh, max(1, int(R * 0.08)))
+        win[:, :, :3] *= (1.0 - 0.5 * sh * (win[:, :, 3] / 255.0))[:, :, None]
+        # leaf-space coordinates (undo the foreshortening) for veins and shading
         yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
-        rr = np.hypot(xx - cx, yy - cy) / R
-        rim = 1.0 - box_blur(m, max(1, int(R * 0.05)))
-        shade = (1.08 - 0.3 * np.clip(rr, 0, 1.2) ** 1.6 - 0.25 * rim) * (1.0 + 0.07 * mottle[y0:y1, x0:x1])
-        leaf_rgb = np.array(col, np.float32)[None, None, :] * shade[:, :, None]
+        dx, dy = xx - cx, yy - cy
+        ca, sa = math.cos(tilt_ax), math.sin(tilt_ax)
+        u_, v_ = dx * ca + dy * sa, -dx * sa + dy * ca
+        u_ /= squash
+        lx, ly = u_ * ca - v_ * sa, u_ * sa + v_ * ca
+        rr = np.hypot(lx, ly) / R
+        ang = np.arctan2(ly, lx) - (rot + math.pi)
+        fl = (ang / TAU * lobes + 0.5) % 1.0  # 0.5 on a lobe's midline
+        # veins: main ones to each lobe tip, fading out, and faint side veins off them
+        dv = np.abs(fl - 0.5) * (TAU / lobes) * rr * R  # distance (px) from the lobe's main vein
+        vw = S2 * (1.6 - 1.1 * np.clip(rr, 0, 1))
+        main_v = np.clip(1.0 - dv / vw, 0, 1) * np.clip(1.0 - rr * 0.9, 0, 1) ** 0.5
+        side_ph = (rr * 9.0 - np.abs(fl - 0.5) * 4.0) % 1.0
+        side_v = np.clip(1.0 - np.abs(side_ph - 0.5) * 2.0 * 7.0, 0, 1) * 0.35 * np.clip(1.0 - rr, 0, 1)
+        veins = np.clip(main_v + side_v, 0, 1)
+        # fold along the veins: each lobe's two halves face slightly different ways
+        fold = np.where(fl > 0.5, 1.0, -1.0) * np.clip(np.abs(fl - 0.5) * 2.0, 0, 1) ** 0.5
+        # a cupped / tilted leaf, lit from one side: brightness from a fake normal
+        nx = lx / R * cup + 0.12 * fold * np.cos(ang + rot + math.pi + math.pi / 2)
+        ny = ly / R * cup + 0.12 * fold * np.sin(ang + rot + math.pi + math.pi / 2)
+        lit = 1.0 - 0.45 * (nx * light[0] + ny * light[1])
+        tilt_lit = 0.85 + 0.3 * squash  # tilted-away leaves catch less of the overhead light
+        rim = 1.0 - box_blur(m, max(1, int(R * 0.04)))
+        shade = (lit * tilt_lit * (1.04 - 0.16 * np.clip(rr, 0, 1.2) ** 2 - 0.2 * rim)
+                 * (1.0 + 0.06 * mottle[y0:y1, x0:x1] + 0.025 * fine[y0:y1, x0:x1]))
+        base = np.array(col, np.float32)
+        vein_col = np.array(lerp(col, (196, 214, 138), 0.32), np.float32)
+        leaf_rgb = base[None, None, :] * shade[:, :, None]
+        leaf_rgb = leaf_rgb * (1 - 0.55 * veins[:, :, None]) + vein_col[None, None, :] * shade[:, :, None] * 0.55 * veins[:, :, None]
         win[:, :, :3] = win[:, :, :3] * (1 - m[:, :, None]) + leaf_rgb * m[:, :, None]
         win[:, :, 3] = np.maximum(win[:, :, 3], m * 255)
-        a[y0:y1, x0:x1] = win
-        img = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGBA")
-        d = ImageDraw.Draw(img)
-        # pale veins from the base to each lobe tip (thin, and fading out toward the tips)
-        vein = lerp(col, (205, 220, 150), 0.3)
-        for k in range(lobes):
-            va = rot + TAU * (k + 0.5) / lobes
-            for t0, t1, w in ((0.0, 0.45, 2), (0.45, 0.8, 1)):
-                d.line([(cx + math.cos(va) * R * t0, cy + math.sin(va) * R * t0),
-                        (cx + math.cos(va) * R * t1, cy + math.sin(va) * R * t1)], fill=vein + (255,), width=max(1, w * SS // 2))
 
-    greens = [(86, 140, 44), (104, 152, 48), (122, 162, 52), (140, 172, 60)]
-    for k in range(1, 9):
-        tx, ty = twig[k]
+    greens = [(68, 118, 36), (82, 132, 40), (96, 144, 44), (110, 152, 48), (124, 160, 54)]
+    twig_col = (112, 84, 56)
+
+    def leaf_pair(tx, ty, dir_a, scale, n_tip=False):
+        """Opposite leaves on long petioles, angled forward off the twig."""
         for side in (-1, 1):
-            if rng.random() < 0.15:
+            if rng.random() < 0.1:
                 continue
-            R = W * rng.uniform(0.11, 0.16) * (0.75 if k == 8 else 1.0)
-            ang = math.radians(rng.uniform(50, 80))
-            px = tx + math.cos(ang) * R * 1.25
-            py = ty + side * math.sin(ang) * R * 1.25
-            py = min(W - R * 1.02, max(R * 1.02, py))
-            px = min(W - R * 1.02, px)
-            d.line([(tx, ty), (px, py)], fill=(130, 110, 60, 255), width=int(1.5 * SS))
+            R = W * rng.uniform(0.06, 0.082) * scale
+            pet = R * rng.uniform(0.6, 1.0)
+            a = dir_a + side * math.radians(rng.uniform(40, 75))
+            px, py = tx + math.cos(a) * pet, ty + math.sin(a) * pet
+            cx, cy = px + math.cos(a) * R * 0.85, py + math.sin(a) * R * 0.85
+            # keep the leaf on the card (pull it in along its petiole)
+            cx = min(W - R * 1.02, max(R * 1.02, cx))
+            cy = min(W - R * 1.02, max(R * 1.02, cy))
+            a = math.atan2(cy - ty, cx - tx)
+            stroke([(tx, ty), (cx - math.cos(a) * R * 0.75, cy - math.sin(a) * R * 0.75)], (128, 108, 62), 1.3 * S2)
             col = rng.choice(greens)
-            col = tuple(max(0, min(255, c + rng.randint(-10, 10))) for c in col)
-            leaf(px, py, R, rng.uniform(0, TAU), col)
-    return finish(img)
+            col = tuple(max(0, min(255, c + rng.randint(-8, 8))) for c in col)
+            leaf(cx, cy, R, a + math.pi, col)
+        if n_tip:
+            R = W * 0.04 * scale
+            cx, cy = tx + math.cos(dir_a) * R * 1.5, ty + math.sin(dir_a) * R * 1.5
+            cx = min(W - R * 1.02, cx)
+            stroke([(tx, ty), (cx - math.cos(dir_a) * R * 0.8, cy - math.sin(dir_a) * R * 0.8)], (128, 108, 62), 1.2 * S2)
+            leaf(cx, cy, R, dir_a + math.pi, greens[-1])
+
+    def twig(x, y, a, length, n_nodes, width, scale, depth):
+        pts = [(x, y)]
+        nodes = []
+        for k in range(1, n_nodes + 1):
+            a += rng.uniform(-0.1, 0.1)
+            seg = length / n_nodes
+            x, y = x + math.cos(a) * seg, y + math.sin(a) * seg
+            pts.append((x, y))
+            nodes.append((x, y, a, k))
+        for k in range(len(pts) - 1):
+            stroke(pts[k:k + 2], twig_col, width * (1.0 - 0.5 * k / len(pts)) * S2)
+        # side twigs first (beneath), in opposite pairs like the leaves, then this twig's own leaves on top
+        if depth == 0:
+            for (nx_, ny_, na, k) in nodes[:-2]:
+                for side in (-1, 1):
+                    if rng.random() < 0.8:
+                        sl = length * rng.uniform(0.34, 0.46) * (1.0 - 0.4 * k / n_nodes)
+                        twig(nx_, ny_, na + side * math.radians(rng.uniform(35, 58)), sl, 3, width * 0.6, scale * 0.9, 1)
+        for (nx_, ny_, na, k) in nodes:
+            sc = scale * (1.0 - 0.3 * (k / n_nodes) ** 2)
+            leaf_pair(nx_, ny_, na, sc, n_tip=(k == n_nodes))
+
+    twig(0.02 * W, 0.5 * W + rng.uniform(-0.02, 0.02) * W, rng.uniform(-0.04, 0.04), 0.78 * W, 6, 3.4, 1.0, 0)
+    out = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGBA")
+    return finish(out, (N, N))
 
 
 SPRAYS = {

@@ -114,6 +114,7 @@ export function prototypesFrom(scenes) {
 function patchCards(mat) {
   const snow = mat.name === 'SnowCards';
   const moss = mat.name === 'MossCards';
+  const maple = mat.name === 'MapleCards';
   const prev = mat.onBeforeCompile;
   const prevKey = mat.customProgramCacheKey;
   mat.onBeforeCompile = (shader, renderer) => {
@@ -127,6 +128,14 @@ function patchCards(mat) {
           // snow and moss strands cover little of their cards: boosting them would turn
           // distant cards into white slabs / pale paper tags
           diffuseColor.a *= 1.0 + cardMip * ${snow ? '0.12' : moss ? '0.05' : '0.3'};
+        }
+        #endif
+        #if ${maple ? 1 : 0}
+        {
+          // a broadleaf card seen edge-on smears its leaves into long streaks: thin it out
+          // as its face (the triangle's, not the bent shading normal) turns away
+          vec3 cardFace = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
+          diffuseColor.a *= smoothstep(0.1, 0.35, abs(dot(cardFace, normalize(vViewPosition))));
         }
         #endif
         #include <alphatest_fragment>`)
@@ -158,7 +167,7 @@ function patchCards(mat) {
         }
         #endif`);
   };
-  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards${snow ? 's' : moss ? 'm' : ''}`;
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|cards${snow ? 's' : moss ? 'm' : maple ? 'b' : ''}`;
 }
 
 /** Colour multiplier per foliage-card material. */
@@ -206,6 +215,9 @@ function convertMaterial(src, assetName, lod, cache) {
   if (cards) {
     mat.map = src.map; // the needle spray (RGBA, embedded in the GLB)
     mat.alphaTest = 0.5;
+    // broad maple leaves hang right over the trail: a hard alpha test stair-stepped their
+    // outlines up close; alpha to coverage (the scene target is 4x MSAA) smooths them
+    mat.alphaToCoverage = src.name === 'MapleCards';
     // the spray textures are painted bright; deepen them to each species' green
     // so they sit together (the impostor bake reads this colour too)
     mat.color.setRGB(...(CARD_TINT[src.name] ?? [0.6, 0.6, 0.6]));
