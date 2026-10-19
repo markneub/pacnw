@@ -549,6 +549,36 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `uSun` is ~0/~1. Phone bench: `- sky` saved 1.3 ms at spawn and in the forest before this (full 7.6 / 6.1 ms), 0.1 ms after (full 6.3 / 5.0;
   rays/glow + mist light 0.2).
   After vine maple + nurse logs: spawn full 6.5 ms (trees 1.8 ±0.2, rocks/logs 0.2), forest 5.1 ms (trees 1.3, rocks/logs 0.2).
+- **Mountain cabin** (`src/cabin.js`, model `blender/build_cabin.py` → `public/models/cabin.glb` + `src/cabin_layout.json`;
+  the user asked for a one-room cabin in the snow basin: glass windows, chimney smoke, a door you tap to open, a potbelly
+  stove and basic furnishings). `planCabin(trail)`: 6.5 m + the porch past the trail's last point, door (local +Z) facing
+  back down the trail, floor 0.32 m above the highest ground under it (the foundation and drifts run into the snow); the
+  scatter is filtered clear of it (`exclude` in buildVegetation: trees 3.5 m, the rest 0.8 m; filtered, so no rng moves).
+  Now at (62.1, −927.9), rotY π/4. **Model:** round logs (r 0.15, courses 0.27 m) with interlocking corners, split around
+  the door and 3 windows (frames, glass, muntins), board gables with sheathing, a shake roof under a lumpy snow slab with
+  icicles, a porch on posts with a skirt and step, stone foundation, stovepipe chimney with a rain cap, woodpile, snow drifts,
+  a porch lantern; inside: potbelly stove (lathe) on a stone hearth with tin heat shields, kettle, wood box + axe, bed with a
+  blanket, trunk, table + 2 chairs, lantern, shelves with tins/jars/books, wash counter, rug, pegs with a coat and hat,
+  broom, snowshoes. Three objects (`cabin`, `cabin_door` (origin on the hinge), `cabin_interior`), ~5.7k faces, 30 draws
+  near (the interior is hidden beyond 45 m). Faces carry their **wood grain** axis as vertex colours (game frame), so the
+  shader lays the `rough_wood` photo (`public/textures/cabin`, `fetch_textures.py cabin`) along every log and board.
+  `MeshBuilder.build` asserts no face was dropped (the grain would misalign). Gotchas: board seams and the floor showed
+  snow/sky through 6–8 mm gaps (now sheathing and a subfloor); the woodpile first covered a window.
+  **Interior light, no real lights** (`patchCabin`): each fragment knows its cabin-frame position (`uCabInv`); inside
+  (|x| < W, |z| < D, under the roof plane) the sky/env light is × 0.06 + window terms (+ the open door), corners and floor
+  edges darker, plus the stove (flickering `uCabFire`) and table lantern as analytic warm lights; direct sun only where a ray
+  to the key light leaves through a window or the open doorway (`cabSunLit`: sun patches on the floor). The glass is a plain
+  transparent reflective material. **Door:** tap (touch `onTap`: a touch that neither walked nor looked), click while
+  playing or E, when `#hint` shows (within ~2 m of the door, looking at it; not closing on the player inside its swing).
+  Eases over ~0.5 s to 105° inward; a segment collider follows it. Walls/furniture/posts are rect/circle colliders in the
+  cabin frame; floor, porch and step are walk modifiers (`setWalkModifier` now keeps a list). HUD: "Mountain cabin".
+  **Smoke:** 30 instanced soft puffs on the GPU (12 s life, rise and drift, lumpy edges), colours in *linear* (the shader
+  writes untone-mapped into the sRGB target: "grey" values came out nearly white and vanished against snow and cloud),
+  darker fresh out of the pipe, lighter in sun. **No rain/snow under the roof:** `shared.uShelter*` (weather.js drops
+  particles inside the roof's box). A **trodden path** to the step is a multiply decal (a painted snow colour read as a pale
+  streak). Budget (container, phone): outside 58 draws / 0.15M tris, inside 35 / 0.12M; spawn +1 draw (the smoke).
+  Views (sun): approach `x=69.85&z=-922.97&yaw=1.097`, porch `x=66.32&z=-923.68&yaw=0.785`, inside
+  `x=62.79&z=-925.8&yaw=-0.09&pitch=-0.35`, back with the smoke `x=52.2&z=-926.5&yaw=-1.43&pitch=0.1`. Dev: `?door=open`.
 - **Rocky slopes** (`src/rockyslope.js`, the user: "plain rocky hillsides ... don't look realistic": smooth felt-green
   mounds, stones dotted evenly over them): bare rock on steep ground is decided **per pixel** in the terrain and corridor
   shaders (`patchRocky`, after `patchGroundDetail`). The slope from the interpolated normal only sets how *likely* rock is

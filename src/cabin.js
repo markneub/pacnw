@@ -67,7 +67,7 @@ export function planCabin(trail) {
     const [lx, lz] = toLocal(wx, wz);
     return Math.abs(lx) < W + 0.9 + margin && lz > -D - 0.7 - margin && lz < PORCH_FRONT + margin;
   };
-  return { x, y, z, rotY, toWorld, toLocal, blocked };
+  return { x, y, z, rotY, toWorld, toLocal, blocked, trailEnd: [e.x, e.y] };
 }
 
 // uniforms shared by all of the cabin's materials
@@ -312,12 +312,13 @@ export async function buildCabin(plan, renderer, { lowPower }) {
   shared.uShelter.value.set(W + L.roof.eaveOut, -D - L.roof.back, D + L.roof.front, RIDGE + 0.3);
   shared.uShelterPitch.value = PITCH;
 
+  const path = buildPath(plan);
   const smoke = buildSmoke();
   const smokeOrigin = new THREE.Vector3(...L.smoke).applyMatrix4(group.matrixWorld);
   smoke.material.uniforms.uOrigin.value.copy(smokeOrigin);
   smoke.position.copy(smokeOrigin); // (for sorting; the vertex shader places the puffs)
   const root = new THREE.Group();
-  root.add(group, smoke);
+  root.add(group, smoke, path);
 
   // ---- the door, the hint ----
   const hint = document.createElement('div');
@@ -473,6 +474,68 @@ export async function buildCabin(plan, renderer, { lowPower }) {
     angle = v ? DOOR_OPEN : 0;
   };
   return { group: root, collide, update, interact, contains, plan, setOpen };
+}
+
+/**
+ * A trodden path in the snow from the end of the trail to the porch step: a strip draped on the
+ * ground that darkens and cools the snow under it (multiply), most down its middle, fading out at
+ * its sides and where it meets the trail. (Painted in the snow's colour, it read as a pale streak:
+ * the ground's own snow is darker with its baked shade and photo.)
+ */
+function buildPath(plan) {
+  const [ex, ez] = plan.toLocal(...plan.trailEnd);
+  const z0 = L.porch.z1 - 0.15; // (local) at the step
+  const STEPS = 24;
+  const ACROSS = 6;
+  const HALF = 0.75;
+  const pos = [];
+  const col = [];
+  const idx = [];
+  const trodden = new THREE.Color(0.8, 0.84, 0.9); // what the groove multiplies the snow by
+  const c = new THREE.Color();
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS;
+    // a gentle S between the step and the trail's end, wandering a little
+    const lz = z0 + (ez - z0) * t;
+    const lx = ex * t * t * (3 - 2 * t) + Math.sin(t * 5.1) * 0.18;
+    const fadeEnd = 1 - THREE.MathUtils.smoothstep(t, 0.75, 1.0);
+    for (let j = 0; j <= ACROSS; j++) {
+      const u = (j / ACROSS) * 2 - 1;
+      const [wx, wz] = plan.toWorld(lx + u * HALF * (1 + 0.15 * Math.sin(t * 9 + j)), lz);
+      pos.push(wx, groundAt(wx, wz) + 0.03, wz);
+      const groove = (1 - u * u) * fadeEnd * THREE.MathUtils.smoothstep(t, 0.0, 0.04);
+      c.setRGB(1, 1, 1).lerp(trodden, groove);
+      col.push(c.r, c.g, c.b);
+    }
+  }
+  for (let i = 0; i < STEPS; i++) {
+    for (let j = 0; j < ACROSS; j++) {
+      const a = i * (ACROSS + 1) + j;
+      const b = a + ACROSS + 1;
+      idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  // face up whichever way the strip winds
+  const n = geo.attributes.normal;
+  if (n.getY(0) < 0) {
+    for (let k = 0; k < idx.length; k += 3) [idx[k + 1], idx[k + 2]] = [idx[k + 2], idx[k + 1]];
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+  }
+  const mat = new THREE.MeshBasicMaterial({
+    vertexColors: true, transparent: true, depthWrite: false, blending: THREE.MultiplyBlending,
+    premultipliedAlpha: true, fog: false, toneMapped: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'cabin path';
+  mesh.renderOrder = 1;
+  return mesh;
 }
 
 /** Wood smoke from the stovepipe: soft puffs that rise, spread, drift downwind and fade. */

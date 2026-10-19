@@ -400,10 +400,12 @@ def porch_and_foundation(b, M, rng, layout):
     x = -1.7
     while x < 1.7:
         w = rng.uniform(0.15, 0.19)
-        box(b, M["board"], x + w / 2, (-D - 0.16 + y_front) / 2, -0.03 + rng.uniform(-0.006, 0.004), w - 0.012, -D - 0.16 - y_front, 0.05)
+        box(b, M["board"], x + w / 2, (-D - R + 0.04 + y_front) / 2, -0.03 + rng.uniform(-0.006, 0.004), w - 0.012, -D - R + 0.04 - y_front, 0.05)
         x += w
     for xx in (-1.6, 0.0, 1.6):
         box(b, M["log_end"], xx, (-D + y_front) / 2, -0.15, 0.12, -D - y_front, 0.18)
+    # the threshold: a sill through the wall's thickness under the door (snow showed in the gap)
+    box(b, M["log_end"], 0, -D, -0.06, DOOR[1] - DOOR[0] + 0.1, 2 * R + 0.12, 0.12)
     # skirt boards from the deck down into the snow on its open sides
     sk = 1.1
     box(b, M["trim"], 0, y_front + 0.03, -0.06 - sk / 2, 3.42, 0.04, sk)
@@ -478,6 +480,20 @@ def chimney(b, M, layout):
         a = TAU * k / 3
         cyl(b, M["iron"], (sx + math.cos(a) * 0.07, sy + math.sin(a) * 0.07, top - 0.02), (sx + math.cos(a) * 0.13, sy + math.sin(a) * 0.13, top + 0.13), 0.008, sides=4)
     layout["smoke"] = [sx, top + 0.15, -sy]
+
+
+def porch_lantern(b, M):
+    """A tin lantern on an iron bracket beside the door."""
+    lx, ly = DOOR[1] + 0.42, -D - R - 0.22
+    cyl(b, M["iron"], (lx, -D - R + 0.02, 2.05), (lx, ly, 2.05), 0.012, sides=5)
+    cyl(b, M["iron"], (lx, ly, 2.05), (lx, ly, 1.94), 0.006, sides=4)
+    lathe(b, M["tin"], [(0.0, 0.0), (0.07, 0.0), (0.07, 0.04), (0.03, 0.05)], lx, ly, 1.62, sides=10)
+    lathe(b, M["lamp"], [(0.03, 0.05), (0.05, 0.1), (0.045, 0.2), (0.03, 0.23)], lx, ly, 1.62, sides=10)
+    lathe(b, M["tin"], [(0.04, 0.23), (0.06, 0.25), (0.0, 0.3)], lx, ly, 1.62, sides=10)
+    for k in range(4):
+        a = TAU * (k + 0.5) / 4
+        cyl(b, M["tin"], (lx + math.cos(a) * 0.055, ly + math.sin(a) * 0.055, 1.66), (lx + math.cos(a) * 0.05, ly + math.sin(a) * 0.05, 1.86), 0.005, sides=4)
+    cyl(b, M["iron"], (lx - 0.05, ly, 1.94), (lx + 0.05, ly, 1.94), 0.005, sides=4)
 
 
 def woodpile(b, M, rng, layout):
@@ -596,6 +612,14 @@ def bed(b, M, rng):
          [(x0 - 0.01, yb0, 0.2), (x0 + 0.02, yb0, 0.2), (x0 + 0.02, yb1, 0.2), (x0 - 0.01, yb1, 0.2)])
     box(b, M["blanket"], cx, yb1 + 0.06, 0.53, x1 - x0 - 0.04, 0.14, 0.04)  # the fold
     box(b, M["cloth"], cx, y1 - 0.25, 0.55, 0.62, 0.32, 0.11)  # pillow
+    # a trunk at the foot of the bed: planked, iron-bound, its lid domed
+    tx, ty = cx, y0 - 0.35
+    box(b, M["wood"], tx, ty, 0.22, 0.8, 0.45, 0.44)
+    b.grain = (1.0, 0.0, 0.0)
+    cyl(b, M["wood"], (tx - 0.4, ty, 0.44), (tx + 0.4, ty, 0.44), 0.225, sides=12)
+    for dx in (-0.3, 0.3):
+        box(b, M["iron"], tx + dx, ty, 0.33, 0.04, 0.47, 0.67)
+    box(b, M["iron"], tx, ty - 0.235, 0.4, 0.08, 0.01, 0.1)
 
 
 def table_and_chairs(b, M, rng):
@@ -671,6 +695,9 @@ def shelves_and_counter(b, M, rng):
     box(b, M["wood"], cx, cy, 0.2, 0.46, 0.9, 0.025)  # low shelf
     lathe(b, M["tin"], [(0.0, 0.0), (0.12, 0.0), (0.18, 0.09), (0.19, 0.1), (0.17, 0.1), (0.11, 0.015), (0.0, 0.015)], cx, cy - 0.15, 0.87, sides=14)
     lathe(b, M["tin"], [(0.0, 0.0), (0.11, 0.0), (0.13, 0.25), (0.12, 0.25), (0.1, 0.02), (0.0, 0.02)], cx - 0.02, cy + 0.25, 0.215, sides=12)
+    # a broom leaning against the wall left of the door
+    cyl(b, M["wood"], (DOOR[0] - 0.24, -D + R + 0.1, 0.28), (DOOR[0] - 0.14, -D + R + 0.04, 1.42), 0.015, sides=6)
+    lathe(b, M["rug"], [(0.03, 0.0), (0.13, 0.02), (0.1, 0.25), (0.03, 0.3)], DOOR[0] - 0.25, -D + R + 0.11, 0.0, sides=8, sy=0.4)
     # pegs by the door with a coat and a hat, snowshoes leaning in the corner
     for k in range(3):
         cyl(b, M["trim"], (-1.0 - k * 0.3, -D + R + 0.01, 1.62), (-1.0 - k * 0.3, -D + R + 0.12, 1.65), 0.018, sides=6)
@@ -704,6 +731,7 @@ def shell(M, layout):
     porch_and_foundation(b, M, rng, layout)
     chimney(b, M, layout)
     woodpile(b, M, rng, layout)
+    porch_lantern(b, M)
     drifts(b, M, rng)
     obj = recalc_normals(b.build("cabin"))
     for poly in obj.data.polygons:  # round logs read round
@@ -753,6 +781,7 @@ def main():
         [W - R - 0.5, (0.45 + D - R) / 2, 0.5, (D - R - 0.45) / 2],  # bed
         [-W + R + 0.55, -0.95, 0.42, 0.62],  # table
         [W - R - 0.27, WINDOWS[1][1], 0.27, 0.5],  # wash counter
+        [(W - R - 0.98 + W - R - 0.02) / 2, 0.1, 0.42, 0.25],  # trunk
         [W + 0.5, sum(WOOD_Y) / 2, 0.32, (WOOD_Y[1] - WOOD_Y[0]) / 2 + 0.05],  # woodpile outside
     ]
     layout["furniture"] = [[cx, -cz, hx, hz] for cx, cz, hx, hz in furn]

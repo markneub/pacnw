@@ -5,7 +5,8 @@ of Douglas fir, western hemlock and red cedar with sword ferns, grassy clearings
 lake, with the Pacific surf breaking on a dune-backed beach to the south. A hiking trail leads from the trailhead at
 your feet down through the dunes to the beach, along the sand and back up, past a marsh boardwalk to a lakeside bench,
 then switchbacks north and up. Follow it and the land climbs where the rain turns to sleet, then snow, out onto a broad
-snowfield in a forest of snow-laden firs, then up again into a high basin walled by peaks, below a pass.
+snowfield in a forest of snow-laden firs, then up again into a high basin walled by peaks, below a pass, where the trail
+ends at a log cabin with smoke rising from its stovepipe. Open the door and step in out of the snow.
 
 **Play it online:** https://markneub.github.io/pacnw/
 
@@ -18,13 +19,13 @@ npm run build    # static site in dist/ (relative paths, so it can be hosted fro
 ```
 
 Controls: click to start · **WASD** move · **Shift** run · mouse look ·
-**R** cycle weather (auto → rain → snow → clear) · **H** toggle HUD · **Esc** release the mouse.
+**R** cycle weather (auto → rain → snow → clear) · **H** toggle HUD · **E** or click to open a door · **Esc** release the mouse.
 
 Pushes to the default branch are built and published to GitHub Pages by
 `.github/workflows/pages.yml` (other branches just get a build check).
 
 On phones and tablets, put your thumb down anywhere: slide up to walk (further up to run, down to back up)
-and slide sideways to turn. A second finger looks up and down. Nothing is drawn on screen, and weather always
+and slide sideways to turn. A second finger looks up and down. Tap to open the cabin door. Nothing is drawn on screen, and weather always
 follows altitude on phones. Touch devices also get a
 lighter render profile (lower resolution, shorter draw distance, fewer particles); force either with
 `?quality=low` or `?quality=high`.
@@ -47,6 +48,8 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | File | What it does |
 | --- | --- |
 | `blender/build_assets.py` | Procedurally models trees, ferns, logs and furniture in Blender → `public/models/forest.glb` |
+| `blender/build_cabin.py` | Models the mountain cabin (shell, door, furnishings) → `public/models/cabin.glb` + `src/cabin_layout.json` |
+| `src/cabin.js` | Places the cabin at the trail's end; its door, colliders, walkable floor, chimney smoke and interior lighting |
 | `blender/build_rocks.py` | Turns photogrammetry scans into game boulders with two detail levels → `public/models/rocks.glb` |
 | `src/terrain.js` | Height function (valley, lake basin, a staircase of snowy benches between ridged peaks, mountain rim, the beach and dunes in the south), vertex-coloured terrain with moss, rock and snow |
 | `src/vegetation.js` | Loads the GLB, scatters ~70k trees/rocks/ferns by altitude, slope and forest-density noise, chunked `InstancedMesh`es with distance culling, trunk collisions |
