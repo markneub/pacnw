@@ -549,6 +549,32 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `uSun` is ~0/~1. Phone bench: `- sky` saved 1.3 ms at spawn and in the forest before this (full 7.6 / 6.1 ms), 0.1 ms after (full 6.3 / 5.0;
   rays/glow + mist light 0.2).
   After vine maple + nurse logs: spawn full 6.5 ms (trees 1.8 ±0.2, rocks/logs 0.2), forest 5.1 ms (trees 1.3, rocks/logs 0.2).
+- **Rocky slopes** (`src/rockyslope.js`, the user: "plain rocky hillsides ... don't look realistic": smooth felt-green
+  mounds, stones dotted evenly over them): bare rock on steep ground is decided **per pixel** in the terrain and corridor
+  shaders (`patchRocky`, after `patchGroundDetail`). The slope from the interpolated normal only sets how *likely* rock is
+  (`rkField`: likely(0.04–0.3) × 1.3 + 3-octave patch noise + ledge bands along the contours; > 0.5 = rock, edge 0.49–0.53,
+  a darker debris fringe 0.4–0.49). The vertex colour/layers only go to rock on cliffs now (slope 0.42–0.62, was
+  0.22–0.42). Rock look: on the vertical planes `rkStrata` (wavy bedding layers 1–6 m thick, joints 1.5–18 m apart,
+  staggered per layer, cracks fading in and out), seen from above `rkBlocks` (cellular slabs); per-block tone and tilt
+  (the bump), lit ledge tops / dark undersides, dark water streaks down faces, lichen, moss on flatter tops; cracks and
+  tilt fade out by 110–240 m (shimmer). Tried first and dropped: value-noise contour cracks (read as worms), cellular cells
+  on faces (crazy paving), evenly spaced strata (masonry). Within the detail range the rock photo takes over: `rkMask`
+  overrides the detail layers (`GD_ROCK_MASK` in grounddetail.js); the rock photo's colour ratio is 65% desaturated (grey
+  stones / a brown average turned lilac), and the top-down floor/mud photos fade out on slopes > 0.28–0.5 (they smeared).
+  `aShade` (terrain, corridor, skirt) carries the baked shade alone (bake.js `shadeMesh`) so shader-made colours get it.
+  Not on snow/mud/trail tread (layers, `vTread`). The grass map drops density on rock (`rockFieldAt`, the same field in JS)
+  and the distant grass tint is × (1 − rkMask). **Patch tint** (terrain.js, after the grass tint): vegetated ground gets
+  straw/lush patches (8–25 m) and dark shrub clumps at every distance. **`addSlopeGrowth`** (vegetation.js, hash, no rng):
+  salal (some ferns below 70 m) exactly where the shader paints shrub clumps (same noise via `valueNoise`), on open
+  (non-forest) slopes 0.05–0.42 below the snow, off rock; and sparse stunted fir/hemlock/saplings on slopes 0.25–0.55
+  (the forest scatter stops at 0.45). **Stones** now gather around and up to 7 m below outcrops (`rockFieldAt` here and
+  uphill, from the same gradient as the slope: no extra heightAt), base density 0.04 + 0.18 in clusters (was 0.22 everywhere):
+  88k → 61k pebble clusters. **Marsh ease:** higher ground eases down to the marsh over 55 m (`marshEase`; the old blend
+  raised the west bank 25 m in ~20 m: a smooth cylindrical wall); lower ground (lake bed) is only raised inside the marsh.
+  That moved every tree south of z ≈ 440 and the trail a little (3.90 km, 24 boardwalk sections). Budget (container, phone
+  `still`): draws/tris within ±10 / ±0.05M at spawn, lake, forest and both views; vegetation load unchanged. Views (sun):
+  `x=165&z=478&yaw=1.8`, `x=424.5&z=-297&yaw=0.6&pitch=-0.2`, bluff `x=125&z=488&yaw=1.6&pitch=0.1`. Phone cost of the
+  shader not yet benched (`?bench=ground`).
 - **Close-up ground detail** (`src/grounddetail.js`): photographic albedo + normal maps for 4 layers (forest
   floor, rock, snow, mud/dirt), weighted by per-vertex `aLayers` (terrain `groundLayers()`, trail tread/banks →
   dirt), within `uGDRange` (20–45 m desktop, 15–32 m phone). The photo *modulates* the existing colour

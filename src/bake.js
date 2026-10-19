@@ -233,11 +233,14 @@ export function shadeGround(object, canopyAt) {
 function shadeMesh(mesh, canopyAt) {
   const pos = mesh.geometry.attributes.position;
   const col = mesh.geometry.attributes.color;
+  const sh = mesh.geometry.attributes.aShade; // the shade alone, for colours the shader makes (rockyslope.js)
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
     const shade = horizonAO(x, z) * (1 - 0.6 * canopyAt(x, z));
     col.setXYZ(i, col.getX(i) * shade, col.getY(i) * shade, col.getZ(i) * shade);
+    if (sh) sh.setX(i, shade);
   }
   col.needsUpdate = true;
+  if (sh) sh.needsUpdate = true;
 }

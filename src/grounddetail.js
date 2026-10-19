@@ -128,6 +128,13 @@ export function patchGroundDetail(shader) {
         gdFade = 1.0 - smoothstep(uGDRange.x, uGDRange.y, distance(vGDPos, cameraPosition));
         if (gdFade > 0.001) {
           vec4 w = vGDLayers;
+          #ifdef GD_ROCK_MASK
+            w = mix(w, vec4(0.0, 1.0, 0.0, 0.0), rkMask); // bare rock decided per pixel (rockyslope.js)
+          #endif
+          // the photos projected from above smear down steep ground: plain ground there instead
+          float gdSteep = 1.0 - smoothstep(0.28, 0.5, 1.0 - normalize(vGDNormal).y);
+          w.x *= gdSteep;
+          w.w *= gdSteep;
           vec3 detail = vec3(0.0);
           vec3 off = vec3(0.0);
           vec2 n;
@@ -148,7 +155,9 @@ export function patchGroundDetail(shader) {
             vec3 aX = textureGrad(uGDAlb[1], vGDPos.zy * s, dPdx.zy * s, dPdy.zy * s).rgb;
             vec3 aY = textureGrad(uGDAlb[1], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).rgb;
             vec3 aZ = textureGrad(uGDAlb[1], vGDPos.xy * s, dPdx.xy * s, dPdy.xy * s).rgb;
-            detail += w.y * mix(vec3(1.0), (aX * bw.x + aY * bw.y + aZ * bw.z) / uGDAvg[1], uGDStrength.y);
+            vec3 rr = (aX * bw.x + aY * bw.y + aZ * bw.z) / uGDAvg[1];
+            rr = mix(vec3(dot(rr, vec3(0.3, 0.5, 0.2))), rr, 0.35); // mostly its light and shade: its grey stones over a brown average turned lilac
+            detail += w.y * mix(vec3(1.0), rr, uGDStrength.y);
             vec2 nX = textureGrad(uGDNrm[1], vGDPos.zy * s, dPdx.zy * s, dPdy.zy * s).xy * 2.0 - 1.0;
             vec2 nY = textureGrad(uGDNrm[1], vGDPos.xz * s, dPdx.xz * s, dPdy.xz * s).xy * 2.0 - 1.0;
             vec2 nZ = textureGrad(uGDNrm[1], vGDPos.xy * s, dPdx.xy * s, dPdy.xy * s).xy * 2.0 - 1.0;

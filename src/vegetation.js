@@ -13,6 +13,7 @@ import { NearPool } from './detail.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
 import { bakeImpostors, impostorGeometry, impostorMaterial } from './impostors.js';
 import { streamRocks } from './streamwater.js';
+import { rockFieldAt, valueNoise } from './rockyslope.js';
 import { loadTick } from './loadprogress.js';
 
 const KIND = (name) => (/^(fern|salal|pebbles)/.test(name) ? 'ferns'
@@ -828,15 +829,27 @@ async function scatter(trail) {
       const r = rng();
       const h = heightAt(x, z);
       if (h < waterLevelAt(x, z) + 0.3 || sandAt(x, z) > 0.3) continue;
-      const slope = slopeAt(x, z);
+      // (slopeAt's own sums: the gradient also points uphill, below)
+      const ux = heightAt(x + 1.5, z) - heightAt(x - 1.5, z);
+      const uz = heightAt(x, z + 1.5) - heightAt(x, z - 1.5);
+      const slope = 1 - 3 / Math.hypot(ux, 3, uz);
       const d = trail.distanceTo(x, z);
       if (d < TRAIL_WIDTH * 0.5 + 0.2) continue; // off the tread itself
       const edge = THREE.MathUtils.smoothstep(d, TRAIL_WIDTH * 0.5, TRAIL_WIDTH * 0.5 + 0.8) * (1 - THREE.MathUtils.smoothstep(d, TRAIL_WIDTH + 2, TRAIL_WIDTH + 5));
-      const stony = THREE.MathUtils.smoothstep(slope, 0.12, 0.45);
-      const high = THREE.MathUtils.smoothstep(h, 60, 110);
+      // around and below the bare rock (rockyslope.js), where the stones come from; elsewhere a
+      // few, in clusters (a stone every ~5 m everywhere read as polka dots on open slopes)
+      let rock = rockFieldAt(x, h, z, slope);
+      if (slope > 0.08 && rock > 0.05) {
+        const ul = Math.hypot(ux, uz);
+        const rise = ul / 3; // per metre
+        for (const up of [3, 7]) rock = Math.max(rock, rockFieldAt(x + ux / ul * up, h + rise * up, z + uz / ul * up, slope) - up * 0.02);
+      }
+      const stony = THREE.MathUtils.smoothstep(rock, 0.3, 0.52);
+      const cluster = THREE.MathUtils.smoothstep(nForest(x * 0.15 + 70, z * 0.15 - 30) * 0.5 + 0.5, 0.45, 0.75);
+      const high = THREE.MathUtils.smoothstep(h, 60, 110) * cluster;
       const duff = THREE.MathUtils.smoothstep(nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5, 0.4, 0.7);
       const bed = streamBed(x, z); // cobbles and gravel line the streams
-      const p = Math.min(0.95, 0.22 + 0.75 * edge + 0.6 * stony + 0.4 * high + 0.7 * bed) * (1 - 0.5 * duff * (1 - edge) * (1 - bed));
+      const p = Math.min(0.95, 0.04 + 0.18 * cluster + 0.75 * edge + 0.85 * stony + 0.25 * high + 0.7 * bed) * (1 - 0.5 * duff * (1 - edge) * (1 - bed));
       if (r > p) continue;
       if (snowAmount(x, z, h, slope) > 0.3) continue;
       const kind = PEBBLES[Math.floor(pick * PEBBLES.length)];
@@ -878,6 +891,62 @@ export async function bakeShrubImpostors(renderer, protos, { lowPower }) {
 }
 
 /**
+ * Open hillsides (hash, no scatter rng): low shrubs in clumps, exactly where the terrain shader
+ * paints its dark shrub patches (the same noise), so up close they're plants and beyond the
+ * shrubs' range the same clumps carry on as speckles; and stunted conifers clinging on, sparse,
+ * on slopes too steep for the forest (0.25-0.55), standing on the ground between the outcrops.
+ * Open slopes used to be bare, even felt with stones dotted over them (the user).
+ */
+function addSlopeGrowth(placements, trail) {
+  const half = WORLD_SIZE / 2 - 20;
+  const put = (name, p) => (placements[name] ||= []).push(p);
+  const STEP = 2.2;
+  for (let gz = -half; gz < half; gz += STEP) {
+    for (let gx = -half; gx < half; gx += STEP) {
+      const x = gx + hash2(gx, gz + 0.5) * STEP;
+      const z = gz + hash2(gx + 0.5, gz) * STEP;
+      // the shader's shrub clumps (terrain.js), before anything costly
+      const n1 = valueNoise(x * 0.55 + 2, z * 0.55 + 2) * 0.7 + valueNoise(x * 1.9, z * 1.9) * 0.3;
+      const clump = THREE.MathUtils.smoothstep(n1, 0.52, 0.72) * THREE.MathUtils.smoothstep(valueNoise(x * 0.07 - 6, z * 0.07 - 6), 0.3, 0.6);
+      const hv = hash2(x * 1.3, z * 0.7);
+      if (hv > 0.05 + clump) continue;
+      const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
+      const open = 1 - THREE.MathUtils.smoothstep(f, 0.25, 0.45); // (the forest has its own salal and ferns)
+      if (hash2(x + 3.1, z) > open) continue;
+      const h = heightAt(x, z);
+      if (h < waterLevelAt(x, z) + 1.5 || h > SNOWLINE + 10 || sandAt(x, z) > 0.2) continue;
+      const slope = slopeAt(x, z);
+      if (slope < 0.05 || slope > 0.42 || snowAmount(x, z, h, slope) > 0.15) continue;
+      if (rockFieldAt(x, h, z, slope) > 0.44) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.6 || offStream(x, z) < 1.2) continue;
+      const k = hash2(z, x);
+      const name = h < 70 && k < 0.25 ? (k < 0.12 ? 'fern_a' : 'fern_b') : 'salal';
+      put(name, { x, y: groundAt(x, z) - 0.05, z, rotY: k * 97, scale: 0.75 + hash2(x - 7, z) * 0.6, tint: hash2(x, z - 7) });
+    }
+  }
+  const TREE_STEP = 8;
+  for (let gz = -half; gz < half; gz += TREE_STEP) {
+    for (let gx = -half; gx < half; gx += TREE_STEP) {
+      const x = gx + hash2(gx + 0.25, gz - 0.75) * TREE_STEP;
+      const z = gz + hash2(gx - 0.75, gz + 0.25) * TREE_STEP;
+      const slope = slopeAt(x, z);
+      const steep = THREE.MathUtils.smoothstep(slope, 0.25, 0.32) * (1 - THREE.MathUtils.smoothstep(slope, 0.45, 0.55));
+      const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
+      if (hash2(x * 0.9, z * 1.1) > steep * (0.12 + 0.3 * f)) continue;
+      const h = heightAt(x, z);
+      if (h < waterLevelAt(x, z) + 1.5 || h > TREELINE - 30 || sandAt(x, z) > 0.2) continue;
+      if (rockFieldAt(x, h, z, slope) > 0.5) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.3 || offStream(x, z) < 2.5) continue;
+      const snow = snowAmount(x, z, h, slope) > 0.1;
+      const k = hash2(x - 1.7, z + 2.3);
+      const name = snow ? (k < 0.5 ? 'fir_snow' : k < 0.75 ? 'hemlock_snow' : 'sapling_snow') : (k < 0.45 ? 'fir' : k < 0.75 ? 'hemlock' : 'sapling');
+      const alt = THREE.MathUtils.clamp(h / TREELINE, 0, 1);
+      put(name, { x, y: groundAt(x, z) - 0.3, z, rotY: k * 63, scale: (0.5 + hash2(z + 9, x) * 0.45) * (1 - alt * 0.35), tint: hash2(x + 9, z) });
+    }
+  }
+}
+
+/**
  * Builds the vegetation as per-chunk InstancedMeshes so far-away chunks can be
  * hidden cheaply, and a spatial hash of trunks/rocks for player collisions.
  * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
@@ -889,6 +958,7 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
   addMarshSnags(placements, trail);
   addLeaners(placements, trail);
   addDriftwood(placements, trail);
+  addSlopeGrowth(placements, trail);
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
   for (const name of Object.keys(placements)) {
     if (!name.startsWith('pebbles')) continue;

@@ -6,6 +6,7 @@ import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter, p
 import { SUN_COLOR } from './atmosphere.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 import { buildStreams } from './streams.js';
+import { patchRocky } from './rockyslope.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -152,10 +153,16 @@ export function baseHeight(x, z) {
 
   // the marsh on the south-east shore: a flat at lake level, tussocks and hummocks out of the
   // shallow water (the lake's surface covers it)
-  const m = marshAt(x, z);
-  if (m > 0) {
-    const hummock = nDetail(x * 0.09 + 3, z * 0.09 - 7) * 0.42 + nDetail(x * 0.3, z * 0.3) * 0.12;
-    h = h * (1 - m) + (WATER_LEVEL - 0.08 + hummock) * m;
+  // Higher ground eases down to it over ~55 m (within the marsh's own edge, the ground west of it
+  // rose 25 m in ~20 m: a smooth curved wall, the user). Lower ground (the lake bed) is only
+  // raised inside the marsh itself, or the lake turned to centimetre-deep shallows.
+  const b = marshEase(x, z);
+  if (b > 0) {
+    const m = marshAt(x, z);
+    const hummock = m > 0 ? nDetail(x * 0.09 + 3, z * 0.09 - 7) * 0.42 + nDetail(x * 0.3, z * 0.3) * 0.12 : 0;
+    const level = WATER_LEVEL - 0.08 + hummock * m;
+    const w = h > level ? b : m;
+    h = h * (1 - w) + level * w;
   }
   return h;
 }
@@ -202,6 +209,17 @@ export function marshAt(x, z) {
   if (Math.abs(x - MARSH.x) > MARSH.rx * 1.3 || Math.abs(z - MARSH.z) > MARSH.rz * 1.3) return 0;
   const d = Math.hypot((x - MARSH.x) / MARSH.rx, (z - MARSH.z) / MARSH.rz) + nDetail(x * 0.03 + 11, z * 0.03) * 0.18;
   return 1 - smoothstep(0.65, 1.0, d);
+}
+
+const MARSH_EASE = 55; // m beyond the flat (marshAt = 1) over which the ground rises back to its own height
+function marshEase(x, z) {
+  const dx = x - MARSH.x;
+  const dz = z - MARSH.z;
+  if (Math.abs(dx) > MARSH.rx + MARSH_EASE + 15 || Math.abs(dz) > MARSH.rz + MARSH_EASE + 15) return 0;
+  const d0 = Math.hypot(dx / MARSH.rx, dz / MARSH.rz);
+  const d = d0 + nDetail(x * 0.03 + 11, z * 0.03) * 0.18; // (marshAt's ragged edge)
+  const out = (d - 0.65) * (d0 > 1e-6 ? Math.hypot(dx, dz) / d0 : 0); // metres outside the flat
+  return 1 - smoothstep(0, MARSH_EASE, out);
 }
 
 // Heights at the terrain mesh vertices, so groundAt() can return the height of
@@ -384,7 +402,7 @@ export function streamBed(x, z) {
 export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
   const bed = streamBed(x, z);
   const snow = snowCover(x, z, y, slope) * (1 - bed); // running water keeps its bed clear of snow
-  const rock = Math.max(smoothstep(0.22, 0.42, slope), bed) * (1 - snow);
+  const rock = Math.max(smoothstep(0.42, 0.62, slope), bed) * (1 - snow);
   const sand = sandAt(x, z) * (1 - rock) * (1 - snow);
   const wl = waterLevelAt(x, z);
   const mud = (1 - smoothstep(wl - 1, wl + 2.5, y)) * (1 - rock) * (1 - snow) * (1 - sand);
@@ -427,9 +445,9 @@ export function groundColor(x, y, z, slope, target = new THREE.Color()) {
     c.lerp(tmp, sand);
   }
 
-  // rock on steep faces
+  // rock on cliffs (on merely steep ground the shader breaks it into outcrops: rockyslope.js)
   tmp.copy(COL.rock).lerp(COL.rockDark, n1);
-  c.lerp(tmp, smoothstep(0.22, 0.42, slope));
+  c.lerp(tmp, smoothstep(0.42, 0.62, slope));
 
   // stream beds: wet, dark cobbles, no snow
   const bed = streamBed(x, z);
@@ -521,6 +539,7 @@ function buildTile(tx, tz) {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.setAttribute('aLayers', new THREE.BufferAttribute(layers, 4));
   geo.setAttribute('aHollow', new THREE.BufferAttribute(hollow, 1));
+  geo.setAttribute('aShade', new THREE.BufferAttribute(new Float32Array(n * n).fill(1), 1));
   geo.setIndex(index);
   geo.computeBoundingSphere();
   return geo;
@@ -579,8 +598,15 @@ export function buildTerrain() {
           float gFar = smoothstep(uGrassTint.x, uGrassTint.y, distance(vGroundPos.xz, cameraPosition.xz));
           if (gFar > 0.0) {
             vec4 gm = texture2D(uGrassMap, ((vGroundPos.xz - uGrassGrid.xy) / uGrassGrid.z + 0.5) / uGrassGrid.w);
-            diffuseColor.rgb = mix(diffuseColor.rgb, gm.rgb * (0.68 + 0.2 * gn), gm.a * 0.85 * gFar);
+            diffuseColor.rgb = mix(diffuseColor.rgb, gm.rgb * (0.68 + 0.2 * gn), gm.a * 0.85 * gFar * (1.0 - rkMask));
           }
+          // patches over the vegetated ground at every distance: drier, straw-coloured stretches,
+          // lusher hollows and dark clumps of low shrubs (an open slope was one flat green)
+          float pv = gNoise(vGroundPos.xz * 0.045 + 3.0) * 0.6 + gNoise(vGroundPos.xz * 0.13 + 4.0) * 0.4;
+          vec3 patchTint = mix(vec3(0.82, 0.93, 0.76), vec3(1.22, 1.1, 0.78), smoothstep(0.32, 0.72, pv));
+          float shrub = smoothstep(0.52, 0.72, gNoise(vGroundPos.xz * 0.55 + 2.0) * 0.7 + gNoise(vGroundPos.xz * 1.9) * 0.3);
+          patchTint *= 1.0 - 0.38 * shrub * smoothstep(0.3, 0.6, gNoise(vGroundPos.xz * 0.07 - 6.0)); // (vegetation.js addSlopeGrowth puts shrubs here)
+          diffuseColor.rgb *= mix(vec3(1.0), patchTint, vRkLayers.x * (1.0 - rkMask));
         }
         ${wet.color}
         // rain pools in hollows, filling from the deepest spot out as uPuddle rises
@@ -595,6 +621,7 @@ export function buildTerrain() {
         ${wet.roughness}
         roughnessFactor = mix(roughnessFactor, 0.05, puddle);`);
     patchGroundDetail(shader);
+    patchRocky(shader);
     patchPuddles(shader);
   };
   mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;

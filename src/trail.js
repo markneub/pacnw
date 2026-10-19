@@ -7,6 +7,7 @@ import {
 } from './terrain.js';
 import { shared, wetChunks, patchSunlight, sunKey, patchPuddles } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
+import { patchRocky } from './rockyslope.js';
 
 // The trail runs from the trailhead at the spawn point south through the dunes to
 // the ocean beach, along the sand and back up through the dunes, north to the
@@ -751,6 +752,7 @@ function buildCorridorMesh(points, distanceTo) {
   geo.setAttribute('aTread', new THREE.Float32BufferAttribute(treadAttr, 1));
   geo.setAttribute('aPrint', new THREE.Float32BufferAttribute(printAttr, 3));
   geo.setAttribute('aLayers', new THREE.Float32BufferAttribute(layers, 4));
+  geo.setAttribute('aShade', new THREE.Float32BufferAttribute(new Float32Array(positions.length / 3).fill(1), 1));
   geo.setIndex(indices);
   // normals from the ground's own slope at each vertex (computeVertexNormals averaged in the
   // triangles where the strip folds over itself on tight turns: downward normals, black pockets)
@@ -843,6 +845,7 @@ function buildCorridorMesh(points, distanceTo) {
         ${wet.roughness}
         roughnessFactor = mix(roughnessFactor, 0.04, puddle);`);
     patchGroundDetail(shader);
+    patchRocky(shader, { tread: true });
     patchPuddles(shader);
   };
   mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
@@ -887,7 +890,7 @@ function buildCorridorMesh(points, distanceTo) {
     const v0 = r0 * rowLen;
     const v1 = (r1 + 1) * rowLen;
     const part = new THREE.BufferGeometry();
-    for (const name of ['position', 'normal', 'color', 'aTread', 'aPrint', 'aLayers']) {
+    for (const name of ['position', 'normal', 'color', 'aTread', 'aPrint', 'aLayers', 'aShade']) {
       const attr = geo.attributes[name];
       part.setAttribute(name, new THREE.BufferAttribute(attr.array.slice(v0 * attr.itemSize, v1 * attr.itemSize), attr.itemSize));
     }
@@ -954,6 +957,7 @@ function buildCorridorMesh(points, distanceTo) {
     skirt.setAttribute('aTread', new THREE.Float32BufferAttribute(new Float32Array(sPos.length / 3), 1));
     skirt.setAttribute('aPrint', new THREE.Float32BufferAttribute(new Float32Array(sPos.length), 3));
     skirt.setAttribute('aLayers', new THREE.Float32BufferAttribute(sLay, 4));
+    skirt.setAttribute('aShade', new THREE.Float32BufferAttribute(new Float32Array(sPos.length / 3).fill(1), 1));
     skirt.setIndex(sIdx);
     // lit like the ground it continues: computeVertexNormals averaged the two windings' opposite
     // normals to zero, so wherever the skirt showed it was black (spots and thin lines in the snow)
