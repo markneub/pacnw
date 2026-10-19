@@ -647,6 +647,60 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   streak). Budget (container, phone): outside 58 draws / 0.15M tris, inside 35 / 0.12M; spawn +1 draw (the smoke).
   Views (sun): approach `x=69.85&z=-922.97&yaw=1.097`, porch `x=66.32&z=-923.68&yaw=0.785`, inside
   `x=62.79&z=-925.8&yaw=-0.09&pitch=-0.35`, back with the smoke `x=52.2&z=-926.5&yaw=-1.43&pitch=0.1`. Dev: `?door=open`.
+- **The cave** (`src/cave.js`, `CAVE` in config.js; the user: a cave in a hillock near the start, natural rock with
+  stones arranged at its entrance as if by a person, realistic torches with flickering shadows giving just enough light,
+  a prick of light ~10 s of running in; walking into it brings you out of the same entrance, at night; again: day).
+  Mouth at (15, 590), 50 m north of spawn (straight ahead), tunnel due **north**, 130 m. The mouth sits exactly on a
+  row of the 5 m terrain grid: the ground is level up to it and `hillock()` (terrain.js, in `baseHeight`, 0 for u ≤ 0,
+  ~7 m at the next row, 11 m by u ≈ 9, falling off by u = 70) steps up from the next row. (A rotated tunnel put the
+  mouth mid-cell: the ground under it interpolated 3 m up the steep nose and the mouth floated.) The floor at the mouth
+  (`Y0`) is the highest ground across the doorway (lower, a view out along the floor slipped under the lip of the ground).
+  **Geometry** (all JS, deterministic, `SEED + 4111/77/919`): a tube along the axis (rings every 0.33 m, 48 verts: an
+  arch + a floor that curls up at the walls), wiggling ±0.85 m sideways (`wiggle`), floor falling 8.5% (`floorAt`),
+  width/height from sums of sines (narrower at the mouth and the end), displaced by 3-octave simplex + ledges; 14
+  chunks for culling inside, one merged mesh (tube + crag) from outside (`rockAll`, renderOrder 50: drawn after the
+  hill that hides it; inside the chunks are renderOrder −1, filling depth first). The **crag** is rings around the
+  opening (its first ring is the tube's), a rounded lip, then rock pushed back into the hill until the ground covers it.
+  The **set stones**: two uprights, a lintel, a threshold slab, dry-stone walls flaring out (superellipsoid stones,
+  `stoneGeometry`); rubble along the floor, a few boulders (colliders), stalactites. A floor apron under the threshold.
+  Terrain and grass are hidden inside a box over the first 14 m (`shared.uCaveO/uCaveDir`); rain/snow stop and motes
+  hide while the camera is inside (`uCaveIn`). The scatter keeps off the crag and the approach (`planCave().blocked`).
+  **Light** (no three.js lights): `caveMaterial` (standard + patch, triplanar `public/textures/cave` = Poly Haven
+  dark_rock_02 walls, forest_ground_04 floor; `fetch_textures.py cave`): outdoor light fades over the first ~4 m (rock
+  above the roof or in front of the mouth counts as outdoors), 12 torches (2 on the uprights, then every 12 m
+  alternating sides; each bracket on the wall at ~1.5 m with the stick leaning out so the flame is 0.3 m clear: the walls
+  curve in above ~1.1 m and the first placement buried the flames in rock, which looked like "the near torches don't
+  light"), `TORCH_I` 6.5 / (d² + 1.2), windowed at 18 m, flicker from sines, the light jittering a few cm. The 4
+  torches nearest the camera get **cube-map shadows** (`WebGLCubeRenderTarget` 256/192 px, RGBA-packed distance, 5-tap
+  PCF; casters = tube, crag, stones, rubble), re-rendered each frame for the nearest 2 (phones 1), every 3rd/4th for the
+  rest, so shadows sway with the flames. Soot above each torch, damp seeps that gloss in the torchlight, moss outside.
+  Flames: camera-facing quads (fbm teardrop, additive) + a soft glow + sparks. The outside torches also light the
+  ground and plants round the mouth through `patchSunlight` (`shared.uCaveTorch`; the cave's own materials pass
+  `{ torches: false }`). No fog over the part of a view inside the cave (`caveFogK`: the fog hid the light at the end).
+  **The light at the end**: the last ring filled, white ×4, plus a halo and a white light on the last ~30 m of walls.
+  **Walking** (`cave.state.inside`, set crossing the doorway on foot): floor via `setWalkModifier`, kept between the
+  walls (`collide`), trees overhead don't collide; outside, an ellipse over the crag and the stones are colliders.
+  `caveLight` (main.js) whitens the screen (`#whiteout`) over the last 18 m; at L − 2.6 the player is moved 12 m in
+  from the mouth, turned round (yaw + π, velocity reversed), `weather.setNight(!night)`, and the white clears over
+  ~1.6 s as you reach the mouth. Deep inside with the mouth out of the frustum, everything outside is hidden
+  (`cullOutdoors`). HUD "Cave". Audio (weather.js `Ambience`): outdoors fades inside, a reverb (synthesised impulse),
+  room tone, drips, torch crackle near torches, an airy swell into the light; crickets at night (no birds).
+  Budget (container `still`): phone spawn 189 → 197 draws, +0.06M tris; desktop 309 → 317; inside 19 draws / 0.05M
+  (+ the shadow passes). Views: `x=15&z=599&yaw=0` (add `&night`), inside `?cave=40` (start 40 m in, facing in;
+  `&yaw=3.14` looks back). Not yet benched on a phone (`?perf` in the cave: the shadow cubes are the new cost).
+  Scripted renders: `window.__pacnw.tick()` runs one frame of the loop (also after `?still` stopped it).
+- **Night** (via the cave, or `?night`; `weather.setNight`): a clear night under a full moon low in the SSW over the sea
+  (`MOON_DIR` (−0.22, 0.45, 0.87), `MOON_COLOR` silver-blue). The key-light direction is no longer baked into shaders:
+  `shared.uKeyDir/uKeyColor/uKeyOff` (sun or moon) drive the dapple (`patchSunlight`), glitter (`uGlDir/uGlColor`), the
+  mist light and rays (post.js), motes and the creeks; the fog chunk gets the night flag as +256 in `fog.near`'s integer
+  part (glow toward the moon). Weather at night: always clear (`uSun` 1, so dapple, shafts and glitter run with the
+  moon), fog 0x121c2a, hemisphere 0x30466e × 0.55, moon 1.25, env = a night PMREM (same size: swapping it recompiles
+  nothing) × 0.35. Sky (`nightSky`): deep blue, a moonlit aureole, three star layers on a cube grid (soft dots ~1 px,
+  power-law brightness, warm/cool tints, some twinkling, more near the horizon), all faded by `wash` near the moon, a
+  faint Milky Way band with dust lanes across the north, and a big moon (2.3° radius: a low moon looks big) with maria
+  and a rayed crater. The moon is reflected on the lake and in a broken path on the sea. Post: a night grade
+  (desaturated in the dark, blue-leaning, a deep blue floor). Views: beach `x=40&z=946&yaw=3.0&pitch=0.1&night`,
+  spawn looking south `yaw=3.14&night`.
 - **Rocky slopes** (`src/rockyslope.js`, the user: "plain rocky hillsides ... don't look realistic": smooth felt-green
   mounds, stones dotted evenly over them): bare rock on steep ground is decided **per pixel** in the terrain and corridor
   shaders (`patchRocky`, after `patchGroundDetail`). The slope from the interpolated normal only sets how *likely* rock is

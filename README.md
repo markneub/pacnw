@@ -8,6 +8,11 @@ then switchbacks north and up. Follow it and the land climbs where the rain turn
 snowfield in a forest of snow-laden firs, then up again into a high basin walled by peaks, below a pass, where the trail
 ends at a log cabin with smoke rising from its stovepipe. Open the door and step in out of the snow.
 
+Just north of the trailhead, a cave runs into the nose of a mossy hillock. Someone set stones round its mouth
+long ago, and torches burn on its walls. Far down the tunnel there's a prick of white light. Walk into it and
+you come back out of the same mouth, and day has turned to night: a full moon low over the sea, a sky full
+of stars, moonlight falling through the crowns. Go through again and it's day.
+
 **Play it online:** https://markneub.github.io/pacnw/
 
 ## Running
@@ -46,7 +51,7 @@ plus GPU time where the browser can measure it (not Safari/iOS).
 spot, after 30 s of heating the GPU up to its throttled state). After you start, it times frames at three spots with
 each part of the scene switched off in turn, and at other resolutions. It then shows a table with a Copy button.
 
-URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
+URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`. `?night` starts at night, `?cave=40` starts 40 m into the cave.
 
 ## How it's put together
 
@@ -54,6 +59,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | --- | --- |
 | `blender/build_assets.py` | Procedurally models trees, ferns, logs and furniture in Blender → `public/models/forest.glb` |
 | `blender/build_cabin.py` | Models the mountain cabin (shell, door, furnishings) → `public/models/cabin.glb` + `src/cabin_layout.json` |
+| `src/cave.js` | The cave north of the trailhead: its tunnel, crag and set stones, torches (flames, flickering light, cube-map shadows), the light at the end; walking in and out |
 | `src/cabin.js` | Places the cabin at the trail's end; its door, colliders, walkable floor, chimney smoke and interior lighting |
 | `blender/build_rocks.py` | Turns photogrammetry scans into game boulders with two detail levels → `public/models/rocks.glb` |
 | `src/terrain.js` | Height function (valley, lake basin, a staircase of snowy benches between ridged peaks, mountain rim, the beach and dunes in the south), vertex-coloured terrain with moss, rock and snow |
