@@ -7,11 +7,11 @@ import * as THREE from 'three';
  * green to grey: a felt-covered mound. Here the slope (from the interpolated normal) only sets
  * how *likely* rock is; patchy noise and ledges that follow the contours decide where, with a
  * crisp, ragged outline at pixel scale. Between the outcrops the ground keeps its own colour
- * (moss, litter, alpine meadow). The rock gets jointed, bedded colour, lichen and moss on its
- * flatter tops, a debris fringe around it, and a bump in its lighting (triplanar, so faces
- * don't smear). Within the ground-detail range the rock photo takes over (GD_ROCK_MASK in
- * grounddetail.js). rockMaskAt() is the same mask in JS, for the scatter (stones gather below
- * the outcrops).
+ * (moss, litter, alpine meadow). The rock is the ground-detail rock photo at every distance
+ * (triplanar, so faces don't smear: the close-up layer near, GD_ROCK_MASK in grounddetail.js,
+ * the same photo at the same scale beyond it, plus a 23 m scale against repeats), with tonal
+ * drifts, dark water streaks, lichen, moss on its flatter tops and a debris fringe around it.
+ * rockFieldAt() is the same field in JS, for the scatter (stones gather below the outcrops).
  *
  * Gentle ground (slope < 0.04) skips all of it in one branch.
  */
@@ -35,45 +35,6 @@ export const ROCKY_GLSL = /* glsl */ `
     // ledges: bands along the contours (heights warped by noise), the rock breaking out along them
     float band = abs(fract(y * 0.3 + rkNoise(q * 0.03 + 1.7) * 2.0) - 0.5) * 2.0;
     return likely * 1.3 + (big - 0.5) * 1.3 - 0.2 * band - 0.12;
-  }
-  // Fractured rock on one plane: cellular noise, blocks a little wider than tall (bedding).
-  // x: how close to a crack (0 on it), y: the block's id (0..1), zw: the block face's tilt
-  vec4 rkBlocks(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = p - i;
-    float d1 = 9.0;
-    float d2 = 9.0;
-    vec2 c1 = vec2(0.0);
-    for (int y = -1; y <= 1; y++) {
-      for (int x = -1; x <= 1; x++) {
-        vec2 g = vec2(float(x), float(y));
-        vec2 r = g + vec2(rkHash(i + g), rkHash(i + g + 19.19)) - f;
-        float d = dot(r, r);
-        if (d < d1) { d2 = d1; d1 = d; c1 = i + g; } else if (d < d2) d2 = d;
-      }
-    }
-    float id = rkHash(c1 + 7.3);
-    return vec4(sqrt(d2) - sqrt(d1), id, rkHash(c1 + 2.9) - 0.5, rkHash(c1 + 5.7) - 0.5);
-  }
-  // Rock on a face: bedding layers (wavy, uneven thickness) cut by joints, staggered from layer
-  // to layer, so it breaks into blocks the way a cliff does. p.x along the face, p.y up (m).
-  // x: metres to the nearest crack, y: block id, z: height within its layer (0 bottom .. 1 top)
-  vec4 rkStrata(vec2 p) {
-    float v = p.y + (rkNoise(vec2(p.x * 0.06, 3.1)) - 0.5) * 4.0 + (rkNoise(vec2(p.x * 0.25, 8.3)) - 0.5) * 0.8;
-    // layers ~1-6 m thick (the warp's slope stays below the base rate, so it never folds back)
-    float rate = 0.6 + 1.2 * 0.25 * (rkNoise(vec2(v * 0.25 + 0.01, 0.5)) - rkNoise(vec2(v * 0.25 - 0.01, 0.5))) / 0.02;
-    float lv = v * 0.6 + 1.2 * rkNoise(vec2(v * 0.25, 0.5));
-    float L = floor(lv);
-    float fy = lv - L;
-    // joints ~1.5-18 m apart, shifted from layer to layer
-    float u0 = p.x * 0.35 + rkHash(vec2(L, 1.7)) * 17.0;
-    float u = u0 + 0.8 * rkNoise(vec2(u0 * 0.7, L + 0.5));
-    float J = floor(u);
-    float fx = u - J;
-    // metres to the nearest crack; joints and bedding planes come and go along their length
-    float bedGap = min(fy, 1.0 - fy) / max(rate, 0.15) + 0.12 * smoothstep(0.45, 0.6, rkNoise(vec2(p.x * 0.4, L * 2.1)));
-    float jointGap = min(fx, 1.0 - fx) / 0.35 + 0.12 * smoothstep(0.4, 0.6, rkNoise(vec2(p.y * 0.5, J * 1.7)));
-    return vec4(min(bedGap, jointGap), rkHash(vec2(L, J) + 7.3), fy, rkHash(vec2(L, J) + 2.9) - 0.5);
   }
 `;
 
@@ -115,7 +76,6 @@ export function patchRocky(shader, { tread = false } = {}) {
       varying vec3 vRkN;
       varying float vRkShade;
       float rkMask = 0.0; // bare rock here (0..1): the detail layer and the grass tint read it
-      vec3 rkBump = vec3(0.0); // world-space normal perturbation on the rock
       ${ROCKY_GLSL}
       void main() {`)
     .replace('#include <color_fragment>', `#include <color_fragment>
@@ -137,59 +97,34 @@ export function patchRocky(shader, { tread = false } = {}) {
           diffuseColor.rgb *= 1.0 - 0.18 * fringe; // loose debris and shade around the rock
           if (rkMask > 0.0) {
             vec3 p = vRkPos;
-            // the planes the rock is projected on, sharply blended (weaker ones skipped)
-            vec3 tw = pow(abs(rn), vec3(4.0));
-            tw /= tw.x + tw.y + tw.z;
-            float far = 1.0 - smoothstep(110.0, 240.0, distance(p, cameraPosition)); // (cracks would shimmer)
-            // faces: strata on the two vertical planes; gentler slabs seen from above: cellular cracks
-            float crack = 0.0;
-            float id = 0.0;
-            float step_ = 0.0; // dark under each ledge, lit along its top
-            vec3 tilt = vec3(0.0);
-            if (tw.z > 0.05) {
-              vec4 b = rkStrata(p.xy);
-              crack += (1.0 - smoothstep(0.03, 0.1, b.x)) * tw.z; id += b.y * tw.z; step_ += (b.z - 0.5) * tw.z;
-              tilt += vec3(b.w, b.z - 0.4, 0.0) * tw.z;
-            }
-            if (tw.x > 0.05) {
-              vec4 b = rkStrata(p.zy + vec2(31.0, 0.0));
-              crack += (1.0 - smoothstep(0.03, 0.1, b.x)) * tw.x; id += b.y * tw.x; step_ += (b.z - 0.5) * tw.x;
-              tilt += vec3(0.0, b.z - 0.4, b.w) * tw.x;
-            }
-            if (tw.y > 0.05) {
-              vec4 b = rkBlocks(p.xz * 0.38 + 57.0);
-              crack += (1.0 - smoothstep(0.0, 0.07, b.x)) * 0.35 * tw.y; id += b.y * 0.6 * tw.y;
-              tilt += vec3(b.z, 0.0, b.w) * 0.15 * tw.y;
-            }
-            crack *= far;
-            // each block its own shade of grey, broad tonal drifts across the face
-            // (each block's own tone, kept small: as a patchwork of flat greys it read as polygons)
-            float tone = id * 0.15 + rkNoise(q * 0.06 + p.y * 0.04) * 0.5 + rkNoise(q * 0.5 + p.y * 0.3) * 0.35;
+            float tone = rkNoise(q * 0.06 + p.y * 0.04) * 0.6 + rkNoise(q * 0.5 + p.y * 0.3) * 0.4;
             vec3 rk = mix(uRkA, uRkB, tone);
             #ifdef GROUND_DETAIL
             {
-              // the rock photo at every distance, at two big scales (blended, so it never visibly
-              // repeats): beyond the close-up range the procedural rock alone read as a patchwork
-              // of flat greys until you got close and the photo took over (the user)
+              // The rock photo at every distance, so far rock looks like near rock: at its close-up
+              // scale (uGDTile.y) taking over exactly where the close-up layer fades out, and at 23 m
+              // everywhere, so its repeats don't show. Procedural bedding layers and blocks (lit ledge
+              // tops, dark undersides) read as terraces beyond the close-up range, then a patchwork:
+              // "half and half" (the user).
               vec3 bw = pow(abs(rn), vec3(4.0));
               bw /= bw.x + bw.y + bw.z;
-              vec3 photo = vec3(0.0);
+              float farW = smoothstep(uGDRange.x, uGDRange.y, distance(p, cameraPosition));
+              vec3 rr = vec3(0.0);
               for (int k = 0; k < 2; k++) {
-                float sc = k == 0 ? 1.0 / 9.0 : 1.0 / 23.0;
+                float sc = k == 0 ? uGDTile.y : 1.0 / 23.0;
                 vec3 pp = p * sc + float(k) * 0.37;
                 vec3 dx = rkDx * sc;
                 vec3 dy = rkDy * sc;
                 vec3 aX = textureGrad(uGDAlb[1], pp.zy, dx.zy, dy.zy).rgb;
                 vec3 aY = textureGrad(uGDAlb[1], pp.xz, dx.xz, dy.xz).rgb;
                 vec3 aZ = textureGrad(uGDAlb[1], pp.xy, dx.xy, dy.xy).rgb;
-                photo += (aX * bw.x + aY * bw.y + aZ * bw.z) * 0.5;
+                vec3 r = (aX * bw.x + aY * bw.y + aZ * bw.z) / uGDAvg[1];
+                r = mix(vec3(dot(r, vec3(0.3, 0.5, 0.2))), r, 0.35); // (as the close-up: grey, not lilac)
+                rr = k == 0 ? mix(vec3(1.0), r, uGDStrength.y * farW) : rr * mix(vec3(1.0), r, 0.45);
               }
-              vec3 rr = photo / uGDAvg[1];
-              rr = mix(vec3(dot(rr, vec3(0.3, 0.5, 0.2))), rr, 0.35); // (as the close-up: grey, not lilac)
-              rk *= mix(vec3(1.0), rr, 0.75);
+              rk *= rr;
             }
             #endif
-            rk *= (1.0 - 0.45 * crack) * (1.0 + 0.15 * step_ * far);
             // dark water streaks running down the faces
             float along = dot(p.xz, normalize(vec2(-rn.z, rn.x) + 1e-4));
             float streak = smoothstep(0.55, 0.85, rkNoise(vec2(along * 1.3, p.y * 0.07))) * smoothstep(0.15, 0.4, s);
@@ -198,15 +133,10 @@ export function patchRocky(shader, { tread = false } = {}) {
             rk = mix(rk, rk * vec3(1.18, 1.16, 1.02), smoothstep(0.62, 0.8, rkNoise(q * 0.9 + p.y * 0.5)) * 0.6);
             rk = mix(rk, uRkMoss, smoothstep(0.6, 0.85, rn.y) * smoothstep(0.35, 0.7, rkNoise(q * 0.45 + 9.0)) * 0.7);
             diffuseColor.rgb = mix(diffuseColor.rgb, rk * vRkShade, rkMask);
-            // relief: every block faces a little differently, ledge tops tilt up
-            vec3 g = tilt * 0.35 * far;
-            g -= rn * dot(g, rn); // along the surface only
-            rkBump = g * rkMask;
           }
         }
       }`)
-    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-      if (rkMask > 0.0) normal = normalize(normal + (viewMatrix * vec4(rkBump, 0.0)).xyz);`);
+;
 }
 
 // ---- the same field in JS (scatter) -------------------------------------------------------

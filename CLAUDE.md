@@ -590,11 +590,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   shaders (`patchRocky`, after `patchGroundDetail`). The slope from the interpolated normal only sets how *likely* rock is
   (`rkField`: likely(0.04–0.3) × 1.3 + 3-octave patch noise + ledge bands along the contours; > 0.5 = rock, edge 0.49–0.53,
   a darker debris fringe 0.4–0.49). The vertex colour/layers only go to rock on cliffs now (slope 0.42–0.62, was
-  0.22–0.42). Rock look: on the vertical planes `rkStrata` (wavy bedding layers 1–6 m thick, joints 1.5–18 m apart,
-  staggered per layer, cracks fading in and out), seen from above `rkBlocks` (cellular slabs); per-block tone and tilt
-  (the bump), lit ledge tops / dark undersides, dark water streaks down faces, lichen, moss on flatter tops; cracks and
-  tilt fade out by 110–240 m (shimmer). Tried first and dropped: value-noise contour cracks (read as worms), cellular cells
-  on faces (crazy paving), evenly spaced strata (masonry). Within the detail range the rock photo takes over: `rkMask`
+  0.22–0.42). Rock look: **the rock photo at every distance** (see below), tonal drifts, dark water streaks down faces,
+  lichen, moss on flatter tops. Procedural rock was tried and dropped: value-noise contour cracks (worms), cellular cells
+  on faces (crazy paving), evenly spaced strata (masonry), then irregular strata + blocks with per-block tone/tilt and
+  lit ledge tops: beyond the close-up range they read as terraces and a patchwork of greys, while near rock was the
+  photo ("half and half", the user). Within the detail range the rock photo takes over: `rkMask`
   overrides the detail layers (`GD_ROCK_MASK` in grounddetail.js); the rock photo's colour ratio is 65% desaturated (grey
   stones / a brown average turned lilac), and the top-down floor/mud photos fade out on slopes > 0.28–0.5 (they smeared).
   `aShade` (terrain, corridor, skirt) carries the baked shade alone (bake.js `shadeMesh`) so shader-made colours get it.
@@ -613,8 +613,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   shader not yet benched (`?bench=ground`).
   **Patchy until close** (the user): two causes. (1) Past the close-up range the procedural rock alone read as a
   patchwork of flat greys: the rock photo (`uGDAlb[1]`, triplanar, gradients taken before the branches) now lies on rock
-  pixels at every distance at two big scales (9 m and 23 m tiles, blended, 65% desaturated like the close-up), per-block
-  tone 0.45 → 0.15 and tilt 0.8 → 0.35. +6 texture taps on rock pixels only. (2) The cobble clusters (`pebbles_d`,
+  pixels at every distance: at the close-up scale (`uGDTile.y`, strength `uGDStrength.y`) weighted by where the close-up
+  layer has faded (`smoothstep(uGDRange)`), so near and far rock are the same picture, times a 23 m scale at 0.45 against
+  repeats; 65% desaturated like the close-up. The procedural strata/blocks and the bump are gone. +6 texture taps on rock
+  pixels only. (2) The cobble clusters (`pebbles_d`,
   20-faced stones, photo only within ~32 m) were scaled up to ×3.5 as talus below outcrops and read as grey polygons:
   now ≤ ×1.5, and the talus is **`addTalus`** (hash, no rng): small scanned boulders (3 variants, scale 0.22–0.55) on a
   4.5 m grid where the rock field here or 3/7 m uphill says stones gather; 6.4k → 12.3k boulders. Draws: all 9 variants
