@@ -717,6 +717,33 @@ def _stick(b, mat, p0, p1, r, sides=4):
         b.face((base[i], base[j], tip), mat)
 
 
+
+def _limb(b, mat, pts, radii, sides=6):
+    """A continuous tapered tube along a polyline (rings at each point, turned by the averaged
+    tangent), closed to a point just past the end. Stacked `_stick` cones read as spikes with
+    open, dark ends up close (the vine maple's stems and twigs, seen from under them)."""
+    n = len(pts)
+    ref = Vector((0.0, 0.0, 1.0))
+    rings = []
+    for i, (p, r) in enumerate(zip(pts, radii)):
+        t = (pts[min(n - 1, i + 1)] - pts[max(0, i - 1)]).normalized()
+        side = t.cross(ref)
+        if side.length < 1e-3:
+            side = t.cross(Vector((1.0, 0.0, 0.0)))
+        side.normalize()
+        up = side.cross(t).normalized()
+        ref = up  # carry the frame along so the rings don't twist on a curve
+        rings.append([b.v(p + (side * math.cos(TAU * k / sides) + up * math.sin(TAU * k / sides)) * r) for k in range(sides)])
+    for i in range(n - 1):
+        lo, hi = rings[i], rings[i + 1]
+        for k in range(sides):
+            j = (k + 1) % sides
+            b.face((lo[k], lo[j], hi[j], hi[k]), mat)
+    end = pts[-1] + (pts[-1] - pts[-2]).normalized() * radii[-1] * 2.0
+    tip = b.v(end)
+    for k in range(sides):
+        b.face((rings[-1][k], rings[-1][(k + 1) % sides], tip), mat)
+
 # ---------------------------------------------------------------------------
 # Ground clutter
 # ---------------------------------------------------------------------------
@@ -832,17 +859,15 @@ def vine_maple(M, name, seed=5, leafy=1.0):
             horiz = L * (math.sin(lean) * t + arch * 0.45 * t ** 2.5)
             return base + out * horiz + Vector((0.0, 0.0, L * (math.cos(lean) * t - arch * 0.25 * t ** 3)))
 
-        pts = [at(i / 6) for i in range(7)]
-        for i in range(6):
-            _stick(b, bark, pts[i], pts[i + 1] + (pts[i + 1] - pts[i]) * 0.08, r0 * (1.0 - 0.7 * i / 6), sides=5)
+        pts = [at(i / 8) for i in range(9)]
+        _limb(b, bark, pts, [r0 * (1.0 - 0.72 * i / 8) for i in range(9)], sides=6)
         def spray(base, fwd, sd, cl, droop):
             """A leaf card whose painted twig (maple_spray.png: along v = 0.5 from u = 0.02 to 0.8)
             lies on a real twig from `base`: u = 0 at base, never mirrored, so every leaf hangs
             off wood (cards mirrored end to end or set off along the twig floated in the air)."""
             _card(b, leaves, base + fwd * (0.5 * cl), fwd, sd, cl, cl, droop, (0.0, 0.0), fold=0.45)
             along = [base + fwd * (u * cl) - Vector((0.0, 0.0, droop * u * u)) for u in (0.0, 0.4, 0.8)]
-            _stick(b, bark, along[0], along[1], 0.014, sides=4)
-            _stick(b, bark, along[1], along[2], 0.009, sides=4)
+            _limb(b, bark, along, [0.012, 0.008, 0.004], sides=4)
             return along
 
         # twigs + leaf layers from 30% up the stem
@@ -864,7 +889,8 @@ def vine_maple(M, name, seed=5, leafy=1.0):
                     q = along[1].lerp(along[0], 0.5)
                     spray(q, f2, Vector((-f2.y, f2.x, 0.0)).normalized(), cl * 0.85, 0.06 * cl)
             else:  # bare twig (the thinned _lod model)
-                _stick(b, bark, p, p + dir_ * tl + Vector((0.0, 0.0, rise)), 0.018, sides=4)
+                _limb(b, bark, [p, p + dir_ * (tl * 0.5) + Vector((0.0, 0.0, rise * 0.4)), p + dir_ * tl + Vector((0.0, 0.0, rise))],
+                      [0.012, 0.008, 0.004], sides=4)
             t += rng.uniform(0.04, 0.07)
         # a spray off the stem's tip, drooping
         tipc = at(1.0)

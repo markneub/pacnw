@@ -135,7 +135,7 @@ function patchCards(mat) {
           // a broadleaf card seen edge-on smears its leaves into long streaks: thin it out
           // as its face (the triangle's, not the bent shading normal) turns away
           vec3 cardFace = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
-          diffuseColor.a *= smoothstep(0.1, 0.35, abs(dot(cardFace, normalize(vViewPosition))));
+          diffuseColor.a *= smoothstep(0.05, 0.25, abs(dot(cardFace, normalize(vViewPosition))));
         }
         #endif
         #include <alphatest_fragment>`)
