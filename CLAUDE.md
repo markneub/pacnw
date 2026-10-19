@@ -27,6 +27,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 
 - `.github/workflows/pages.yml` builds on every push and deploys **only from the default branch**
   (currently `claude/peaceful-johnson-ehsy3g`; it's the only branch). Live at https://markneub.github.io/pacnw/
+- **Links for the user (they test on a phone):** whenever you suggest URL parameters to try (`?bench=...`, a view,
+  `?weather=sun`, ...), give the **full clickable URL**, e.g.
+  [https://markneub.github.io/pacnw/?bench=trees](https://markneub.github.io/pacnw/?bench=trees), never bare parameters:
+  copying and pasting them on a phone is awkward.
 - Pages source is set to "GitHub Actions". The proxy blocks enabling or configuring Pages via `gh api`,
   and github.io isn't reachable from the container, so check deploys with `gh run watch <id> --repo markneub/pacnw`.
 
