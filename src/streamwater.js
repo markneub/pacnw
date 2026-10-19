@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { rawGroundAt, streams } from './terrain.js';
 import { shared, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter } from './materials.js';
-import { SUN_DIR, SUN_COLOR } from './atmosphere.js';
 
 /**
  * The streams' water: one ribbon per stream along its points, filling the
@@ -541,9 +540,9 @@ function streamMaterial(rockTex) {
           reflectedLight.directSpecular *= 0.5 * uSwSun * (1.0 - swFoam);
           // sun glitter where the sun reaches the water (the canopy along the ray toward it), wider
           // on faster, rougher water
-          vec2 toSun = vec2(${(SUN_DIR.x / SUN_DIR.y).toFixed(3)}, ${(SUN_DIR.z / SUN_DIR.y).toFixed(3)}) * 10.0;
+          vec2 toSun = uGlDir.xz / uGlDir.y * 10.0;
           float shade = min(1.0, texture2D(uSwCanopy, (vWPos.xz + toSun - uSwCanopyRect.xy) / uSwCanopyRect.zw).r * 2.4);
-          reflectedLight.indirectSpecular += ${'vec3(' + [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b].map((v) => v.toFixed(3)).join(', ') + ')'}
+          reflectedLight.indirectSpecular += uGlColor
             * glitter(vWPos, normalize(cameraPosition - vWPos), 0.2 + 0.12 * smoothstep(0.4, 2.5, vFlow.z + 2.6 * vSwInfo.z)) * (1.0 - shade) * (1.0 - swFoam);
         }
         #endif`);

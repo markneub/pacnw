@@ -349,7 +349,7 @@ function grassMaterial(baked, ring) {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
   mat.envMapIntensity = 0.35; // like the needles: no sky sheen on foliage
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms, cutUniforms, { uTime: shared.uTime, uWind: shared.uWind });
+    Object.assign(shader.uniforms, uniforms, cutUniforms, { uTime: shared.uTime, uWind: shared.uWind, uCaveO: shared.uCaveO, uCaveDir: shared.uCaveDir });
     patchSunlight(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
@@ -364,6 +364,8 @@ function grassMaterial(baked, ring) {
         uniform vec4 uGrassGrid; // min x, min z, step, n
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
+        uniform vec4 uCaveO;
+        uniform vec2 uCaveDir;
         uniform float uTime;
         uniform float uWind;
         varying vec3 vGrassCol;
@@ -408,6 +410,10 @@ function grassMaterial(baked, ring) {
               && texture2D(uCutMask, gCutUv).r > 0.5) gScale = 0.0;
           gY = gGround(gXZ);
           if (gY < ${(WATER_LEVEL + 0.15).toFixed(2)} - 0.5 * gMarsh) gScale = 0.0;
+          // none inside the cave's mouth (cave.js), where the ground runs up into the tunnel
+          vec2 gCo = gXZ - uCaveO.xz;
+          float gCs = dot(gCo, uCaveDir);
+          if (gCs > -0.3 && gCs < 14.0 && abs(dot(gCo, vec2(-uCaveDir.y, uCaveDir.x))) < 3.0) gScale = 0.0;
         }
         float gHeight = mix(0.7, 1.35, gR3) * mix(0.55, 1.0, gMap.a); // sparse grass is shorter
         gHeight *= 1.0 + 2.2 * gMarsh; // marsh sedge: knee high

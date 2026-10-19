@@ -232,3 +232,13 @@ body.touch #hud {
 #look-cue.on {
   opacity: 1;
 }
+
+/* the light at the end of the cave (main.js caveLight): the screen goes white and clears outside */
+#whiteout {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: #fbfcff;
+  opacity: 0;
+  will-change: opacity;
+}

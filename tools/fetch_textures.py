@@ -45,6 +45,10 @@ SETS = {
     "cabin": [
         ("wood", "rough_wood", 1.2, 0.9),             # the cabin's logs and boards: weathered, checked grain
     ],
+    "cave": [
+        ("wall", "dark_rock_02", 3.5, 1.0),           # the cave's walls and the crag: dark, stratified, craggy
+        ("floor", "forest_ground_04", 2.5, 1.0),      # its floor: grit, loose stones and dirt
+    ],
 }
 SIZES = (1024, 512)
 

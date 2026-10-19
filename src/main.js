@@ -26,6 +26,7 @@ import { buildOcean } from './ocean.js';
 import { Post } from './post.js';
 import { planCabin, buildCabin, loadCabinAssets } from './cabin.js';
 import { loadWorld } from './world.js';
+import { planCave, buildCave, loadCaveAssets } from './cave.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -159,6 +160,7 @@ async function init() {
   // the models download meanwhile too (they're needed from the impostor bake on)
   const protosReady = loadPrototypes(['forest', 'rocks'].map((m) => `${import.meta.env.BASE_URL}models/${m}.glb`));
   const cabinReady = loadCabinAssets(renderer, { lowPower });
+  const caveReady = loadCaveAssets(renderer, { lowPower });
   // close-up ground and bark/rock textures download while the world is being built
   const detailReady = off.has('detail') ? Promise.resolve([false, false])
     : Promise.all([loadGroundDetail(renderer, { lowPower }), loadSurfaceDetail(renderer, { lowPower })]);
@@ -204,8 +206,10 @@ async function init() {
   await loadTickNow(1);
   step('tree impostors');
   progress('vegetation'); // the scatter and the instanced chunks
-  const cabinPlan = planCabin(trail); // (the scatter keeps clear of it)
-  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, exclude: cabinPlan.blocked, placements: world?.placements });
+  const cabinPlan = planCabin(trail); // (the scatter keeps clear of it, and of the cave's mouth)
+  const cavePlan = planCave();
+  const exclude = (x, z, margin) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin);
+  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, exclude, placements: world?.placements });
   scene.add(veg.group);
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
   step('vegetation');
@@ -226,22 +230,40 @@ async function init() {
   await loadTickNow(0.85);
 
   const weather = new Weather(scene, renderer, { particles: lowPower ? 0.5 : 1 });
+  // a moonlit sky to reflect at night (same PMREM size, so swapping it recompiles nothing)
+  weather.envs = { day: scene.environment, night: createEnvironment(renderer, { night: true }) };
+  if (params.has('night')) weather.setNight(true); // (also: through the cave)
   // the sea and its surf (reflecting the weather's sky)
   const ocean = off.has('water') ? null : await buildOcean(weather.sky.uniforms, { lowPower, progress: [0.86, 0.98] });
   if (ocean) scene.add(ocean.mesh);
   // the mountain cabin at the end of the trail (its own model, textures and shaders)
   const cabin = await buildCabin(cabinPlan, cabinReady);
+  // the cave north of the trailhead (its tunnel, crag, set stones and torches)
+  const cave = await buildCave(cavePlan, caveReady, { lowPower });
+  scene.add(cave.group);
   scene.add(cabin.group);
   if (params.get('door') === 'open') cabin.setOpen(true);
   const player = new Player(camera, renderer.domElement, (pos, r) => {
+    if (cave.state.inside) {
+      cave.collide(pos, r); // (in the tunnel the trees overhead don't count)
+      return;
+    }
     veg.collide(pos, r);
     cabin.collide(pos, r);
+    cave.collide(pos, r);
   });
 
   // Spawn in the southern valley looking north toward the mountains.
   // ?x=&z=&yaw=&pitch= override this (handy for screenshots / bookmarking).
   const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
   player.place(num('x', SPAWN.x), num('z', SPAWN.z), num('yaw', SPAWN.yaw), num('pitch', SPAWN.pitch));
+  // ?cave=30: start 30 m into the cave, facing in (yaw/pitch relative to that)
+  if (params.has('cave')) {
+    const e = cave.exitPoint();
+    cave.state.inside = true;
+    const p = cave.pointAt(num('cave', 10));
+    player.place(p.x, p.z, e.yaw + Math.PI + num('yaw', 0), num('pitch', 0));
+  }
   if (['rain', 'snow', 'clear'].includes(params.get('weather'))) weather.override = params.get('weather');
   if (params.get('weather') === 'sun') weather.override = 'clear';
   // no sun breaks (always overcast) for ?off=sun and for screenshots, so views stay comparable
@@ -278,6 +300,7 @@ async function init() {
 
   progress('warmup');
   await nextFrame();
+  cave.warmUp(renderer); // (its shadow cubes)
   await warmUp();
   step('warm-up');
   if (params.has('perf')) {
@@ -332,6 +355,63 @@ async function init() {
     if (e.code === 'KeyR') cycleWeather();
   });
 
+  // Walking into the light at the end of the cave: the screen goes white, and as it clears you're
+  // coming out of the same mouth, facing out, and day has turned to night (or night to day)
+  const white = document.getElementById('whiteout');
+  let whiteHold = 0;
+  let whiteShown = -1;
+  const caveLight = (dt) => {
+    const st = cave.state;
+    let w = st.inside ? Math.pow(THREE.MathUtils.smoothstep(st.s, cave.length - 18, cave.length - 2.6), 1.6) : 0;
+    if (st.inside && st.s > cave.length - 2.6) {
+      const e = cave.exitPoint();
+      player.yaw += Math.PI; // the way you were looking, turned round: you walk on out
+      player.pos.set(e.x, cave.floorAt(e.s), e.z);
+      player.vel.x = -player.vel.x;
+      player.vel.z = -player.vel.z;
+      player.syncCamera();
+      weather.setNight(!weather.night);
+      veg.updateNear(camera, true);
+      veg.updateVisibility(camera.position);
+      whiteHold = 1.6;
+      w = 1;
+    }
+    if (whiteHold > 0) {
+      whiteHold -= dt;
+      w = Math.max(w, Math.min(1, whiteHold / 1.35)); // (clears as you reach the mouth)
+    }
+    weather.cave.depth = st.inside ? THREE.MathUtils.smoothstep(st.s, 0, 14) : 0;
+    weather.cave.torch = cave.nearestTorch();
+    weather.cave.white = w;
+    if (Math.abs(w - whiteShown) > 0.002) {
+      whiteShown = w;
+      white.style.opacity = w.toFixed(3);
+    }
+  };
+
+  // Deep in the tunnel nothing outside can be seen unless you look back at the mouth: then the
+  // rest of the world isn't drawn at all (its vertices alone cost more than the cave)
+  const mouth = new THREE.Sphere(new THREE.Vector3(cave.mouth.x, cave.mouth.y, cave.mouth.z), 4);
+  const frustum = new THREE.Frustum();
+  const viewProj = new THREE.Matrix4();
+  let hiddenOutdoors = null;
+  const cullOutdoors = () => {
+    let hide = false;
+    if (cave.state.inside && cave.state.s > 6) {
+      camera.updateMatrixWorld();
+      viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      frustum.setFromProjectionMatrix(viewProj);
+      hide = !frustum.intersectsSphere(mouth);
+    }
+    if (hide) {
+      hiddenOutdoors ??= scene.children.filter((o) => o !== cave.group && !o.isLight && o.visible);
+      for (const o of hiddenOutdoors) o.visible = false; // (every frame: the weather re-shows its particles)
+    } else if (!hide && hiddenOutdoors) {
+      for (const o of hiddenOutdoors) o.visible = true;
+      hiddenOutdoors = null;
+    }
+  };
+
   const clock = new THREE.Clock();
   const lookDir = new THREE.Vector3();
   let visTimer = 0;
@@ -351,8 +431,7 @@ async function init() {
   let hudTimer = 0;
 
   let frames = 0;
-  renderer.setAnimationLoop(() => {
-    if (!pacer.ready()) return; // the GPU is still busy with earlier frames: skip this one
+  const tick = () => {
     perf?.begin();
     autoRes?.tick();
     // ?still=N renders N frames then stops (for headless screenshots)
@@ -363,6 +442,9 @@ async function init() {
 
     player.update(dt);
     cabin.update(dt, t, camera, player, scene);
+    cave.track(player);
+    caveLight(dt);
+    cave.update(dt, t, camera, renderer);
     weather.update(dt, t, camera);
     updateGroundDetail(camera, camera.position.z > 650); // (snow's detail slot shows sand at the coast)
 
@@ -380,7 +462,7 @@ async function init() {
       hudTimer = 0.25; // DOM text updates are cheap at 4 Hz, wasteful at 60
       const alt = Math.round(player.pos.y);
       const sand = sandAt(player.pos.x, player.pos.z) > 0.5;
-      const zone = cabin.contains(player.pos.x, player.pos.z) ? 'Mountain cabin'
+      const zone = cave.state.inside ? 'Cave' : cabin.contains(player.pos.x, player.pos.z) ? 'Mountain cabin'
         : sand ? (alt < 4 ? 'Ocean beach' : 'Dunes') : alt > SNOWLINE + 10 ? 'Subalpine snowfield'
         : alt > SNOWLINE - 30 ? 'Upper slopes'
           : alt < 8 ? 'Lakeshore' : 'Temperate rainforest';
@@ -395,6 +477,7 @@ async function init() {
       hud.textContent = text;
     }
 
+    cullOutdoors();
     post.render(scene, camera);
     pacer.submit();
     perf?.end();
@@ -402,9 +485,13 @@ async function init() {
       renderer.setAnimationLoop(null);
       window.__still = renderer.domElement.toDataURL('image/png');
     }
+  };
+  renderer.setAnimationLoop(() => {
+    if (pacer.ready()) tick(); // (else the GPU is still busy with earlier frames: skip this one)
   });
 
-  window.__pacnw = { scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, worldSize: WORLD_SIZE };
+  // (scripted screenshots: one frame of the loop, also after ?still has stopped it)
+  window.__pacnw = { tick: () => tick(), cave, scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, worldSize: WORLD_SIZE };
 }
 
 let flashTimer;

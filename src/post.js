@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SUN_DIR, SUN_COLOR, FOG_POOL_BASE, FOG_POOL_FALLOFF } from './atmosphere.js';
+import { SUN_COLOR, MOON_COLOR, FOG_POOL_BASE, FOG_POOL_FALLOFF } from './atmosphere.js';
 import { shared } from './materials.js';
 
 /**
@@ -125,7 +125,6 @@ export class Post {
       }`, { tSrc: { value: null }, uSunUv: { value: this.sunUv }, uStep: { value: 0.5 } });
 
     // 2a. volumetric light in the mist (quarter res)
-    const sunXZ = new THREE.Vector2(SUN_DIR.x / SUN_DIR.y, SUN_DIR.z / SUN_DIR.y); // horizontal drift per metre of climb
     this.volume = pass(/* glsl */ `
       uniform sampler2D tDepth;
       uniform mat4 uInvProj;
@@ -139,9 +138,10 @@ export class Post {
       uniform float uTime;
       uniform float uSun;
       uniform float uFrame;
+      uniform vec3 uKeyDir; // toward the sun (or the moon)
       varying vec2 vUv;
-      const vec2 SUN_XZ = vec2(${sunXZ.x.toFixed(4)}, ${sunXZ.y.toFixed(4)});
-      const vec3 SUN = vec3(${SUN_DIR.x.toFixed(4)}, ${SUN_DIR.y.toFixed(4)}, ${SUN_DIR.z.toFixed(4)});
+      #define SUN uKeyDir
+      #define SUN_XZ (uKeyDir.xz / uKeyDir.y)
       float vHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
       float vNoise(vec2 p) {
         vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -207,7 +207,7 @@ export class Post {
       tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
       uCamPos: { value: new THREE.Vector3() }, uCanopyMap: shared.uSunMap, uCanopyRect: shared.uCanopyRect,
       uGround: { value: null }, uGroundGrid: { value: new THREE.Vector4() }, uDensity: { value: 0.01 },
-      uTime: { value: 0 }, uSun: { value: 0 }, uFrame: { value: 0 },
+      uTime: { value: 0 }, uSun: { value: 0 }, uFrame: { value: 0 }, uKeyDir: shared.uKeyDir,
     });
 
     // 2b. temporal accumulation of the mist light: reproject last frame's result
@@ -281,6 +281,7 @@ export class Post {
       uniform float uSun;
       uniform float uTime;
       uniform vec3 uSunColor;
+      uniform float uNight;
       varying vec2 vUv;
       float hash(vec2 p) {
         vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -295,8 +296,16 @@ export class Post {
           + (1.0 - exp(-texture2D(tVol, vUv).rgb * uVol)) * uSunColor * 0.7;
         s = 1.0 - (1.0 - s) * (1.0 - clamp(add, 0.0, 1.0)); // screen blend: light, never clipped
         float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
+        if (uNight > 0.5) {
+          // night vision: colour drains out of the dim parts (the eye's rods), what's left leans
+          // blue, and the darkest shadows keep a little deep blue instead of going black
+          float sat = mix(0.35, 0.8, smoothstep(0.05, 0.5, l));
+          s = mix(vec3(l), s, sat) * vec3(0.9, 0.97, 1.12);
+          s += vec3(0.004, 0.007, 0.016) * (1.0 - smoothstep(0.0, 0.15, l));
+          l = dot(s, vec3(0.2126, 0.7152, 0.0722));
+        }
         // grade: highlights a little warmer in a sun break, shadows a touch cool (moist air)
-        s *= mix(vec3(1.0), vec3(1.03, 1.0, 0.95), smoothstep(0.5, 0.95, l) * uSun);
+        s *= mix(vec3(1.0), vec3(1.03, 1.0, 0.95), smoothstep(0.5, 0.95, l) * uSun * (1.0 - uNight));
         s += vec3(-0.004, 0.0, 0.010) * (1.0 - smoothstep(0.0, 0.3, l));
         // soft vignette
         vec2 v = vUv - 0.5;
@@ -307,7 +316,7 @@ export class Post {
       }`, {
       tScene: { value: null }, tRays: { value: null }, tGlow: { value: null }, tVol: { value: null }, uVol: { value: 0 },
       uRays: { value: 0 }, uSun: { value: 0 }, uTime: { value: 0 },
-      uSunColor: { value: SUN_COLOR.clone() },
+      uSunColor: { value: SUN_COLOR.clone() }, uNight: shared.uNight,
     });
   }
 
@@ -345,8 +354,9 @@ export class Post {
 
     // where the sun is on screen, and how much we face it
     camera.getWorldDirection(this.dir);
-    const facing = THREE.MathUtils.smoothstep(this.dir.dot(SUN_DIR), 0.1, 0.75);
-    this.sunScreen.copy(SUN_DIR).multiplyScalar(500).add(camera.position).project(camera);
+    const key = shared.uKeyDir.value; // the sun, or the moon at night
+    const facing = THREE.MathUtils.smoothstep(this.dir.dot(key), 0.1, 0.75);
+    this.sunScreen.copy(key).multiplyScalar(500).add(camera.position).project(camera);
     this.sunUv.set(this.sunScreen.x * 0.5 + 0.5, this.sunScreen.y * 0.5 + 0.5);
     const rays = forceRays ? 1 : this.effects ? shared.uSun.value * facing : 0;
 
@@ -427,6 +437,9 @@ export class Post {
     u.uVol.value = sun > 0.01 ? this.volStrength : 0;
     u.uRays.value = rays > 0.01 ? rays : 0;
     u.uSun.value = shared.uSun.value;
+    // moonbeams are silver, and dimmer than sunbeams
+    if (shared.uNight.value > 0.5) u.uSunColor.value.copy(MOON_COLOR).multiplyScalar(0.55);
+    else u.uSunColor.value.copy(SUN_COLOR);
     u.uTime.value = shared.uTime.value;
     blit(this.composite, null);
     r.info.render.calls = calls;

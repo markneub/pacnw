@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SNOWLINE } from './config.js';
-import { SUN_DIR } from './atmosphere.js';
+import { SUN_DIR, SUN_COLOR } from './atmosphere.js';
 
 // Uniforms shared by every patched material, updated once per frame.
 export const shared = {
@@ -14,7 +14,12 @@ export const shared = {
   uLodBand: { value: 12 }, // m either side of uLodRadius over which the tiers crossfade
   uFernRadius: { value: 150 }, // m; ferns only exist inside this radius
   uShrubFar: { value: 260 }, // m; their billboards (impostors.js) dissolve away by this radius
-  uSun: { value: 0 }, // 0 overcast .. 1 sun break (weather.js)
+  uSun: { value: 0 }, // 0 overcast .. 1 sun break (weather.js); at night 1 = a clear night
+  // the key light: the sun by day, the full moon at night (weather.js sets them, cave.js swaps day and night)
+  uNight: { value: 0 },
+  uKeyDir: { value: SUN_DIR.clone() }, // toward the sun or the moon
+  uKeyColor: { value: SUN_COLOR.clone() }, // its colour for glitter and the like (HDR, moonlight dimmer)
+  uKeyOff: { value: new THREE.Vector2(SUN_DIR.x * 12 / SUN_DIR.y, SUN_DIR.z * 12 / SUN_DIR.y) }, // to the crown layer 12 m up
   uCanopyMap: { value: null }, // R8, 0 open sky .. 1 deep shade (bake.js bakeCanopy)
   uSunMap: { value: null }, // the same at 1 m, barely blurred: sunlight only (bake.js bakeSunMap)
   uGroundH: { value: null }, // R32F terrain grid heights (main.js), for blending objects into the ground
@@ -28,6 +33,13 @@ export const shared = {
   uShelterInv: { value: new THREE.Matrix4() },
   uShelter: { value: new THREE.Vector4(0, 0, 0, 0) },
   uShelterPitch: { value: 0 },
+  // the cave (cave.js): its mouth (x, floor y, z, length) and direction in (x, z); the terrain and
+  // grass hide inside its first metres, and rain and snow stop while the camera is inside (uCaveIn)
+  uCaveO: { value: new THREE.Vector4(0, -1e4, 0, 0) },
+  uCaveDir: { value: new THREE.Vector2(0, -1) },
+  uCaveIn: { value: 0 },
+  // the two torches outside the cave's mouth (xyz, intensity): they light the ground and plants round it
+  uCaveTorch: { value: [new THREE.Vector4(), new THREE.Vector4()] },
 };
 
 /**
@@ -399,6 +411,9 @@ addTrunkMoss.enabled = true; // ?off=moss
 export const GLITTER_GLSL = /* glsl */ `
   uniform float uGlTime;
   uniform float uGlSun;
+  uniform vec3 uGlDir;   // toward the sun (or the moon)
+  uniform vec3 uGlColor; // its light, for the callers to multiply by
+  uniform float uGlNight;
   float glHash(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
   float glLevel(vec2 xz, float cell, float pTilt) {
     vec2 c = floor(xz / cell);
@@ -414,7 +429,7 @@ export const GLITTER_GLSL = /* glsl */ `
     return step(h, pTilt) * smoothstep(0.2, 0.03, d) * smoothstep(0.0, 0.25, life) * smoothstep(1.0, 0.55, life);
   }
   float glitter(vec3 wp, vec3 toEye, float sigma) {
-    vec3 sun = normalize(vec3(${SUN_DIR.x.toFixed(4)}, ${SUN_DIR.y.toFixed(4)}, ${SUN_DIR.z.toFixed(4)}));
+    vec3 sun = uGlDir;
     vec3 hv = normalize(sun + toEye);
     float cosT = max(hv.y, 1e-3);
     float tan2 = (1.0 - cosT * cosT) / (cosT * cosT);
@@ -434,6 +449,9 @@ export const GLITTER_GLSL = /* glsl */ `
 export function patchGlitter(shader) {
   shader.uniforms.uGlTime = shared.uTime;
   shader.uniforms.uGlSun = shared.uSun;
+  shader.uniforms.uGlDir = shared.uKeyDir;
+  shader.uniforms.uGlColor = shared.uKeyColor;
+  shader.uniforms.uGlNight = shared.uNight;
 }
 
 /**
@@ -505,20 +523,40 @@ export function patchPuddles(shader) {
  * lookups per pixel. Call from a material's onBeforeCompile; `?off=dapple`
  * leaves it out (patchSunlight.enabled = false before materials compile).
  */
-const SUN_OFFSET = SUN_DIR.clone().multiplyScalar(12 / SUN_DIR.y); // to the crown layer
 const SUNLIGHT_CHUNK = THREE.ShaderChunk.lights_fragment_begin.replace(
   'getDirectionalLightInfo( directionalLight, directLight );',
   'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= sunVis;',
 );
-export function patchSunlight(shader) {
+export function patchSunlight(shader, { torches = true } = {}) {
   if (!patchSunlight.enabled || !shared.uCanopyMap.value) return;
+  if (torches) {
+    shader.uniforms.uCaveTorch = shared.uCaveTorch;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec4 uCaveTorch[2];')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        #ifdef USE_FOG
+        // the torches at the cave's mouth (cave.js): warm, flickering, ~10 m
+        for (int i = 0; i < 2; i++) {
+          vec3 tl = uCaveTorch[i].xyz - vFogWorld;
+          float d2 = dot(tl, tl);
+          if (d2 < 100.0) {
+            float win = 1.0 - d2 / 100.0;
+            vec3 lv = normalize((viewMatrix * vec4(tl, 0.0)).xyz);
+            reflectedLight.directDiffuse += diffuseColor.rgb * vec3(1.0, 0.5, 0.2) * uCaveTorch[i].w * win * win / (d2 + 1.2)
+              * (0.25 + 0.75 * max(dot(normal, lv), 0.0));
+          }
+        }
+        #endif`);
+  }
   shader.uniforms.uCanopyMap = shared.uSunMap;
   shader.uniforms.uCanopyRect = shared.uCanopyRect;
   shader.uniforms.uSun = shared.uSun;
   shader.uniforms.uTime = shared.uTime;
+  shader.uniforms.uKeyOff = shared.uKeyOff;
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
       #define SUN_VIS
+      uniform vec2 uKeyOff; // to the crown layer along the ray toward the sun (or the moon)
       uniform sampler2D uCanopyMap;
       uniform vec4 uCanopyRect;
       uniform float uSun;
@@ -537,7 +575,7 @@ export function patchSunlight(shader) {
       float sunVisibility(vec3 wp) {
         // two samples along the ray, through the lower and upper crowns; a low
         // sun's path crosses several crowns, so the (soft, baked) density is scaled up
-        vec2 o = vec2(${SUN_OFFSET.x.toFixed(3)}, ${SUN_OFFSET.z.toFixed(3)});
+        vec2 o = uKeyOff;
         vec2 q = wp.xz + o * 0.65;
         float c1 = texture2D(uCanopyMap, (q - uCanopyRect.xy) / uCanopyRect.zw).r;
         float c2 = texture2D(uCanopyMap, (wp.xz + o * 1.5 - uCanopyRect.xy) / uCanopyRect.zw).r;

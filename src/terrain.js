@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
-import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED } from './config.js';
+import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED, CAVE } from './config.js';
 import { loadTick } from './loadprogress.js';
 import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter, patchPuddles } from './materials.js';
-import { SUN_COLOR } from './atmosphere.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 import { buildStreams } from './streams.js';
 import { patchRocky } from './rockyslope.js';
@@ -145,6 +144,8 @@ export function baseHeight(x, z) {
     h += rimH * smoothstep(-260, 60, s);
   } else h += rimH;
 
+  h += hillock(x, z);
+
   // lake basin
   const dl = Math.hypot((x - LAKE.x) * 1.0, (z - LAKE.z) * 1.4);
   const wobble = nDetail(x * 0.01, z * 0.01) * 25;
@@ -165,6 +166,21 @@ export function baseHeight(x, z) {
     h = h * (1 - w) + level * w;
   }
   return h;
+}
+
+/**
+ * The hillock the cave runs into (config.js CAVE): steep at its south nose, where the crag around
+ * the mouth stands (cave.js), and rounded on top, running back ~60 m along the tunnel.
+ */
+function hillock(x, z) {
+  const ox = x - CAVE.x;
+  const oz = z - CAVE.z;
+  const u = ox * CAVE.dir[0] + oz * CAVE.dir[1]; // in along the tunnel
+  if (u < -12 || u > 75) return 0;
+  const v = -ox * CAVE.dir[1] + oz * CAVE.dir[0]; // across it
+  const along = u <= 0 ? 0 : u < 12 ? smoothstep(0, 9, u) : 1 - smoothstep(12, 70, u);
+  const wide = 11 + 0.5 * Math.abs(u) + 4 * nDetail(x * 0.03 + 11, z * 0.03);
+  return 11 * along * Math.exp(-(v / wide) * (v / wide)) * (1 + 0.12 * nDetail(x * 0.06 - 4, z * 0.06 + 9));
 }
 
 /** Sea level: the ocean along the south edge (the lake sits higher, at WATER_LEVEL). */
@@ -581,6 +597,8 @@ export function buildTerrain() {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, cutUniforms);
     patchSunlight(shader);
+    shader.uniforms.uCaveO = shared.uCaveO;
+    shader.uniforms.uCaveDir = shared.uCaveDir;
     shader.uniforms.uWet = shared.uWet;
     shader.uniforms.uPuddle = shared.uPuddle;
     shader.uniforms.uGrassMap = shared.uGrassMap;
@@ -598,6 +616,8 @@ export function buildTerrain() {
         float puddle;
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
+        uniform vec4 uCaveO;
+        uniform vec2 uCaveDir;
         uniform sampler2D uGrassMap;
         uniform vec2 uGrassTint;
         uniform vec4 uGrassGrid;
@@ -613,6 +633,14 @@ export function buildTerrain() {
         vec2 cutUv = (vGroundPos.xz - uCutRect.xy) / uCutRect.zw;
         if (all(greaterThan(cutUv, vec2(0.0))) && all(lessThan(cutUv, vec2(1.0)))
             && texture2D(uCutMask, cutUv).r > 0.5) discard;
+        {
+          // inside the cave's first metres (cave.js) the ground would show through the tunnel:
+          // its tube and the crag round the mouth cover everything this cuts away
+          vec2 co = vGroundPos.xz - uCaveO.xz;
+          float cs = dot(co, uCaveDir);
+          if (cs > 0.0 && cs < 14.0 && abs(dot(co, vec2(-uCaveDir.y, uCaveDir.x))) < 3.0
+              && vGroundPos.y < uCaveO.y + 3.6 && vGroundPos.y > uCaveO.y - 0.1 * cs - 1.0) discard;
+        }
         float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
         diffuseColor.rgb *= 0.78 + gn * 0.44;
         {
@@ -779,10 +807,15 @@ export function buildWater() {
           refl = mix(shore, refl, smoothstep(treeTop - 0.01, treeTop + 0.01, e));
           float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(normal, wV), 0.0, 1.0), 5.0);
           reflectedLight.indirectSpecular = refl * fres * 1.15;
+          // the moon on a still night: its reflection, wobbling on the ripples
+          if (uGlNight > 0.5) {
+            float mc = max(dot(rW, uGlDir), 0.0);
+            reflectedLight.indirectSpecular += uGlColor * (pow(mc, 2500.0) * 8.0 + pow(mc, 80.0) * 0.4) * (e > treeTop ? 1.0 : 0.0);
+          }
           reflectedLight.indirectSpecular += fogColor * shoreLine * 0.15;
           // sun glitter (calm open water: a moderate wave-slope spread; rain roughens it)
           vec3 glP = vec3(vWaterXZ.x, vWaterY, vWaterXZ.y);
-          reflectedLight.indirectSpecular += ${'vec3(' + [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b].map((v) => v.toFixed(3)).join(', ') + ')'} * glitter(glP, normalize(cameraPosition - glP), 0.16 + 0.06 * uWet);
+          reflectedLight.indirectSpecular += uGlColor * glitter(glP, normalize(cameraPosition - glP), 0.16 + 0.06 * uWet);
         }
         #endif`);
   };

@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { WORLD_SIZE } from './config.js';
 import { coastZ, rawGroundAt, SEA_LEVEL } from './terrain.js';
 import { shared, GLITTER_GLSL, patchGlitter } from './materials.js';
-import { SUN_COLOR } from './atmosphere.js';
 import { waveNormals, foamTexture } from './streamwater.js';
 import { loadTick } from './loadprogress.js';
 
@@ -221,6 +220,7 @@ export async function buildOcean(skyUniforms, { lowPower, progress = [0, 1] }) {
     uOHorizon: skyUniforms.uHorizon,
     uOZenith: skyUniforms.uZenith,
     uOSun: shared.uSun,
+    uONight: shared.uNight,
     uOWet: shared.uWet,
   };
 
@@ -272,6 +272,7 @@ export async function buildOcean(skyUniforms, { lowPower, progress = [0, 1] }) {
         uniform vec3 uOHorizon;
         uniform vec3 uOZenith;
         uniform float uOSun;
+        uniform float uONight;
         uniform float uOWet;
         varying vec3 vOPos;
         varying vec2 vOT;
@@ -287,6 +288,8 @@ export async function buildOcean(skyUniforms, { lowPower, progress = [0, 1] }) {
           vec3 blue = mix(vec3(0.2, 0.28, 0.38), vec3(0.035, 0.1, 0.27), pow(smoothstep(0.0, 0.85, up), 0.6));
           blue = mix(blue, uOHorizon * 1.05, 1.0 - smoothstep(0.0, 0.16, up));
           vec3 c = mix(over, blue, uOSun);
+          // a clear night: the sky's deep blue (the moon's glitter path is the key light's glitter)
+          if (uONight > 0.5) c = mix(uOHorizon * 1.1, vec3(0.006, 0.012, 0.03), smoothstep(0.0, 0.6, up));
           return e < 0.0 ? uOHorizon * 0.55 : c;
         }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
@@ -373,8 +376,13 @@ export async function buildOcean(skyUniforms, { lowPower, progress = [0, 1] }) {
           float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(nW, wV), 0.0, 1.0), 5.0);
           oF = fres * (1.0 - oFoam) * (oFilm > 0.0 ? oFilm * 0.85 : 1.0);
           reflectedLight.indirectSpecular = oSky(r.y);
+          // at night the moon itself and its aureole, broken up by the waves into a path of light
+          if (uONight > 0.5) {
+            float mc = max(dot(r, uGlDir), 0.0);
+            reflectedLight.indirectSpecular += uGlColor * (pow(mc, 900.0) * 6.0 + pow(mc, 60.0) * 0.5 + pow(mc, 8.0) * 0.06) / max(fres, 0.05) * (1.0 - oFoam);
+          }
           // sun glitter on the open water (not the foam)
-          reflectedLight.indirectSpecular += ${'vec3(' + [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b].map((v) => v.toFixed(3)).join(', ') + ')'}
+          reflectedLight.indirectSpecular += uGlColor
             * glitter(oP, wV, 0.2 + 0.08 * uOWet) * (1.0 - oFoam) / max(fres, 0.05);
         }`)
       .replace('#include <opaque_fragment>', `

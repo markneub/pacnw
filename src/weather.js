@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { snowlineAt } from './terrain.js';
-import { createSky, SUN_DIR, SUN_COLOR } from './atmosphere.js';
+import { createSky, SUN_DIR, SUN_COLOR, MOON_DIR, MOON_COLOR } from './atmosphere.js';
 import { shared } from './materials.js';
 
 const smooth = THREE.MathUtils.smoothstep;
@@ -17,6 +17,7 @@ function shelter(mat) {
   mat.uniforms.uShelterInv = shared.uShelterInv;
   mat.uniforms.uShelter = shared.uShelter;
   mat.uniforms.uShelterPitch = shared.uShelterPitch;
+  mat.uniforms.uCaveIn = shared.uCaveIn; // (and none in the cave)
 }
 
 function createRain(count = 14000) {
@@ -62,6 +63,7 @@ function createRain(count = 14000) {
       uniform mat4 uShelterInv;
       uniform vec4 uShelter;
       uniform float uShelterPitch;
+      uniform float uCaveIn;
       bool sheltered(vec3 p) {
         vec3 l = (uShelterInv * vec4(p, 1.0)).xyz;
         return abs(l.x) < uShelter.x && l.z > uShelter.y && l.z < uShelter.z && l.y > -2.0 && l.y < uShelter.w - uShelterPitch * abs(l.x);
@@ -83,7 +85,7 @@ function createRain(count = 14000) {
         float above = p.y - (uCam.y - 1.7); // ~height above the ground under the camera
         float shelter = canopy * smoothstep(18.0, 8.0, above);
         if (fract(position.y * 71.3 + position.x * 7.9) < 0.88 * shelter) vAlpha = 0.0;
-        if (sheltered(p)) vAlpha = 0.0;
+        if (sheltered(p) || uCaveIn > 0.5) vAlpha = 0.0;
         #include <fog_vertex>
       }
     `,
@@ -140,6 +142,7 @@ function createSnow(count = 14000) {
       uniform mat4 uShelterInv;
       uniform vec4 uShelter;
       uniform float uShelterPitch;
+      uniform float uCaveIn;
       bool sheltered(vec3 p) {
         vec3 l = (uShelterInv * vec4(p, 1.0)).xyz;
         return abs(l.x) < uShelter.x && l.z > uShelter.y && l.z < uShelter.z && l.y > -2.0 && l.y < uShelter.w - uShelterPitch * abs(l.x);
@@ -157,7 +160,7 @@ function createSnow(count = 14000) {
         gl_PointSize = (0.08 + seed * 0.1) * uPixelRatio * (500.0 / -mvPosition.z);
         float d = length(p - uCam);
         vAlpha = 1.0 - smoothstep(16.0, 29.0, d);
-        if (sheltered(p)) {
+        if (sheltered(p) || uCaveIn > 0.5) {
           vAlpha = 0.0;
           gl_PointSize = 0.0;
         }
@@ -197,7 +200,6 @@ function createMotes(count = 900) {
   for (let i = 0; i < offsets.length; i++) offsets[i] = Math.random();
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(offsets, 3));
-  const off = SUN_DIR.clone().multiplyScalar(1 / SUN_DIR.y); // per metre of height, toward the sun
   const mat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -210,8 +212,10 @@ function createMotes(count = 900) {
       uPixelRatio: { value: 1 },
       uCanopyMap: shared.uSunMap,
       uCanopyRect: shared.uCanopyRect,
+      uKeyDir: shared.uKeyDir,
     },
     vertexShader: /* glsl */ `
+      uniform vec3 uKeyDir; // toward the sun (or the moon)
       uniform float uTime;
       uniform vec3 uCam;
       uniform vec3 uBox;
@@ -232,12 +236,12 @@ function createMotes(count = 900) {
         gl_Position = projectionMatrix * mvPosition;
         gl_PointSize = max(1.5, (0.03 + seed * 0.03) * uPixelRatio * (700.0 / -mvPosition.z));
         // in sunlight? (the canopy along the ray toward the sun, as for the ground)
-        vec2 q = p.xz + vec2(${off.x.toFixed(3)}, ${off.z.toFixed(3)}) * 10.0;
+        vec2 q = p.xz + uKeyDir.xz / uKeyDir.y * 10.0;
         float c = texture2D(uCanopyMap, (q - uCanopyRect.xy) / uCanopyRect.zw).r;
         float lit = 1.0 - smoothstep(0.12, 0.38, c);
         // forward scattering: bright toward the sun, faint elsewhere
         vec3 toP = normalize(p - uCam);
-        float phase = 0.12 + 1.6 * pow(max(dot(toP, ${'vec3(' + [SUN_DIR.x, SUN_DIR.y, SUN_DIR.z].map((v) => v.toFixed(4)).join(', ') + ')'}), 0.0), 6.0);
+        float phase = 0.12 + 1.6 * pow(max(dot(toP, uKeyDir), 0.0), 6.0);
         float d = length(p - uCam);
         float fade = smoothstep(0.8, 2.0, d) * (1.0 - smoothstep(4.5, 7.5, d));
         vAlpha = lit * phase * fade * (0.5 + 0.5 * seed);
@@ -273,6 +277,19 @@ const LOW = {
 const OVERCAST_DIR = new THREE.Vector3(-0.4, 1, 0.3).normalize(); // the diffuse "sun" behind the cloud deck
 const SUN_FOG = new THREE.Color(0xa7b8c6); // sunlit haze: the pale blue-grey of a blue sky's aerial perspective
 const SUN_HEMI = new THREE.Color(0xb4c8de); // blue sky between the clouds
+// A clear night under the full moon (cave.js swaps day and night): blue-black haze, a cool sky
+// light, and the moon as the key light (dappled through the crowns, beams in the mist)
+const NIGHT = {
+  fog: new THREE.Color(0x121c2a),
+  fogHigh: new THREE.Color(0x1a2534),
+  hemiSky: new THREE.Color(0x30466e),
+  hemiGround: new THREE.Color(0x0a0e0b),
+  hemiIntensity: 0.55,
+  moonIntensity: 1.25,
+  envIntensity: 0.35,
+};
+const KEY_DAY = { dir: SUN_DIR, color: SUN_COLOR.clone() };
+const KEY_NIGHT = { dir: MOON_DIR, color: MOON_COLOR.clone().multiplyScalar(0.6) };
 const HIGH = {
   fog: new THREE.Color(0xc4ccd4),
   density: 0.0145,
@@ -312,6 +329,26 @@ export class Weather {
     this.override = null; // 'rain' | 'snow' | 'clear' | null (automatic by altitude)
     this.sunAmount = 0; // 0 overcast .. 1 sun break (shared.uSun)
     this.sunCycle = true; // ?weather= or ?off=sun pin it
+    this.night = false; // a clear, moonlit night (setNight)
+    this.envs = null; // { day, night } environment maps (main.js)
+    // set by main.js from the cave: how far in (0 outside .. 1 deep), the nearest torch (m), the white light at the end (0..1)
+    this.cave = { depth: 0, torch: 100, white: 0 };
+  }
+
+  /** Day or night, at once (the cave swaps them while the screen is white). */
+  setNight(on) {
+    this.night = on;
+    this.started = false; // snap the weather to its new state on the next update
+    this.started2 = false;
+    this.wetStarted = false;
+    this.puddleStarted = false;
+    const key = on ? KEY_NIGHT : KEY_DAY;
+    shared.uNight.value = on ? 1 : 0;
+    shared.uKeyDir.value.copy(key.dir);
+    shared.uKeyColor.value.copy(key.color);
+    shared.uKeyOff.value.set(key.dir.x * 12 / key.dir.y, key.dir.z * 12 / key.dir.y);
+    if (this.envs && this.scene.environment) this.scene.environment = on ? this.envs.night : this.envs.day;
+    this.scene.environmentIntensity = on ? NIGHT.envIntensity : 0.55;
   }
 
   cycleOverride() {
@@ -334,6 +371,7 @@ export class Weather {
     if (this.override === 'rain') { rain = 1; snow = 0; }
     if (this.override === 'snow') { rain = 0; snow = 1; }
     if (this.override === 'clear') { rain = 0; snow = 0; }
+    if (this.night) { sunT = 1; rain = 0; snow = 0; } // always a clear night
 
     // ease toward targets so overrides fade in/out (snap on the first frame)
     const k = this.started ? 1 - Math.exp(-dt * 1.5) : 1;
@@ -356,8 +394,8 @@ export class Weather {
       const u = this.motes.material.uniforms;
       u.uTime.value = time;
       u.uCam.value.copy(camera.position);
-      u.uIntensity.value = sun * (1 - snowT);
-      this.motes.visible = u.uIntensity.value > 0.01 && !this.particlesOff && !this.motesOff;
+      u.uIntensity.value = sun * (1 - snowT) * (this.night ? 0.3 : 1);
+      this.motes.visible = u.uIntensity.value > 0.01 && !this.particlesOff && !this.motesOff && shared.uCaveIn.value < 0.5;
     }
 
     // Atmosphere follows altitude; sun breaks thin the fog (but leave a haze for
@@ -366,7 +404,8 @@ export class Weather {
     fog.color.copy(LOW.fog).lerp(HIGH.fog, snowT).lerp(SUN_FOG, sun * (1 - 0.6 * snowT));
     // (sun breaks clear the high country more than the valley: clear mountain air, peaks in view)
     const density = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT) * THREE.MathUtils.lerp(1, 0.45 - 0.3 * snowT, sun); // clear air in sun: at 0.62 the far lake shore whited out looking into the sun; up high, peaks 300 m off were ghosts
-    fog.near = Math.round(sun * 255) + Math.min(density, 0.999); // see installHeightFog
+    if (this.night) fog.color.copy(NIGHT.fog).lerp(NIGHT.fogHigh, snowT);
+    fog.near = Math.round(sun * 255) + (this.night ? 256 : 0) + Math.min(density, 0.999); // see installHeightFog
     // the mist the sunbeams show in (post.js) doesn't clear with the haze: clearing it with the
     // view (0.62 → 0.45) left the shafts too faint to notice
     fog.mist = THREE.MathUtils.lerp(LOW.density, HIGH.density, snowT) * MIST_GAIN;
@@ -380,10 +419,20 @@ export class Weather {
     // overcast light comes from high up (soft, no low glints on wet ground);
     // the sun swings down to its low WNW position as a break arrives
     this.sun.position.copy(OVERCAST_DIR).lerp(SUN_DIR, sun).normalize().multiplyScalar(100);
+    if (this.night) {
+      this.hemi.color.copy(NIGHT.hemiSky);
+      this.hemi.groundColor.copy(NIGHT.hemiGround);
+      this.hemi.intensity = NIGHT.hemiIntensity;
+      this.sun.intensity = NIGHT.moonIntensity;
+      this.sun.color.copy(MOON_COLOR);
+      this.sun.position.copy(MOON_DIR).multiplyScalar(100);
+      this.renderer.toneMappingExposure = this.baseExposure;
+    }
 
     this.sky.uniforms.uHorizon.value.copy(fog.color);
     this.sky.uniforms.uZenith.value.copy(LOW.zenith).lerp(HIGH.zenith, snowT);
     this.sky.uniforms.uSun.value = sun;
+    this.sky.uniforms.uNight.value = this.night ? 1 : 0;
     this.sky.uniforms.uTime.value = time;
     fog.far = time; // drifts the mist banks
 
@@ -395,14 +444,14 @@ export class Weather {
     shared.uRain.value = this.rainAmount;
     // puddles fill over ~40 s of rain and dry over a few minutes (the first frame starts settled);
     // it rains in the valley whenever there's no sun break, wherever the player is
-    const fill = this.override === 'clear' || this.override === 'snow' ? 0 : this.override === 'rain' ? 1 : 1 - sun;
+    const fill = this.night || this.override === 'clear' || this.override === 'snow' ? 0 : this.override === 'rain' ? 1 : 1 - sun;
     const pk = fill > shared.uPuddle.value ? 1 / 40 : 1 / 200;
     shared.uPuddle.value = this.puddleStarted ? shared.uPuddle.value + (fill - shared.uPuddle.value) * Math.min(1, dt * pk) : fill;
     this.puddleStarted = true;
 
     shared.uWind.value = 0.7 + this.snowAmount * 0.8 + Math.sin(time * 0.13) * 0.3;
 
-    if (this.audio) this.audio.update(this.rainAmount, this.snowAmount, time, sun);
+    if (this.audio) this.audio.update(this.rainAmount, this.snowAmount, time, sun, this.night, this.cave, snowT);
   }
 
   enableAudio() {
@@ -474,22 +523,162 @@ class Ambience {
     this.birdBus.connect(echo).connect(damp).connect(fb).connect(echo);
     damp.connect(ctx.destination);
     this.nextBird = 2 + Math.random() * 4;
+
+    // outdoors (rain, wind, birds, crickets) fades as you go into the cave
+    this.outdoor = ctx.createGain();
+    this.outdoor.connect(ctx.destination);
+    this.rainGain.disconnect();
+    this.rainGain.connect(this.outdoor);
+    this.windGain.disconnect();
+    this.windGain.connect(this.outdoor);
+    this.birdBus.disconnect();
+    this.birdBus.connect(this.outdoor);
+    this.birdBus.connect(echo);
+
+    // the cave: a long, dark reverb (synthesised impulse), a low room tone, drips, the torches' crackle
+    const ir = ctx.createBuffer(2, ctx.sampleRate * 2.6, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / ctx.sampleRate;
+        d[i] = (Math.random() * 2 - 1) * Math.exp(-t / 0.55) * (t < 0.012 ? t / 0.012 : 1);
+      }
+    }
+    this.caveVerb = ctx.createConvolver();
+    this.caveVerb.buffer = ir;
+    const verbLp = ctx.createBiquadFilter();
+    verbLp.type = 'lowpass';
+    verbLp.frequency.value = 3200;
+    this.caveVerb.connect(verbLp).connect(ctx.destination);
+    this.caveBus = ctx.createGain(); // dry + into the reverb
+    this.caveBus.connect(ctx.destination);
+    this.caveBus.connect(this.caveVerb);
+    this.roomLp = ctx.createBiquadFilter();
+    this.roomLp.type = 'lowpass';
+    this.roomLp.frequency.value = 160;
+    this.roomGain = ctx.createGain();
+    this.roomGain.gain.value = 0;
+    src(0.7).connect(this.roomLp).connect(this.roomGain).connect(ctx.destination);
+    this.crackleBus = ctx.createGain();
+    this.crackleBus.gain.value = 0;
+    this.crackleBus.connect(this.caveBus);
+    this.noiseBuf = buf;
+    this.nextDrip = 1;
+    this.nextCrackle = 0;
+    // the light at the end: an airy swell that rises as the screen whitens
+    this.swellBp = ctx.createBiquadFilter();
+    this.swellBp.type = 'bandpass';
+    this.swellBp.Q.value = 0.8;
+    this.swellGain = ctx.createGain();
+    this.swellGain.gain.value = 0;
+    src(1).connect(this.swellBp).connect(this.swellGain).connect(this.caveVerb);
+    this.swellGain.connect(ctx.destination);
+    // crickets on a clear night: a few, each chirping steadily at its own pitch and pace
+    this.crickets = [0, 1, 2].map(() => ({
+      f: 3600 + Math.random() * 1400, period: 0.42 + Math.random() * 0.3, next: 0,
+      pan: Math.random() * 1.6 - 0.8, vol: 0.004 + Math.random() * 0.006,
+    }));
+  }
+
+  /** A short burst of noise (torch crackle) at t. */
+  burst(t, dur, freq, vol, out) {
+    const ctx = this.ctx;
+    const s = ctx.createBufferSource();
+    s.buffer = this.noiseBuf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = freq;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(bp).connect(g).connect(out);
+    s.start(t, Math.random() * 3, dur + 0.02);
+  }
+
+  /** A water drop into a pool somewhere in the dark: a quick falling pitch, a smaller ringing one. */
+  drip(t) {
+    const ctx = this.ctx;
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = Math.random() * 1.4 - 0.7;
+    pan.connect(this.caveBus);
+    const f = 900 + Math.random() * 1500;
+    for (const [mul, vol, dur] of [[1, 0.05, 0.05], [1.9, 0.015, 0.03]]) {
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(f * mul * 0.7, t);
+      o.frequency.exponentialRampToValueAtTime(f * mul * 1.35, t + dur * 0.5);
+      const g = ctx.createGain();
+      const v = vol * (0.3 + Math.random() * 0.7);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(v, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(pan);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
+  }
+
+  /** One cricket chirp: three quick pulses of a pure tone. */
+  chirp(c, t) {
+    const ctx = this.ctx;
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = c.pan;
+    pan.connect(this.outdoor);
+    for (let k = 0; k < 3; k++) {
+      const o = ctx.createOscillator();
+      o.frequency.value = c.f * (1 + (Math.random() - 0.5) * 0.004);
+      const g = ctx.createGain();
+      const t0 = t + k * 0.028;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(c.vol, t0 + 0.004);
+      g.gain.linearRampToValueAtTime(0, t0 + 0.016);
+      o.connect(g).connect(pan);
+      o.start(t0);
+      o.stop(t0 + 0.03);
+    }
   }
 
   resume() {
     if (this.ctx.state !== 'running') this.ctx.resume();
   }
 
-  update(rain, snow, t, sun = 0) {
+  update(rain, snow, t, sun = 0, night = false, cave = { depth: 0, torch: 100, white: 0 }, high = 0) {
     const ctx = this.ctx;
     const now = ctx.currentTime;
+    const deep = cave.depth;
+    this.outdoor.gain.setTargetAtTime(1 - 0.92 * deep, now, 0.4);
+    this.roomGain.gain.setTargetAtTime(0.05 * deep, now, 0.5);
+    this.crackleBus.gain.setTargetAtTime(Math.min(1, 1.6 / Math.max(cave.torch, 0.5)) * (deep > 0 || cave.torch < 8 ? 1 : 0), now, 0.2);
+    this.swellGain.gain.setTargetAtTime(cave.white * cave.white * 0.5, now, 0.1);
+    this.swellBp.frequency.setTargetAtTime(300 + 2500 * cave.white, now, 0.2);
+    if (ctx.state === 'running') {
+      if (deep > 0.3 && now >= this.nextDrip) {
+        this.drip(now + 0.02);
+        this.nextDrip = now + 0.5 + Math.random() * 2.5;
+      }
+      // torches crackle and spit: short bursts, a few a second
+      if (cave.torch < 10 && now >= this.nextCrackle) {
+        const big = Math.random() < 0.15;
+        this.burst(now + 0.01, big ? 0.05 : 0.012 + Math.random() * 0.02, 1500 + Math.random() * 4000, big ? 0.05 : 0.025, this.crackleBus);
+        this.nextCrackle = now + 0.03 + Math.random() * (big ? 0.4 : 0.18);
+      }
+      if (night && high < 0.5 && deep < 0.9) {
+        for (const c of this.crickets) {
+          if (c.next < now) c.next = now + Math.random() * c.period;
+          if (c.next < now + 0.1) {
+            this.chirp(c, c.next);
+            c.next += c.period * (0.95 + Math.random() * 0.1);
+          }
+        }
+      }
+    }
     const gust = Math.max(0, Math.sin(t * 0.37) * Math.sin(t * 0.11 + 1.3)); // calm about half the time
     this.rainGain.gain.setTargetAtTime(rain * 0.4, now, 0.3);
     this.windGain.gain.setTargetAtTime(0.008 + (0.05 + snow * 0.25) * gust * gust, now, 0.8);
     this.windFilter.frequency.setTargetAtTime(900 + gust * 1200 + snow * 300, now, 0.8);
 
     // birdsong: often in sun breaks, now and then under cloud, never in rain or up in the snow
-    const birdy = (1 - rain) * (1 - snow) * (0.25 + 0.75 * sun);
+    const birdy = night ? 0 : (1 - rain) * (1 - snow) * (0.25 + 0.75 * sun);
     if (now >= this.nextBird && ctx.state === 'running') {
       if (birdy > 0.05 && Math.random() < birdy) this.sing(now);
       this.nextBird = now + 3 + Math.random() * 9;

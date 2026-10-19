@@ -1,0 +1,29 @@
+{
+  "source": "Poly Haven (CC0)",
+  "layers": [
+    {
+      "name": "wall",
+      "asset": "dark_rock_02",
+      "tile": 3.5,
+      "strength": 1.0,
+      "avg": [
+        0.04311,
+        0.03424,
+        0.02546
+      ],
+      "url": "https://polyhaven.com/a/dark_rock_02"
+    },
+    {
+      "name": "floor",
+      "asset": "forest_ground_04",
+      "tile": 2.5,
+      "strength": 1.0,
+      "avg": [
+        0.14544,
+        0.1023,
+        0.0579
+      ],
+      "url": "https://polyhaven.com/a/forest_ground_04"
+    }
+  ]
+}
