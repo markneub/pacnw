@@ -662,10 +662,26 @@ function buildCorridorMesh(points, distanceTo) {
   const tmpSnow = new THREE.Color();
   const e = 1;
 
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const prev = points[Math.max(0, i - 1)];
-    const next = points[Math.min(points.length - 1, i + 1)];
+  // The strip runs on past both ends of the trail: the bench cut rounds each end off out to
+  // BANK_OUTER, and a strip that stopped at the last point left the cut's end wall uncovered (with
+  // the terrain above it, a slot to see through: the user, at the trailhead). Opaque until the cut
+  // has blended back into the ground, then faded like the sides.
+  const ext = [];
+  for (let k = 1; k * STEP <= CORRIDOR_HALF + 0.2; k++) ext.push(k * STEP);
+  const along = (s) => 1 - THREE.MathUtils.smoothstep(s, CUTOUT_HALF + 0.3, CORRIDOR_HALF);
+  const beyond = (a, b, s) => b.clone().sub(a).normalize().multiplyScalar(s).add(b);
+  const n = points.length;
+  const rowPts = [
+    ...ext.slice().reverse().map((s) => ({ p: beyond(points[1], points[0], s), fade: along(s) })),
+    ...points.map((p) => ({ p, fade: 1 })),
+    ...ext.map((s) => ({ p: beyond(points[n - 2], points[n - 1], s), fade: along(s) })),
+  ];
+  const pts = rowPts.map((r) => r.p);
+
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const prev = pts[Math.max(0, i - 1)];
+    const next = pts[Math.min(pts.length - 1, i + 1)];
     const dir = next.clone().sub(prev).normalize();
     const nx = -dir.y;
     const nz = dir.x;
@@ -714,10 +730,10 @@ function buildCorridorMesh(points, distanceTo) {
       layers.push(lw[0] * (1 - dirtW), lw[1] * (1 - dirtW), lw[2] * (1 - dirtW), lw[3] * (1 - dirtW) + dirtW);
 
       // fade the strip's outer edge into the terrain beneath
-      const alpha = 1 - THREE.MathUtils.smoothstep(Math.abs(u), CUTOUT_HALF + 0.3, CORRIDOR_HALF);
+      const alpha = Math.min(1 - THREE.MathUtils.smoothstep(Math.abs(u), CUTOUT_HALF + 0.3, CORRIDOR_HALF), rowPts[i].fade);
       colors.push(col.r, col.g, col.b, alpha);
       treadAttr.push(t * (1 - 0.7 * snow) * (1 - sandy)); // (less dark grit on trodden snow, none on sand)
-      printAttr.push(i * STEP, u, sandy * (1 - THREE.MathUtils.smoothstep(marshAt(x, z), 0.05, 0.2)));
+      printAttr.push((i - ext.length) * STEP, u, sandy * (1 - THREE.MathUtils.smoothstep(marshAt(x, z), 0.05, 0.2)));
     }
     if (i > 0) {
       const r0 = (i - 1) * (across + 1);
@@ -862,7 +878,7 @@ function buildCorridorMesh(points, distanceTo) {
   // Split into ~150 m segments so off-screen stretches are frustum-culled.
   // Normals come from the full strip, so segment joins don't show.
   const rowLen = across + 1;
-  const rows = points.length;
+  const rows = pts.length;
   const SEG = 100; // rows per segment (1.5 m each)
   const group = new THREE.Group();
   group.name = 'trail';

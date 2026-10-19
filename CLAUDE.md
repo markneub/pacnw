@@ -348,6 +348,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   opaque interior (`mat`, depth-writing) and the faded fringe (`fringeMat`: transparent, `depthWrite: false`), because a
   fringe drawn first hid the overlapping switchback leg beneath it; (3) a 3 m **skirt** hangs from the opaque boundary
   (|u| = 4.8 m) and across both ends, since around switchbacks the faded edge sits up to ~2 m off the terrain.
+  (4) the strip runs **~6 m past both ends** of the trail (opaque to 4.5 m, faded by 6 m): the bench cut rounds each end
+  off radially out to BANK_OUTER, and a strip that stopped at the first point left the cut's end wall uncovered, a slot
+  under the terrain's lip to see the forest through (the user, at the trailhead). holecheck looks down, so it missed it.
   **`tools/holecheck.mjs`** (magenta sky, fog off, looks down along the whole trail and over a 60 m map grid; `trail` for the
   trail only, ~5 min in SwiftShader; exits 1 and lists views) must report no holes after any change to the trail, terrain
   cutout or ground meshes. `rawGroundAt` = terrain mesh height, `groundAt` = with the cut.
