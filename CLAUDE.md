@@ -97,6 +97,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   into the hollow tube); now a ragged bark-backed rim (mostly 0.1–0.45 m splinters, a quarter 0.5–0.9 m), a torn face of
   `BrokenWood` (0.6, 0.52, 0.42; snag photo) and a pit of punky `RotWood` (0.5, 0.29, 0.17; soil photo) hollowed back into
   the heart. End faces get little light under the canopy: darker colours read as black.
+  **Still see-through (the user, on a phone, from the end):** the broken end's twisted splinter/torn-wood faces partly
+  faced into the trunk and were culled, so you looked into the hollow tube and saw the ground and grass inside it (found
+  by tinting Bark/BrokenWood/RotWood flat colours: the trunk was intact, the end had windows). Log materials (`swapXY`,
+  every asset starting with 'log') are now **DoubleSide**, and BrokenWood/RotWood take moss 0.1 (the pit's up-facing
+  faces read as a green wedge).
   Now `broken_end(b, M, loop, x, r, centre, d, er)` (lengths in units of r, faces oriented by `_face_toward`, which
   reverses a face whose winding points away from a hint direction) also gives both ends of the ordinary `log` (own rng
   `seed + 151`): its flat `LogEnd` discs read as dark faceted blobs. `LogEnd` is now only the root wad's trunk cap.

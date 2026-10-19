@@ -193,7 +193,10 @@ function convertMaterial(src, assetName, lod, cache) {
     // bark is smooth so trunks read as round; scans have real smooth surfaces;
     // foliage cards carry their own (outward-pointing) normals
     flatShading: !src.name.endsWith('Bark') && !src.name.endsWith('Soil') && !scan && !cards,
-    side: (kind === 'ferns' && !pebble) || cards ? THREE.DoubleSide : THREE.FrontSide,
+    // logs: their ragged broken ends twist splinters and torn wood every which way, and a face
+    // turned inward got culled, opening a window into the hollow trunk (the user saw the ground
+    // and grass inside nurse logs), so log materials draw both sides
+    side: (kind === 'ferns' && !pebble) || cards || swapXY ? THREE.DoubleSide : THREE.FrontSide,
   });
   if (cards) {
     mat.map = src.map; // the needle spray (RGBA, embedded in the GLB)
@@ -207,7 +210,7 @@ function convertMaterial(src, assetName, lod, cache) {
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns' && !pebble) addWindSway(mat, 2.5, undefined, 'fade');
   // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
-  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0, bleach: /Bark|Wood/.test(src.name) });
+  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : /BrokenWood|RotWood/.test(src.name) ? 0.1 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0, bleach: /Bark|Wood/.test(src.name) });
   if (cards) patchCards(mat);
   // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
   if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);

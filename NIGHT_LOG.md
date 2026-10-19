@@ -362,3 +362,9 @@ and shows its footprint texture more.
 Where the trail runs over the sand it's now a line of footprints, a few people's worth, instead of a scuffed strip.
 The lower beach is firm, smooth, tan wave-packed sand (the pocked, trampled look stays higher up), and in sunshine a
 light sea haze hangs low over the beach, so it fades off into the distance like the user's photo.
+
+### 49. Nurse log ends really solid now (found by the user)
+Looking at a fallen log from its broken end you could still see into it, and the ground and grass inside. The trunk was
+fine: some of the splintered faces of the end were facing inward and got dropped by the renderer, leaving windows into
+the hollow log. Logs now draw both sides of every face, so the end is solid from any angle, and the rotten heart no
+longer takes on moss green.
