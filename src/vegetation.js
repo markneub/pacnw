@@ -119,7 +119,7 @@ function patchCards(mat) {
   const prevKey = mat.customProgramCacheKey;
   mat.onBeforeCompile = (shader, renderer) => {
     prev?.call(mat, shader, renderer);
-    shader.fragmentShader = shader.fragmentShader
+    shader.fragmentShader = '#define CARD_SKY 1.6\n' + shader.fragmentShader
       .replace('#include <alphatest_fragment>', `
         #ifdef USE_MAP
         {
@@ -144,10 +144,12 @@ function patchCards(mat) {
         // the side of a spray facing away from its (outward, up) normal is the
         // underside: seen from below, crowns should be darker, not sky-lit
         // (snow from below: you'd see the dark branch under it, not white)
+        float cardBack = 0.0;
         {
           vec3 cardV = normalize(vViewPosition);
           float cardD = dot(normal, cardV);
-          diffuseColor.rgb *= mix(${snow ? '0.22' : '0.6'}, 1.0, smoothstep(-0.35, 0.2, cardD));
+          cardBack = smoothstep(0.0, -0.3, cardD);
+          diffuseColor.rgb *= mix(${snow ? '0.22' : '0.75'}, 1.0, smoothstep(-0.35, 0.2, cardD));
           // seen from behind, mirror the normal toward the viewer (keeping its up/out
           // tilt): with N.V < 0 the specular term blows up and bleaches the spray
           if (cardD < 0.0) normal = normalize(normal - 2.0 * cardD * cardV);
@@ -157,6 +159,16 @@ function patchCards(mat) {
         reflectedLight.directSpecular *= 0.15;
         // wet leaves pick up a soft sheen of the sky
         reflectedLight.indirectSpecular *= 0.35 + 0.45 * uWet;
+        #if ${snow ? 0 : 1}
+        #if NUM_HEMI_LIGHTS > 0
+        if (cardBack > 0.0) {
+          // from below, needles and leaves let daylight through: the mirrored normal faces down
+          // and saw only ground bounce, so crowns overhead were near-black combs (the user).
+          // The hemisphere's sky colour only (an env-map lookup per card pixel costs fill)
+          reflectedLight.indirectDiffuse += material.diffuseColor * RECIPROCAL_PI * hemisphereLights[0].skyColor * (CARD_SKY * cardBack);
+        }
+        #endif
+        #endif
         #if defined(SUN_VIS) && NUM_DIR_LIGHTS > 0 && ${snow ? 0 : 1}
         {
           // backlight: thin leaves glow when you look toward the sun through them

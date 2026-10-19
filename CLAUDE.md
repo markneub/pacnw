@@ -60,7 +60,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   CedarBark (0.33, 0.235, 0.18: was a saturated rust 0.42/0.24/0.16). `cedar_spray()` paints flat scale-leaf fans (overlapping lobes, not needles). Tint (0.5, 0.56, 0.46). ~3.9k tris.
   `?bench=trees,near40` measured: 40 m vs 60 m saves 1.0 ms at spawn (full 7.5 ms, trees 2.9), 0.0 in the forest, so phones went to 40 m. New `branchy_conifer` options consume no extra rng unless used, so fir/hemlock stay identical. All cards
   are now darkened up to 40% where the visible side faces away from the card normal (crown undersides seen from below
-  were sky-lit and pale). **Snowy fir/hemlock done:** `branchy_fir/hemlock(snow=True)` = the same tree
+  were sky-lit and pale). **Lighter undersides** (the user: fir crowns overhead read as near-black combs): the back-side
+  floor is 0.75 (was 0.6), and seen from below (`cardBack` = smoothstep(0, −0.3, N·V)) non-snow cards add transmitted
+  daylight: diffuse × hemisphere sky colour × `CARD_SKY` 1.6 × cardBack (hemisphere only: an env-map lookup on every card
+  pixel costs fill). Fir from below (`x=3&z=623&yaw=0.1&pitch=0.95`): upper-frame luma sun 28 → 34, overcast 53 → 62;
+  eye-level views unchanged. **Snowy fir/hemlock done:** `branchy_fir/hemlock(snow=True)` = the same tree
   (identical shape: the snow uses its own rng `seed + 991`) with `FirFrostCards`/`HemlockFrostCards` (same spray textures,
   bluer `CARD_TINT`) and `SnowCards` (`snow_clumps.png`: white clumps kept clear of the card edges) laid flat 6–10 cm above
   85% of the sprays that aren't hung/rolled, with up-facing normals (`_card(up_normal=True)`) plus a cap on the leader.
