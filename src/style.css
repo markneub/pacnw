@@ -41,6 +41,27 @@ canvas {
   opacity: 1;
 }
 
+/* "Tap to open the door" near the cabin door (cabin.js) */
+#hint {
+  position: fixed;
+  bottom: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(20, 30, 25, 0.55);
+  color: #fff;
+  font-size: 15px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+
+#hint.show {
+  opacity: 1;
+}
+
 #overlay {
   position: fixed;
   inset: 0;

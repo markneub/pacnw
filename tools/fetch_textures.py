@@ -42,6 +42,9 @@ SETS = {
         ("rock", "lichen_rock", 2.5, 0.85),           # dark basalt with grey lichen
         ("soil", "brown_mud_02", 1.2, 1.0),           # root wads: torn earth
     ],
+    "cabin": [
+        ("wood", "rough_wood", 1.2, 0.9),             # the cabin's logs and boards: weathered, checked grain
+    ],
 }
 SIZES = (1024, 512)
 

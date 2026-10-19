@@ -309,14 +309,16 @@ export function groundAt(x, z) {
 }
 
 // What you stand on: the ground, or a structure over it (the trail's footbridges).
-let walkModifier = null;
+const walkModifiers = [];
+/** Add a walkable surface: fn(x, z, height so far) -> height (footbridges, the boardwalk, the cabin). */
 export function setWalkModifier(fn) {
-  walkModifier = fn;
+  walkModifiers.push(fn);
 }
-/** Height the player stands at: groundAt, raised onto any footbridge deck. */
+/** Height the player stands at: groundAt, raised onto any footbridge deck or floor. */
 export function walkAt(x, z) {
-  const g = groundAt(x, z);
-  return walkModifier ? walkModifier(x, z, g) : g;
+  let g = groundAt(x, z);
+  for (const fn of walkModifiers) g = fn(x, z, g);
+  return g;
 }
 
 /** Local snowline altitude; wanders ±18 m so the snow edge isn't a contour line. */

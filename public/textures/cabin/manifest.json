@@ -1,0 +1,17 @@
+{
+  "source": "Poly Haven (CC0)",
+  "layers": [
+    {
+      "name": "wood",
+      "asset": "rough_wood",
+      "tile": 1.2,
+      "strength": 0.9,
+      "avg": [
+        0.1483,
+        0.12415,
+        0.0976
+      ],
+      "url": "https://polyhaven.com/a/rough_wood"
+    }
+  ]
+}

@@ -36,6 +36,7 @@ export class TouchControls {
     this.vel = { x: 0, y: 0 }; // look speed (rad/s), for the glide on release
     this.lookId = null;
     this.lookLast = { x: 0, y: 0 };
+    this.onTap = null; // a quick touch that neither walked nor looked (opens the cabin door)
 
     this.cue = document.createElement('div');
     this.cue.id = 'look-cue';
@@ -129,6 +130,7 @@ export class TouchControls {
     if (e.pointerId === this.steerId) {
       clearTimeout(this.holdTimer);
       const wasLook = this.mode === 'look';
+      if (this.mode === 'pending') this.onTap?.();
       if (wasLook && performance.now() - this.last.t < 80) {
         // let go mid-swipe: keep turning briefly (≤ ~30°); up/down doesn't glide,
         // since the view is about to ease back to the ground ahead anyway

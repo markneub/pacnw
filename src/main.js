@@ -24,6 +24,7 @@ import { buildGrass } from './grass.js';
 import { buildStreamWater } from './streamwater.js';
 import { buildOcean } from './ocean.js';
 import { Post } from './post.js';
+import { planCabin, buildCabin } from './cabin.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -186,7 +187,8 @@ async function init() {
   await loadTickNow(1);
   step('tree impostors');
   progress('vegetation'); // the scatter and the instanced chunks
-  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors });
+  const cabinPlan = planCabin(trail); // (the scatter keeps clear of it)
+  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, exclude: cabinPlan.blocked });
   scene.add(veg.group);
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
   step('vegetation');
@@ -210,7 +212,14 @@ async function init() {
   // the sea and its surf (reflecting the weather's sky)
   const ocean = off.has('water') ? null : await buildOcean(weather.sky.uniforms, { lowPower, progress: [0.86, 0.98] });
   if (ocean) scene.add(ocean.mesh);
-  const player = new Player(camera, renderer.domElement, veg.collide);
+  // the mountain cabin at the end of the trail (its own model, textures and shaders)
+  const cabin = await buildCabin(cabinPlan, renderer, { lowPower });
+  scene.add(cabin.group);
+  if (params.get('door') === 'open') cabin.setOpen(true);
+  const player = new Player(camera, renderer.domElement, (pos, r) => {
+    veg.collide(pos, r);
+    cabin.collide(pos, r);
+  });
 
   // Spawn in the southern valley looking north toward the mountains.
   // ?x=&z=&yaw=&pitch= override this (handy for screenshots / bookmarking).
@@ -237,7 +246,12 @@ async function init() {
   }
 
   const cycleWeather = () => flash(`Weather: ${weather.cycleOverride()}`);
-  if (touch) new TouchControls(renderer.domElement, player); // eslint-disable-line no-new
+  if (touch) new TouchControls(renderer.domElement, player).onTap = () => cabin.interact(player);
+  // desktop: E, or a click while playing, opens the cabin door when the hint shows
+  document.addEventListener('keydown', (e) => { if (e.code === 'KeyE') cabin.interact(player); });
+  renderer.domElement.addEventListener('mousedown', (e) => {
+    if (e.button === 0 && document.pointerLockElement === renderer.domElement) cabin.interact(player);
+  });
 
   progress('textures');
   const [ground, surface] = await detailReady; // before warm-up so their shaders compile now
@@ -326,6 +340,7 @@ async function init() {
     shared.uTime.value = t;
 
     player.update(dt);
+    cabin.update(dt, t, camera, player, scene);
     weather.update(dt, t, camera);
     updateGroundDetail(camera, camera.position.z > 650); // (snow's detail slot shows sand at the coast)
 
@@ -343,7 +358,8 @@ async function init() {
       hudTimer = 0.25; // DOM text updates are cheap at 4 Hz, wasteful at 60
       const alt = Math.round(player.pos.y);
       const sand = sandAt(player.pos.x, player.pos.z) > 0.5;
-      const zone = sand ? (alt < 4 ? 'Ocean beach' : 'Dunes') : alt > SNOWLINE + 10 ? 'Subalpine snowfield'
+      const zone = cabin.contains(player.pos.x, player.pos.z) ? 'Mountain cabin'
+        : sand ? (alt < 4 ? 'Ocean beach' : 'Dunes') : alt > SNOWLINE + 10 ? 'Subalpine snowfield'
         : alt > SNOWLINE - 30 ? 'Upper slopes'
           : alt < 8 ? 'Lakeshore' : 'Temperate rainforest';
       let text = `${zone} · ${alt} m`;
@@ -366,7 +382,7 @@ async function init() {
     }
   });
 
-  window.__pacnw = { scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, worldSize: WORLD_SIZE };
+  window.__pacnw = { scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, worldSize: WORLD_SIZE };
 }
 
 let flashTimer;

@@ -12,6 +12,13 @@ const smooth = THREE.MathUtils.smoothstep;
 const RAIN_BOX = new THREE.Vector3(70, 40, 70);
 const SNOW_BOX = new THREE.Vector3(60, 30, 60);
 
+/** No rain or snow under the cabin's roof (shared, not cloned: the cabin is placed later). */
+function shelter(mat) {
+  mat.uniforms.uShelterInv = shared.uShelterInv;
+  mat.uniforms.uShelter = shared.uShelter;
+  mat.uniforms.uShelterPitch = shared.uShelterPitch;
+}
+
 function createRain(count = 14000) {
   const offsets = new Float32Array(count * 2 * 3);
   const ends = new Float32Array(count * 2);
@@ -52,6 +59,13 @@ function createRain(count = 14000) {
       uniform vec3 uBox;
       uniform vec2 uWind;
       varying float vAlpha;
+      uniform mat4 uShelterInv;
+      uniform vec4 uShelter;
+      uniform float uShelterPitch;
+      bool sheltered(vec3 p) {
+        vec3 l = (uShelterInv * vec4(p, 1.0)).xyz;
+        return abs(l.x) < uShelter.x && l.z > uShelter.y && l.z < uShelter.z && l.y > -2.0 && l.y < uShelter.w - uShelterPitch * abs(l.x);
+      }
       void main() {
         float speed = 17.0 + fract(position.x * 91.7 + position.z * 13.1) * 6.0;
         vec3 vel = vec3(uWind.x, -speed, uWind.y);
@@ -69,6 +83,7 @@ function createRain(count = 14000) {
         float above = p.y - (uCam.y - 1.7); // ~height above the ground under the camera
         float shelter = canopy * smoothstep(18.0, 8.0, above);
         if (fract(position.y * 71.3 + position.x * 7.9) < 0.88 * shelter) vAlpha = 0.0;
+        if (sheltered(p)) vAlpha = 0.0;
         #include <fog_vertex>
       }
     `,
@@ -86,6 +101,7 @@ function createRain(count = 14000) {
   // shared (not cloned by merge): the canopy map is baked after the weather is built
   mat.uniforms.uCanopyMap = shared.uCanopyMap;
   mat.uniforms.uCanopyRect = shared.uCanopyRect;
+  shelter(mat);
   const lines = new THREE.LineSegments(geo, mat);
   lines.frustumCulled = false;
   lines.renderOrder = 10;
@@ -121,6 +137,13 @@ function createSnow(count = 14000) {
       uniform vec2 uWind;
       uniform float uPixelRatio;
       varying float vAlpha;
+      uniform mat4 uShelterInv;
+      uniform vec4 uShelter;
+      uniform float uShelterPitch;
+      bool sheltered(vec3 p) {
+        vec3 l = (uShelterInv * vec4(p, 1.0)).xyz;
+        return abs(l.x) < uShelter.x && l.z > uShelter.y && l.z < uShelter.z && l.y > -2.0 && l.y < uShelter.w - uShelterPitch * abs(l.x);
+      }
       void main() {
         float seed = fract(position.x * 53.1 + position.y * 17.3 + position.z * 7.7);
         float fall = 1.1 + seed * 0.9;
@@ -134,6 +157,10 @@ function createSnow(count = 14000) {
         gl_PointSize = (0.08 + seed * 0.1) * uPixelRatio * (500.0 / -mvPosition.z);
         float d = length(p - uCam);
         vAlpha = 1.0 - smoothstep(16.0, 29.0, d);
+        if (sheltered(p)) {
+          vAlpha = 0.0;
+          gl_PointSize = 0.0;
+        }
         #include <fog_vertex>
       }
     `,
@@ -149,6 +176,7 @@ function createSnow(count = 14000) {
       }
     `,
   });
+  shelter(mat);
   const points = new THREE.Points(geo, mat);
   points.frustumCulled = false;
   points.renderOrder = 11;

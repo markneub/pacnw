@@ -952,13 +952,21 @@ function addSlopeGrowth(placements, trail) {
  * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
  * chunk for all tree types, instead of the *_lod models per type.
  */
-export async function buildVegetation(protos, trail, { impostors = null, shrubImpostors = null } = {}) {
+export async function buildVegetation(protos, trail, { impostors = null, shrubImpostors = null, exclude = null } = {}) {
   const placements = await scatter(trail);
   addStreamRocks(placements, protos, trail);
   addMarshSnags(placements, trail);
   addLeaners(placements, trail);
   addDriftwood(placements, trail);
   addSlopeGrowth(placements, trail);
+  // nothing where the cabin stands (filtered, so the scatter's rng sequence stays put)
+  if (exclude) {
+    for (const name of Object.keys(placements)) {
+      if (name === 'signpost') continue;
+      const margin = KIND(name) === 'trees' ? 3.5 : 0.8;
+      placements[name] = placements[name].filter((q) => !exclude(q.x, q.z, margin));
+    }
+  }
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
   for (const name of Object.keys(placements)) {
     if (!name.startsWith('pebbles')) continue;

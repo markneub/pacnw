@@ -23,6 +23,11 @@ export const shared = {
   uGrassMap: { value: null }, // grass.js: density (a) and colour (rgb) per terrain vertex, for the ground's distant tint
   uGrassTint: { value: new THREE.Vector2(16, 28) }, // m: where the grass tufts fade out (the tint fades in)
   uCanopyRect: { value: new THREE.Vector4(-1000, -1000, 2000, 2000) }, // minX, minZ, sizeX, sizeZ
+  // under the cabin's roof (cabin.js): no rain or snow. World -> cabin frame; half width, back and
+  // front z, ridge height (a zero width shelters nothing); the roof's pitch
+  uShelterInv: { value: new THREE.Matrix4() },
+  uShelter: { value: new THREE.Vector4(0, 0, 0, 0) },
+  uShelterPitch: { value: 0 },
 };
 
 /**
