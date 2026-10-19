@@ -70,10 +70,10 @@ export function planCave() {
   shared.uCaveDir.value.set(DX, DZ);
   const blocked = (x, z, margin) => {
     const [s, v] = toLocal(x, z);
-    const es = (s - 2) / (8 + margin);
-    const ev = v / (10 + margin);
+    const es = (s - 2) / (5 + margin);
+    const ev = v / (6 + margin);
     if (es * es + ev * ev < 1) return true;
-    return s > -9 - margin && s < 0 && Math.abs(v) < 3 + margin; // the way in
+    return s > -6 - margin && s < 0 && Math.abs(v) < 2.5 + margin; // the way in
   };
   return { blocked, y: Y0 };
 }
@@ -123,7 +123,10 @@ function ringPoint(s, j, out) {
   if (j <= NA) {
     const ledge = 0.08 * smooth(0.35, 0.65, ((((y + 0.5 * noise3(wx * 0.2, yy * 0.2, wz * 0.2)) / 0.6) % 1) + 1) % 1);
     const nearFloor = smooth(0.0, 0.6, y);
-    d = (0.34 * n + ledge) * (0.35 + 0.65 * nearFloor) * (s < 0.01 ? 0.6 : 1);
+    // (a ragged mouth, not a pipe's end: bigger, blockier lumps over the first metres)
+    const mouth = 1 - smooth(0, 6, s);
+    const lump = noise3(wx * 0.9 + 17, yy * 0.9, wz * 0.9) * 0.6 + noise3(wx * 1.9, yy * 1.9 - 4, wz * 1.9) * 0.4;
+    d = (0.34 * n + ledge) * (0.35 + 0.65 * nearFloor) + mouth * nearFloor * (0.28 * lump + 0.12 * n);
   } else {
     d = 0.05 * n + 0.06 * Math.max(0, noise3(wx * 0.7, 0, wz * 0.7));
   }
@@ -189,6 +192,7 @@ function buildTube() {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos.slice(i0 * M * 3, (i1 + 1) * M * 3), 3));
     g.setAttribute('normal', new THREE.BufferAttribute(nrm.slice(i0 * M * 3, (i1 + 1) * M * 3), 3));
+    g.setAttribute('aOut', new THREE.BufferAttribute(new Float32Array(n * M), 1)); // (0: inside)
     const idx = [];
     for (let i = 0; i < n - 1; i++) {
       for (let j = 0; j < M; j++) {
@@ -224,7 +228,7 @@ function buildTube() {
  * that leans out, then rock receding into the hillside until the hill covers it.
  */
 function buildCrag(tube) {
-  const RHO = [0, 0.3, 0.75, 1.3, 2.0, 2.8, 3.7, 4.7, 5.8, 7.0, 8.3];
+  const RHO = [0, 0.3, 0.75, 1.3, 2.0, 2.7, 3.4];
   const K = RHO.length;
   const pos = [];
   const H0 = height(0);
@@ -247,7 +251,7 @@ function buildCrag(tube) {
       oy /= ol;
       let x = lx + ox * rho;
       let y = ly + oy * rho;
-      let s = -(0.45 * smooth(0, 0.75, rho) - 0.75 * Math.pow(Math.max(0, rho - 1.2), 1.2));
+      let s = -(0.3 * smooth(0, 0.75, rho) - 0.9 * Math.pow(Math.max(0, rho - 1.0), 1.2));
       // craggy: blocky lumps (folded noise: sharp creases), and ledges along the bedding
       const [nx0, nz0] = toWorld(s, x);
       const n = fbm3(nx0 * 0.7 + 40, (Y0 + y) * 0.7, nz0 * 0.7);
@@ -258,10 +262,13 @@ function buildCrag(tube) {
       x += ox * n * amp * 0.6;
       y += oy * n * amp * 0.6;
       // recede into the hill: far out, push each vertex in until the ground covers it
-      for (let it = 0; it < 60 && rho > 2.5; it++) {
+      // (back up to 4 m, then down: at the nose's sides the hill is low, and pushing in alone drew
+      // long wedges along it)
+      for (let it = 0; it < 56 && rho > 0.75; it++) {
         localToWorld(s, x, y, w);
-        if (w.y < rawGroundAt(w.x, w.z) - 0.4) break;
-        s += 0.35;
+        if (w.y < rawGroundAt(w.x, w.z) - (rho > 2 ? 0.3 : 0.05)) break;
+        if (it < 16) s += 0.25;
+        else y -= 0.25;
       }
       localToWorld(s, x, y, w);
       pos.push(w.x, w.y, w.z);
@@ -290,6 +297,7 @@ function buildCrag(tube) {
     g.setIndex(idx);
     g.computeVertexNormals();
   }
+  g.setAttribute('aOut', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count).fill(1), 1)); // outdoors
   g.computeBoundingSphere();
   return g;
 }
@@ -350,52 +358,42 @@ function placeStone(geo, s, v, y, { yaw = 0, pitch = 0, roll = 0 } = {}) {
   return geo.applyMatrix4(m);
 }
 
-/** The stones someone set at the mouth: two uprights and a lintel, a threshold, dry-stone walling either side. */
+/**
+ * A few rough-hewn blocks someone set at the mouth: boxy, with flat chisel facets (a coarse grid,
+ * displaced, flat-shaded), one leaning, one stacked on another, one fallen in front.
+ */
 function buildPortal(colliders) {
   const parts = [];
-  const r = mulberry32(SEED + 77);
   const edge = 0.79 * halfW(0); // half the opening's width at the floor
-  const groundAtLocal = (s, v) => rawGroundAt(...toWorld(s, v));
-  // uprights (their inner faces on the opening's edges)
-  for (const side of [-1, 1]) {
-    const v = side * (edge + 0.33);
-    const g = stoneGeometry(0.36, 1.55, 0.34, side * 3.1, { round: 4, rough: 0.05, seg: 6 });
-    const base = Math.min(groundAtLocal(-0.4, v), Y0) - 0.3;
-    parts.push(placeStone(g, -0.42, v, base + 1.55, { yaw: side * 0.05, roll: side * 0.025 }));
-    colliders.push({ s: -0.42, v, r: 0.42 });
-  }
-  // the lintel across them
+  const groundAtLocal = (s, v) => Math.min(rawGroundAt(...toWorld(s, v)), Y0 + 0.3);
+  const hewn = (hx, hy, hz, seed) => {
+    const g = stoneGeometry(hx, hy, hz, seed, { round: 5, rough: 0.16, seg: 2 }).toNonIndexed();
+    g.computeVertexNormals(); // (flat: each facet a chisel cut)
+    return g;
+  };
+  const put = (hx, hy, hz, seed, s, v, base, rot) => {
+    parts.push(placeStone(hewn(hx, hy, hz, seed), s, v, base + hy * 0.9, rot));
+  };
+  // left: a squat block with a smaller one set on top
   {
-    const g = stoneGeometry(edge + 0.85, 0.32, 0.4, 9.7, { round: 4, rough: 0.05, seg: 7 });
-    parts.push(placeStone(g, -0.45, 0.04, Y0 + 2.75 + 0.3, { roll: 0.035, yaw: 0.02 }));
+    const v = -(edge + 0.55);
+    const base = groundAtLocal(-0.3, v) - 0.15;
+    put(0.52, 0.55, 0.45, 3.1, -0.3, v, base, { yaw: 0.12, roll: 0.03 });
+    put(0.32, 0.22, 0.3, 7.3, -0.38, v - 0.04, base + 0.95, { yaw: -0.25, roll: -0.06, pitch: 0.05 });
+    colliders.push({ s: -0.3, v, r: 0.55 });
+    put(0.3, 0.2, 0.26, 4.4, -1.1, v - 0.45, groundAtLocal(-1.1, v - 0.45) - 0.1, { yaw: 0.8, pitch: 0.1 });
+    colliders.push({ s: -1.1, v: v - 0.45, r: 0.3 });
   }
-  // a flat threshold stone, nearly flush with the ground
+  // right: a tall one leaning in toward the opening, and one fallen out in front
   {
-    const g = stoneGeometry(edge * 0.95, 0.12, 0.45, 2.2, { round: 3, rough: 0.06 });
-    parts.push(placeStone(g, -0.55, 0, Y0 - 0.06, { yaw: 0.04 }));
+    const v = edge + 0.45;
+    const base = groundAtLocal(-0.3, v) - 0.2;
+    put(0.4, 0.82, 0.4, 9.7, -0.3, v, base, { yaw: -0.08, roll: 0.07 });
+    colliders.push({ s: -0.3, v, r: 0.48 });
+    put(0.55, 0.24, 0.34, 2.2, -1.25, v + 0.6, groundAtLocal(-1.25, v + 0.6) - 0.12, { yaw: 0.65, roll: 0.12, pitch: -0.05 });
+    colliders.push({ s: -1.25, v: v + 0.6, r: 0.5 });
   }
-  // dry-stone walls flaring out from the uprights along the crag's foot
-  for (const side of [-1, 1]) {
-    for (let course = 0; course < 4; course++) {
-      let t = 0.05 + r() * 0.15;
-      while (t < 1) {
-        const len = 0.45 + r() * 0.35;
-        const tm = t + len / 2 / 3.2;
-        const top = 1.35 - 0.8 * tm; // the wall steps down outward
-        const hy = 0.12 + r() * 0.05;
-        const y0 = course * 0.27 + hy;
-        if (y0 + hy > top + 0.1) break;
-        const v = side * (edge + 0.75 + tm * 2.9);
-        const s = -0.55 - tm * 1.6 + course * 0.07;
-        const g = stoneGeometry(len / 2 + 0.03, hy + 0.02, 0.22 + r() * 0.1, r() * 50, { round: 2.6 + r() * 0.8, rough: 0.16, seg: 4 });
-        const base = groundAtLocal(s, v) - 0.12;
-        parts.push(placeStone(g, s, v, base + y0, { yaw: side * (0.5 * tm + 0.1) + (r() - 0.5) * 0.15, roll: (r() - 0.5) * 0.1, pitch: (r() - 0.5) * 0.08 }));
-        t += len / 3.2 + 0.01;
-      }
-    }
-    for (let k = 0; k < 4; k++) colliders.push({ s: -0.6 - k * 0.45, v: side * (edge + 1.0 + k * 0.8), r: 0.45 });
-  }
-  return mergeGeometries(parts.map((g) => g.toNonIndexed()));
+  return mergeGeometries(parts);
 }
 
 /** Loose rock along the tunnel's floor, a few boulders against the walls, and stalactites. */
@@ -431,7 +429,9 @@ function buildRubble(tube, colliders) {
     const top = floorAt(s) + height(s) * (0.92 - 0.25 * Math.pow(Math.abs(v - wiggle(s)) / halfW(s), 2)) + 0.12;
     parts.push(placeStone(g, s, v, top, { yaw: r() * 6 }));
   }
-  return mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)));
+  const g = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)));
+  g.setAttribute('aOut', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count), 1));
+  return g;
 }
 
 // ---------------------------------------------------------------------------
@@ -455,11 +455,12 @@ function wallAt(tube, s, side, y) {
 
 function torchPlan(tube) {
   const torches = [];
-  const edge = 0.79 * halfW(0);
-  // two outside, on the uprights' faces
+  // two a few metres in, one on each wall (they light the ground outside too)
   for (const side of [-1, 1]) {
-    const v = side * (edge + 0.33);
-    torches.push({ s: -0.8, v, y: Y0 + 1.75, out: [-DX, -DZ], lean: 0.35 });
+    const ss = 3;
+    const lo = wallAt(tube, ss, side, 1.45);
+    const hi = wallAt(tube, ss, side, 2.05);
+    torches.push({ s: ss, v: lo.x - side * 0.03, y: floorAt(ss) + lo.y, top: [hi.x - side * 0.36, hi.y], side });
   }
   // inside, every 12 m, alternating sides: the bracket on the wall at ~1.5 m, the stick leaning
   // out so its flame burns ~0.3 m clear of the wall (which curves in above ~1.1 m)
@@ -681,6 +682,7 @@ function caveGLSL(nTorch) {
   uniform vec4 uEnd;
   varying vec3 vCvW;
   varying vec3 vCvN;
+  varying float vCvOut; // 1: outdoor rock (the crag)
   vec3 cvN; // the shading normal, world space
   float cvS; // how far in (m along the axis)
   float cvFloorY; // the tunnel's floor there (roughly)
@@ -739,19 +741,21 @@ function caveMaterial(kind, nTorch) {
     shader.uniforms.uCaveO = shared.uCaveO;
     shader.uniforms.uCaveDir = shared.uCaveDir;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vCvW;\nvarying vec3 vCvN;')
+      .replace('#include <common>', `#include <common>\nvarying vec3 vCvW;\nvarying vec3 vCvN;\nvarying float vCvOut;\n${kind === 'rock' ? 'attribute float aOut;' : ''}`)
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
         vCvW = (modelMatrix * vec4(transformed, 1.0)).xyz;
-        vCvN = normalize(mat3(modelMatrix) * objectNormal);`);
+        vCvN = normalize(mat3(modelMatrix) * objectNormal);
+        vCvOut = ${kind === 'rock' ? 'aOut' : '0.0'};`);
     const textured = kind !== 'plain';
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <packing>', `#include <packing>\n${caveGLSL(nTorch)}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-        cvN = normalize(vCvN);
+        cvN = normalize(vCvN) * (gl_FrontFacing ? 1.0 : -1.0); // (rock is double-sided)
         cvS = dot(vCvW.xz - uCaveO.xz, uCaveDir);
         cvFloorY = uCaveO.y - ${GRADE} * max(cvS - 3.0, 0.0);
         // outdoors: in front of the mouth, or up on the crag over the tunnel's roof
-        cvOut = max(1.0 - smoothstep(0.5, 3.0, cvS), step(cvFloorY + 3.8, vCvW.y));
+        cvOut = max(max(1.0 - smoothstep(0.5, 3.0, cvS), step(cvFloorY + 3.8, vCvW.y)), vCvOut);
+        if (!gl_FrontFacing) cvOut = 1.0; // (the tunnel's outside: only seen from outdoors, over the mouth)
         ${textured ? `{
           // triplanar rock photo (modulating the base colour), the floor photo on the floor inside
           vec3 bw = pow(abs(cvN), vec3(4.0));
@@ -929,6 +933,7 @@ export async function buildCave(plan, texReady, { lowPower }) {
     const g = new THREE.BufferGeometry().setFromPoints([pts[0], pts[2], pts[1], pts[0], pts[3], pts[2]]);
     g.computeVertexNormals();
     if (g.getAttribute('normal').getY(0) < 0) g.setFromPoints([pts[0], pts[1], pts[2], pts[0], pts[2], pts[3]]).computeVertexNormals();
+    g.setAttribute('aOut', new THREE.BufferAttribute(new Float32Array(6).fill(1), 1));
     group.add(new THREE.Mesh(g, rock));
   }
   const rubble = new THREE.Mesh(buildRubble(tube, inner), rock);
@@ -1002,12 +1007,12 @@ export async function buildCave(plan, texReady, { lowPower }) {
     // the crag: an ellipse over its footprint, except the way in
     const door = 0.79 * halfW(0) - r;
     if (!(Math.abs(nv) < door && ns < 1.5)) {
-      const es = (ns - 3) / 4.6;
-      const ev = nv / 8.5;
+      const es = (ns - 2.5) / 3.2;
+      const ev = nv / 4.5;
       const e = Math.hypot(es, ev);
       if (e < 1 && e > 1e-6) {
-        ns = 3 + (es / e) * 4.6;
-        nv = (ev / e) * 8.5;
+        ns = 2.5 + (es / e) * 3.2;
+        nv = (ev / e) * 4.5;
       }
     }
     for (const c of colliders) {

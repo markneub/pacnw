@@ -652,7 +652,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   a prick of light ~10 s of running in; walking into it brings you out of the same entrance, at night; again: day).
   Mouth at (15, 590), 50 m north of spawn (straight ahead), tunnel due **north**, 130 m. The mouth sits exactly on a
   row of the 5 m terrain grid: the ground is level up to it and `hillock()` (terrain.js, in `baseHeight`, 0 for u ≤ 0,
-  ~7 m at the next row, 11 m by u ≈ 9, falling off by u = 70) steps up from the next row. (A rotated tunnel put the
+  ~5 m at the next row, 8 m by u ≈ 9, a narrow nose widening behind, falling off by u = 70) steps up from the next row.
+  The user: the entrance shouldn't be elevated (the hillock is only there for headroom) and should be simpler: an
+  earlier version stood the mouth in a big rock dome (11 m hill, 8 m crag) framed by dressed uprights, a lintel and
+  dry-stone walls. (A rotated tunnel put the
   mouth mid-cell: the ground under it interpolated 3 m up the steep nose and the mouth floated.) The floor at the mouth
   (`Y0`) is the highest ground across the doorway (lower, a view out along the floor slipped under the lip of the ground).
   **Geometry** (all JS, deterministic, `SEED + 4111/77/919`): a tube along the axis (rings every 0.33 m, 48 verts: an
@@ -661,13 +664,18 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   chunks for culling inside, one merged mesh (tube + crag) from outside (`rockAll`, renderOrder 50: drawn after the
   hill that hides it; inside the chunks are renderOrder −1, filling depth first). The **crag** is rings around the
   opening (its first ring is the tube's), a rounded lip, then rock pushed back into the hill until the ground covers it.
-  The **set stones**: two uprights, a lintel, a threshold slab, dry-stone walls flaring out (superellipsoid stones,
-  `stoneGeometry`); rubble along the floor, a few boulders (colliders), stalactites. A floor apron under the threshold.
-  Terrain and grass are hidden inside a box over the first 14 m (`shared.uCaveO/uCaveDir`); rain/snow stop and motes
+  The crag is small (rings to 3.4 m, each pushed ≤ 4 m in, then down, until the ground covers it) and the tube's
+  first 6 m get bigger, blockier lumps, so the mouth is ragged, not a pipe's end. **Rough-hewn rocks** at the mouth
+  (`buildPortal`: boxy superellipsoids on a coarse grid, flat-shaded chisel facets): a block with a smaller one on
+  top, a tall leaning one, one fallen in front, one small. Rubble along the floor, a few boulders (colliders),
+  stalactites. A floor apron under the threshold. Terrain and grass are hidden only inside the tube's own arch (+0.6 m)
+  over the first 14 m (`CAVE_GLSL` `inCaveMouth` in materials.js, mirroring cave.js's shape; a box showed holes from
+  up on the lower hill). Rock is double-sided (back faces count as outdoors: the tube's outside over the mouth, and
+  any fold in the crag rings); rain/snow stop and motes
   hide while the camera is inside (`uCaveIn`). The scatter keeps off the crag and the approach (`planCave().blocked`).
   **Light** (no three.js lights): `caveMaterial` (standard + patch, triplanar `public/textures/cave` = Poly Haven
   dark_rock_02 walls, forest_ground_04 floor; `fetch_textures.py cave`): outdoor light fades over the first ~4 m (rock
-  above the roof or in front of the mouth counts as outdoors), 12 torches (2 on the uprights, then every 12 m
+  above the roof, in front of the mouth or on the crag (`aOut`) counts as outdoors), 12 torches (a pair 3 m in, then every 12 m
   alternating sides; each bracket on the wall at ~1.5 m with the stick leaning out so the flame is 0.3 m clear: the walls
   curve in above ~1.1 m and the first placement buried the flames in rock, which looked like "the near torches don't
   light"), `TORCH_I` 6.5 / (d² + 1.2), windowed at 18 m, flicker from sines, the light jittering a few cm. The 4

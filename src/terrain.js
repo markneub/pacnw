@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { WORLD_SIZE, TERRAIN_SEGMENTS, WATER_LEVEL, SNOWLINE, SEED, CAVE } from './config.js';
 import { loadTick } from './loadprogress.js';
-import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter, patchPuddles } from './materials.js';
+import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter, patchPuddles, CAVE_GLSL, patchCaveMouth } from './materials.js';
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 import { buildStreams } from './streams.js';
 import { patchRocky } from './rockyslope.js';
@@ -169,8 +169,8 @@ export function baseHeight(x, z) {
 }
 
 /**
- * The hillock the cave runs into (config.js CAVE): steep at its south nose, where the crag around
- * the mouth stands (cave.js), and rounded on top, running back ~60 m along the tunnel.
+ * The hillock the cave runs into (config.js CAVE): a low, rounded rise that gives the tunnel
+ * headroom, steep only at its south nose round the mouth (cave.js), running back ~60 m along it.
  */
 function hillock(x, z) {
   const ox = x - CAVE.x;
@@ -178,9 +178,10 @@ function hillock(x, z) {
   const u = ox * CAVE.dir[0] + oz * CAVE.dir[1]; // in along the tunnel
   if (u < -12 || u > 75) return 0;
   const v = -ox * CAVE.dir[1] + oz * CAVE.dir[0]; // across it
+  // (just enough over the tunnel's first metres for headroom: ~5 m one grid row in, 8 m by 9 m)
   const along = u <= 0 ? 0 : u < 12 ? smoothstep(0, 9, u) : 1 - smoothstep(12, 70, u);
-  const wide = 11 + 0.5 * Math.abs(u) + 4 * nDetail(x * 0.03 + 11, z * 0.03);
-  return 11 * along * Math.exp(-(v / wide) * (v / wide)) * (1 + 0.12 * nDetail(x * 0.06 - 4, z * 0.06 + 9));
+  const wide = 5 + 0.7 * Math.abs(u) + 3 * nDetail(x * 0.03 + 11, z * 0.03);
+  return 8 * along * Math.exp(-(v / wide) * (v / wide)) * (1 + 0.12 * nDetail(x * 0.06 - 4, z * 0.06 + 9));
 }
 
 /** Sea level: the ocean along the south edge (the lake sits higher, at WATER_LEVEL). */
@@ -597,8 +598,7 @@ export function buildTerrain() {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, cutUniforms);
     patchSunlight(shader);
-    shader.uniforms.uCaveO = shared.uCaveO;
-    shader.uniforms.uCaveDir = shared.uCaveDir;
+    patchCaveMouth(shader);
     shader.uniforms.uWet = shared.uWet;
     shader.uniforms.uPuddle = shared.uPuddle;
     shader.uniforms.uGrassMap = shared.uGrassMap;
@@ -616,8 +616,7 @@ export function buildTerrain() {
         float puddle;
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
-        uniform vec4 uCaveO;
-        uniform vec2 uCaveDir;
+        ${CAVE_GLSL}
         uniform sampler2D uGrassMap;
         uniform vec2 uGrassTint;
         uniform vec4 uGrassGrid;
@@ -633,14 +632,8 @@ export function buildTerrain() {
         vec2 cutUv = (vGroundPos.xz - uCutRect.xy) / uCutRect.zw;
         if (all(greaterThan(cutUv, vec2(0.0))) && all(lessThan(cutUv, vec2(1.0)))
             && texture2D(uCutMask, cutUv).r > 0.5) discard;
-        {
-          // inside the cave's first metres (cave.js) the ground would show through the tunnel:
-          // its tube and the crag round the mouth cover everything this cuts away
-          vec2 co = vGroundPos.xz - uCaveO.xz;
-          float cs = dot(co, uCaveDir);
-          if (cs > 0.0 && cs < 14.0 && abs(dot(co, vec2(-uCaveDir.y, uCaveDir.x))) < 3.0
-              && vGroundPos.y < uCaveO.y + 3.6 && vGroundPos.y > uCaveO.y - 0.1 * cs - 1.0) discard;
-        }
+        // inside the cave's first metres (cave.js) the ground would show through the tunnel
+        if (inCaveMouth(vGroundPos)) discard;
         float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
         diffuseColor.rgb *= 0.78 + gn * 0.44;
         {

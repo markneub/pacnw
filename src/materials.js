@@ -43,6 +43,33 @@ export const shared = {
 };
 
 /**
+ * GLSL: is p inside the cave's first 14 m (cave.js: the tube's arch, plus a margin)? The terrain
+ * and the grass hide there. Needs uniforms uCaveO, uCaveDir (shared). Mirrors cave.js's shape.
+ */
+export const CAVE_GLSL = /* glsl */ `
+  uniform vec4 uCaveO;
+  uniform vec2 uCaveDir;
+  bool inCaveMouth(vec3 p) {
+    vec2 co = p.xz - uCaveO.xz;
+    float s = dot(co, uCaveDir);
+    if (s <= 0.0 || s > 14.0) return false;
+    float v = dot(co, vec2(-uCaveDir.y, uCaveDir.x));
+    float wig = (0.55 * sin(0.047 * s + 1.0) + 0.3 * sin(0.13 * s + 2.0) - (0.55 * sin(1.0) + 0.3 * sin(2.0))) * smoothstep(3.0, 14.0, s);
+    float a = 1.75 + 0.22 * sin(0.21 * s + 0.3) + 0.15 * sin(0.53 * s + 1.7) - 0.3 * (1.0 - smoothstep(0.0, 5.0, s));
+    float H = 3.1 + 0.35 * sin(0.17 * s + 2.2) + 0.2 * sin(0.41 * s) - 0.5 * (1.0 - smoothstep(0.0, 4.0, s));
+    float fl = uCaveO.y - 0.085 * max(0.0, s - 3.0 * (1.0 - exp(-s / 3.0)));
+    float b = 0.62 * H;
+    float x = (v - wig) / (a + 0.6);
+    float y = (p.y - fl - (H - b)) / (b + 0.6);
+    return p.y > fl - 0.6 && x * x + y * y < 1.0;
+  }
+`;
+export function patchCaveMouth(shader) {
+  shader.uniforms.uCaveO = shared.uCaveO;
+  shader.uniforms.uCaveDir = shared.uCaveDir;
+}
+
+/**
  * Per-instance level-of-detail switch, decided in the vertex shader so the
  * near pool and the far chunks are exact complements. 'near' draws only
  * instances inside uLodRadius (horizontal distance from the camera), 'far'

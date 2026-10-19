@@ -4,7 +4,7 @@ import {
   terrainGrid, terrainSurface, cutUniforms, nForest, mulberry32, rawGroundAt, waterLevelAt, marshAt, MARSH, sandAt, SEA_LEVEL,
 } from './terrain.js';
 import { rockFieldAt } from './rockyslope.js';
-import { shared, patchSunlight, sunKey } from './materials.js';
+import { shared, patchSunlight, sunKey, CAVE_GLSL, patchCaveMouth } from './materials.js';
 
 /**
  * Grass blades around the camera: one draw call, no per-frame CPU work.
@@ -349,7 +349,8 @@ function grassMaterial(baked, ring) {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
   mat.envMapIntensity = 0.35; // like the needles: no sky sheen on foliage
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms, cutUniforms, { uTime: shared.uTime, uWind: shared.uWind, uCaveO: shared.uCaveO, uCaveDir: shared.uCaveDir });
+    Object.assign(shader.uniforms, uniforms, cutUniforms, { uTime: shared.uTime, uWind: shared.uWind });
+    patchCaveMouth(shader);
     patchSunlight(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
@@ -364,8 +365,7 @@ function grassMaterial(baked, ring) {
         uniform vec4 uGrassGrid; // min x, min z, step, n
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
-        uniform vec4 uCaveO;
-        uniform vec2 uCaveDir;
+        ${CAVE_GLSL}
         uniform float uTime;
         uniform float uWind;
         varying vec3 vGrassCol;
@@ -411,9 +411,7 @@ function grassMaterial(baked, ring) {
           gY = gGround(gXZ);
           if (gY < ${(WATER_LEVEL + 0.15).toFixed(2)} - 0.5 * gMarsh) gScale = 0.0;
           // none inside the cave's mouth (cave.js), where the ground runs up into the tunnel
-          vec2 gCo = gXZ - uCaveO.xz;
-          float gCs = dot(gCo, uCaveDir);
-          if (gCs > -0.3 && gCs < 14.0 && abs(dot(gCo, vec2(-uCaveDir.y, uCaveDir.x))) < 3.0) gScale = 0.0;
+          if (inCaveMouth(vec3(gXZ, gY).xzy)) gScale = 0.0;
         }
         float gHeight = mix(0.7, 1.35, gR3) * mix(0.55, 1.0, gMap.a); // sparse grass is shorter
         gHeight *= 1.0 + 2.2 * gMarsh; // marsh sedge: knee high
