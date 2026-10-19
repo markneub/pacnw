@@ -82,8 +82,15 @@ const overlay = document.getElementById('overlay');
 const status = document.getElementById('status');
 const hud = document.getElementById('hud');
 
-// ?perf also logs how long each loading step takes
+// ?perf also logs how long each loading step takes, under the build's commit (shown from the
+// start of loading, so you can tell whether a new version has arrived)
 const timings = [];
+const loadTimes = params.has('perf') ? document.createElement('div') : null;
+if (loadTimes) {
+  loadTimes.id = 'load-times';
+  loadTimes.textContent = `build ${__BUILD_SHA__}`;
+  overlay.appendChild(loadTimes);
+}
 let stepStart = performance.now();
 function step(label) {
   const now = performance.now();
@@ -277,10 +284,7 @@ async function init() {
     const line = `${timings.join(' · ')} · longest stall ${longestStall().toFixed(0)} ms · ready ${(performance.now() / 1000).toFixed(1)} s after navigation`;
     console.info('load:', line);
     // and on the start screen, for phones (no console there): one step per line
-    const el = document.createElement('div');
-    el.id = 'load-times';
-    el.textContent = line.split(' · ').join('\n');
-    overlay.appendChild(el);
+    loadTimes.textContent = `build ${__BUILD_SHA__}\n${line.split(' · ').join('\n')}`;
   }
 
   await progress(null); // fill the rest where it can be seen, then offer the start

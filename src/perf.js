@@ -158,6 +158,6 @@ export class PerfOverlay {
       wait = ` · gpu-bound ${Math.round((100 * skipped) / Math.max(1, skipped + drawn))}%`;
     }
     this.drawnSincePaint = 0;
-    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris · dpr ${this.renderer.getPixelRatio()}${wait}`;
+    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris · dpr ${this.renderer.getPixelRatio()}${wait} · ${__BUILD_SHA__}`;
   }
 }

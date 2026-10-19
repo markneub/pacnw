@@ -31,6 +31,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `?weather=sun`, ...), give the **full clickable URL**, e.g.
   [https://markneub.github.io/pacnw/?bench=trees](https://markneub.github.io/pacnw/?bench=trees), never bare parameters:
   copying and pasting them on a phone is awkward.
+- **After pushing a change, tell the user its short git sha** (`git rev-parse --short HEAD`). The build embeds it
+  (`__BUILD_SHA__`, vite.config.js `define`: `git rev-parse --short HEAD`, else `GITHUB_SHA`): `?perf` shows
+  `build <sha>` on the start screen from the start of loading and at the end of the overlay's third line, so the user
+  can tell whether the new version has loaded yet.
 - Pages source is set to "GitHub Actions". The proxy blocks enabling or configuring Pages via `gh api`,
   and github.io isn't reachable from the container, so check deploys with `gh run watch <id> --repo markneub/pacnw`.
 

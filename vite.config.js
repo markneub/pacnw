@@ -78,7 +78,17 @@ function worldBake() {
   };
 }
 
+// the commit this build is from (?perf shows it, so you can tell when a new version has loaded)
+function buildSha() {
+  try {
+    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return (process.env.GITHUB_SHA ?? 'unknown').slice(0, 7);
+  }
+}
+
 export default defineConfig({
+  define: { __BUILD_SHA__: JSON.stringify(buildSha()) },
   // relative asset paths so the build works from any sub-path (e.g. GitHub Pages)
   base: './',
   plugins: [worldBake()],
