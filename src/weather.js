@@ -402,7 +402,7 @@ export class Weather {
 
     shared.uWind.value = 0.7 + this.snowAmount * 0.8 + Math.sin(time * 0.13) * 0.3;
 
-    if (this.audio) this.audio.update(this.rainAmount, this.snowAmount, time);
+    if (this.audio) this.audio.update(this.rainAmount, this.snowAmount, time, sun);
   }
 
   enableAudio() {
@@ -411,7 +411,7 @@ export class Weather {
   }
 }
 
-/** Rain hiss + gusting wind synthesised from filtered noise (no audio files). */
+/** Rain hiss, a breeze in gusts and occasional birdsong, all synthesised (no audio files). */
 class Ambience {
   constructor() {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -449,25 +449,116 @@ class Ambience {
     this.rainGain.gain.value = 0;
     src(1).connect(rainHp).connect(rainLp).connect(this.rainGain).connect(ctx.destination);
 
-    // wind: slow, resonant low band
+    // wind: a breeze in the crowns, not a roar. The old low band (220-600 Hz, always on at
+    // 0.12-0.37) read as a waterfall or pouring rain in calm, sunny weather (the user).
+    // Now a soft rustle band (900-2500 Hz) that's near silent between gusts.
     this.windFilter = ctx.createBiquadFilter();
     this.windFilter.type = 'bandpass';
-    this.windFilter.frequency.value = 300;
-    this.windFilter.Q.value = 1.4;
+    this.windFilter.frequency.value = 1200;
+    this.windFilter.Q.value = 0.7;
     this.windGain = ctx.createGain();
     this.windGain.gain.value = 0;
-    src(0.5).connect(this.windFilter).connect(this.windGain).connect(ctx.destination);
+    src(1).connect(this.windFilter).connect(this.windGain).connect(ctx.destination);
+
+    // birds: a little forest echo (feedback delay, damped) shared by every song
+    this.birdBus = ctx.createGain();
+    this.birdBus.gain.value = 1;
+    const echo = ctx.createDelay(1);
+    echo.delayTime.value = 0.23;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.28;
+    const damp = ctx.createBiquadFilter();
+    damp.type = 'lowpass';
+    damp.frequency.value = 2500;
+    this.birdBus.connect(ctx.destination);
+    this.birdBus.connect(echo).connect(damp).connect(fb).connect(echo);
+    damp.connect(ctx.destination);
+    this.nextBird = 2 + Math.random() * 4;
   }
 
   resume() {
     if (this.ctx.state !== 'running') this.ctx.resume();
   }
 
-  update(rain, snow, t) {
-    const now = this.ctx.currentTime;
-    const gust = 0.5 + 0.5 * Math.sin(t * 0.37) * Math.sin(t * 0.11 + 1.3);
-    this.rainGain.gain.setTargetAtTime(rain * 0.55, now, 0.3);
-    this.windGain.gain.setTargetAtTime(0.12 + (0.25 + snow * 0.9) * gust, now, 0.5);
-    this.windFilter.frequency.setTargetAtTime(220 + gust * 380 + snow * 150, now, 0.5);
+  update(rain, snow, t, sun = 0) {
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const gust = Math.max(0, Math.sin(t * 0.37) * Math.sin(t * 0.11 + 1.3)); // calm about half the time
+    this.rainGain.gain.setTargetAtTime(rain * 0.4, now, 0.3);
+    this.windGain.gain.setTargetAtTime(0.008 + (0.05 + snow * 0.25) * gust * gust, now, 0.8);
+    this.windFilter.frequency.setTargetAtTime(900 + gust * 1200 + snow * 300, now, 0.8);
+
+    // birdsong: often in sun breaks, now and then under cloud, never in rain or up in the snow
+    const birdy = (1 - rain) * (1 - snow) * (0.25 + 0.75 * sun);
+    if (now >= this.nextBird && ctx.state === 'running') {
+      if (birdy > 0.05 && Math.random() < birdy) this.sing(now);
+      this.nextBird = now + 3 + Math.random() * 9;
+    }
+  }
+
+  /** One synthesised song at a random spot around the listener (no audio files). */
+  sing(t0) {
+    const ctx = this.ctx;
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = Math.random() * 1.6 - 0.8;
+    const dist = 0.35 + Math.random() * 0.65; // nearer = louder
+    const out = ctx.createGain();
+    out.gain.value = 0.05 * dist;
+    out.connect(pan).connect(this.birdBus);
+    const note = (start, dur, f0, f1, vol = 1, buzz = 0) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f0, start);
+      o.frequency.exponentialRampToValueAtTime(f1, start + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(vol, start + Math.min(0.03, dur * 0.3));
+      g.gain.setTargetAtTime(0, start + dur * 0.7, dur * 0.12);
+      o.connect(g);
+      if (buzz > 0) {
+        // a fast tremolo makes the varied thrush's burry tone
+        const am = ctx.createGain();
+        am.gain.value = 1 - buzz;
+        const lfo = ctx.createOscillator();
+        lfo.frequency.value = 55 + Math.random() * 30;
+        const depth = ctx.createGain();
+        depth.gain.value = buzz;
+        lfo.connect(depth).connect(am.gain);
+        g.connect(am).connect(out);
+        lfo.start(start);
+        lfo.stop(start + dur + 0.3);
+      } else {
+        g.connect(out);
+      }
+      o.start(start);
+      o.stop(start + dur + 0.3);
+    };
+    const kind = Math.random();
+    let t = t0 + 0.05;
+    if (kind < 0.35) {
+      // varied thrush: one long, burry, slightly falling whistle (then maybe another at a new pitch)
+      const f = 2400 + Math.random() * 2000;
+      note(t, 1.4 + Math.random() * 0.6, f, f * 0.97, 0.9, 0.6);
+      if (Math.random() < 0.4) note(t + 2.6 + Math.random(), 1.5, f * (0.8 + Math.random() * 0.35), f * 0.78, 0.8, 0.6);
+    } else if (kind < 0.7) {
+      // Swainson's thrush: a run of short fluty notes spiralling upward
+      let f = 1600 + Math.random() * 500;
+      const n = 6 + Math.floor(Math.random() * 5);
+      for (let i = 0; i < n; i++) {
+        const d = 0.09 + Math.random() * 0.05;
+        note(t, d, f, f * (1.04 + Math.random() * 0.1), 0.7 + 0.3 * (i / n));
+        t += d + 0.03;
+        f *= 1.06 + Math.random() * 0.06;
+      }
+    } else {
+      // a wren-like tumbling trill: fast chips at shifting pitches
+      const n = 12 + Math.floor(Math.random() * 14);
+      let f = 4000 + Math.random() * 1500;
+      for (let i = 0; i < n; i++) {
+        if (i % 4 === 0) f = 3500 + Math.random() * 3000;
+        note(t, 0.035, f * 1.1, f * 0.85, 0.6);
+        t += 0.055 + Math.random() * 0.02;
+      }
+    }
   }
 }

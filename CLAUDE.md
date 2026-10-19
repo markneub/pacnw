@@ -444,7 +444,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   canopy (the canopy map, ×2.2), so under closed crowns only drips fall and clearings get the full shower; the canopy uniforms are
   attached after `UniformsUtils.merge`, which clones) and snow points wrapped in a box around the camera (plus sun-break **motes**: ~900 soft
   additive points within 7 m, lit by forward scattering × canopy sun visibility; `?off=motes`, bench row `motes`), with fog/light
-  lerped by altitude relative to the local snowline, and WebAudio noise ambience.
+  lerped by altitude relative to the local snowline, and WebAudio ambience (`Ambience`, all synthesised): rain hiss (×
+  rain amount), a **breeze** (noise band 900–2500 Hz, near silent between gusts: the old always-on 220–600 Hz wind band at
+  0.12–0.37 gain sounded like a waterfall or pouring rain in sunny weather, the user), and **birdsong** every 3–12 s with
+  probability (1 − rain)(1 − snow)(0.25 + 0.75 sun): varied thrush (long burry whistle: sine × 55–85 Hz tremolo), Swainson's
+  thrush (rising flute spiral), a wren-like trill; random pan and distance, a damped feedback-delay echo.
 - **Be opinionated (the user's call):** no user-facing options or toggles for how the game feels (head bob, sway, etc.).
   Pick the behaviour and ship it. (`?off=`/`?bench` switches are dev tools, not options.)
 - **Realism direction (agreed): stylized low-poly now ("A"). The long-term goal is near-photoreal *up
@@ -818,7 +822,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   1. (Done: landscape rework, see Map.)
   2. (Done: streams, see Streams.)
   3. (Done: sun glitter, see Sun glitter.)
-- Deferred by the user (they test with the sound off): sound — footsteps by surface, birdsong in sun breaks, drips after rain.
+- Sound: (done: quiet breeze, birdsong). Still open: footsteps by surface, drips after rain, creek/surf near water.
 
 ## Headless screenshots (how to see the scene)
 
