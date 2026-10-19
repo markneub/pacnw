@@ -503,7 +503,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   everything sky-side, saturated toward white. Now lit air counts fully only where the canopy at the sun-ray crossing is
   dense (`mix(0.15, 1, smoothstep(0.25, 0.85, c))`: a gap in thick canopy is a beam, open sky only a faint veil), the
   density fades above 6 m (e-fold 10 m: lit air among/above the crowns was a glow), beam edges ±0.04 (was 0.07), blur
-  0.5 texel (was 0.75), `volStrength` 6 (was 2) and composite × 0.7 (was 0.55); half-float; **temporally accumulated** (`resolve`: reproject the history by this pixel's depth with
+  0.5 texel (was 0.75), `volStrength` 6 (was 2) and composite × 0.7 (was 0.55). **Straight beams** (the user's phone:
+  "the beams look like they're bending"): the crown layers (7.8/18 m) are taken relative to the ground where the ray
+  crosses the crowns (one extra `uGround` read at the 12 m crossing), not the ground under the point, and the shift
+  no longer stops at the layer (`max(0, h − above)` made beams vertical above 7.8 m; ground-relative heights bent them
+  over slopes); half-float; **temporally accumulated** (`resolve`: reproject the history by this pixel's depth with
   last frame's view-proj, clamp to the new frame's 4-neighbour range, blend 15% new; reset on resize, a >4 m jump or post off),
   because per-frame jitter + camera-relative steps shimmered while walking (measured 3.8% → 1.2% change per frame); blurred,
   added as (1 − exp(−light × `volStrength` 2.0)) × SUN_COLOR × 0.55: it saturates, because linear accumulation blew an open

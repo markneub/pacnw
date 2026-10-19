@@ -151,10 +151,17 @@ export class Post {
       // is this point in the air sunlit? Same samples as the ground's dappled light
       // (materials.js sunVisibility), shifted by its height: the ray to the sun
       // crosses the crowns at the same spots as for the fleck it lands on.
+      float groundH(vec2 xz) { return texture2D(uGround, (xz - uGroundGrid.xy) / uGroundGrid.z).r; }
+      // A beam must be a straight line: the crown layers are taken relative to the ground where
+      // the ray crosses the crowns (about the same spot all along one beam), not the ground under
+      // the point, and the shift keeps going above the layers. (max(0, h - above) turned beams
+      // vertical above 7.8 m, and ground-relative heights bent them over slopes: the user saw
+      // beams bending.)
       float sunlit(vec3 p, float above) {
-        vec2 q = p.xz + SUN_XZ * max(0.0, 7.8 - above);
+        float h = p.y - groundH(p.xz + SUN_XZ * (12.0 - above));
+        vec2 q = p.xz + SUN_XZ * (7.8 - h);
         float c1 = canopy(q);
-        float c2 = canopy(p.xz + SUN_XZ * max(0.0, 18.0 - above));
+        float c2 = canopy(p.xz + SUN_XZ * (18.0 - h));
         float c = 1.0 - (1.0 - min(1.0, c1 * 2.4)) * (1.0 - min(1.0, c2 * 2.4));
         vec2 dp = q * 0.45 + vec2(uTime * 0.04, uTime * 0.025);
         float n = vNoise(dp) * 0.6 + vNoise(dp * 2.7 + 7.3) * 0.4;
