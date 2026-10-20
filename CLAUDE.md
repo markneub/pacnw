@@ -403,6 +403,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   **Phone bench** (`?bench=ocean&views=beach`, DPR 1.75, full clock): beach full frame 3.4 ms, ocean 0.5 ±0.3 ms (14 draws, 0.10M tris).
   Again after the headland/wreck/lighthouse (they're out of that view): full 3.2 ms, ocean 0.5 ±0.1. Bench row `coast`
   ("- wreck/lighthouse") and opt-in view `wreck` (`x=205&z=1012&yaw=2.41`) measure the new models.
+  Phone: wreck view full 3.7 ms (16 draws, 0.12M tris), wreck/lighthouse 0.2 ±0.4 (noise), ocean 0.8 ±0.1; beach 3.1 ms.
 - **Lake shore** (lake/pond shader in terrain.js `buildWater`; the user: edges "too straight and geometric"): the flat water
   cut the 5 m terrain triangles along straight lines. Now each water pixel reads the rendered ground under it
   (`shoreGround`, `uGroundH` with groundAt's triangulation) and the water ends where it is 3–30 cm deep by 3-octave value
