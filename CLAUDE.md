@@ -430,7 +430,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   0.7–0.9 fades the pull in; distance fades it over the last 0.8 m), the view's tilt eases to look at `pos` (rate 2/s ×
   strength; on touch it replaces `levelPitch`'s slope target). Tilting the view yourself (> 0.015 rad in a frame, not
   mouse jitter) lets go of that target until you leave its reach. Only pitch, never yaw. Used by the cabin note
-  (reach 2.4 m, inside the cabin, not while held); reading reach 1.9 → 2.1 m. Tested headless: level → note in ~1 s from
+  (reach 2.4 m, inside the cabin, not while held), **touch only** (the user: with a mouse you just look down); reading reach 1.9 → 2.1 m. Tested headless: level → note in ~1 s from
   1 m and 1.8 m, nothing facing away, look-up holds. View: `x=62.03&z=-927.4&yaw=2.61&pitch=-0.7&door=open`.
 - **Ocean** (`src/ocean.js`, `?off=water`, bench row `ocean` + opt-in view `beach`): one swell train (10 s, from 0.22 rad
   west of shore-normal). `bakeCoast` (load, ~0.1 s) marches each 4 m column in from the south edge in 2 m steps

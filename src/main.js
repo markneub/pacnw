@@ -254,7 +254,7 @@ async function init() {
     coast.collide(pos, r);
   });
 
-  player.addGaze(cabin.gaze);
+  if (touch) player.addGaze(cabin.gaze); // (phones only: with a mouse, looking down is easy, and the view moving by itself fights the hand)
 
   // Spawn in the southern valley looking north toward the mountains.
   // ?x=&z=&yaw=&pitch= override this (handy for screenshots / bookmarking).
