@@ -419,8 +419,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (within 1.9 m, looking at it: cos > 0.88), else the door. Held: it eases (0.7 s, cubic) along an arc (+12 cm) to face
   the camera at the distance where it fills ~95% of the view's height or 90% of its width (portrait phones), with a
   slight sway; `depthFunc` Always + renderOrder 20 while off the table (walls can't cut it; it still writes depth, or the
-  window glass blended over it). Walking > 2.6 m away lays it down. Hint: "Tap to read the note" / "Tap to put it down"
-  (fades after 2.5 s so it doesn't sit over the words). View: `x=62.03&z=-927.4&yaw=2.61&pitch=-0.7&door=open`.
+  window glass blended over it). Walking > 2.6 m away lays it down. Prompt "Read note" / "Put down note"
+  (fades after 2.5 s so it doesn't sit over the words). **The prompt** (`#hint`, the user: two-piece, minimal, familiar):
+  an input chip (a white "TAP" pill on touch, an "E" keycap on desktop; a click still works too) + the action in a
+  dark pill: "Open door", "Close door", "Read note", "Put down note". Style in style.css. View: `x=62.03&z=-927.4&yaw=2.61&pitch=-0.7&door=open`.
 - **Ocean** (`src/ocean.js`, `?off=water`, bench row `ocean` + opt-in view `beach`): one swell train (10 s, from 0.22 rad
   west of shore-normal). `bakeCoast` (load, ~0.1 s) marches each 4 m column in from the south edge in 2 m steps
   accumulating travel time with linear dispersion (Eckart), k_z = √(k² − k_x²) (Snell), into an RGBA32F texture: R travel

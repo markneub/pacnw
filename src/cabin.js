@@ -19,7 +19,7 @@ import { buildNote } from './note.js';
  *   outdoor sky light (more near the windows and the open door), direct sun only where a ray to
  *   the sun leaves through a window or the open doorway (sun patches on the floor), and the warm,
  *   flickering light of the stove and the lantern.
- * - The door opens and closes when you tap (touch), click or press E near it; a hint says so.
+ * - The door opens and closes when you tap (touch), click or press E near it; a prompt says so ([E] Open door).
  * - Smoke rises from the stovepipe: soft billboards animated entirely on the GPU.
  * - Walls, the door, the furniture and the porch posts are colliders; the floor and porch are
  *   walkable (terrain.js walk modifiers). No rain or snow falls under its roof (weather.js
@@ -340,10 +340,17 @@ export async function buildCabin(plan, assets) {
   let canRead = false;
 
   // ---- the door, the hint ----
+  // a two-part prompt: the input (Tap on phones, the E key on desktop) and what it does
   const hint = document.createElement('div');
   hint.id = 'hint';
-  document.body.appendChild(hint);
   const touch = document.body.classList.contains('touch');
+  const hintKey = document.createElement('span');
+  hintKey.className = touch ? 'hint-key tap' : 'hint-key';
+  hintKey.textContent = touch ? 'Tap' : 'E';
+  const hintLabel = document.createElement('span');
+  hintLabel.className = 'hint-label';
+  hint.append(hintKey, hintLabel);
+  document.body.appendChild(hint);
   let open = false;
   let angle = 0;
   let canToggle = false;
@@ -497,13 +504,10 @@ export async function buildCabin(plan, assets) {
     const near = Math.abs(pl.x - (L.door.x0 + DOOR_W / 2)) < 1.6 && Math.abs(pl.z - D) < 2.2;
     canToggle = near && (facing > 0.45 || dd < 0.9) && !(open && inSwing(pl.x, pl.z, 0.45)) && !canRead && !note.held;
     let text = null;
-    if (note.held) text = touch ? 'Tap to put it down' : 'Click or press E to put it down';
-    else if (canRead) text = touch ? 'Tap to read the note' : 'Click or press E to read the note';
-    else if (canToggle) {
-      const verb = open ? 'close' : 'open';
-      text = touch ? `Tap to ${verb} the door` : `Click or press E to ${verb} the door`;
-    }
-    if (text && hint.textContent !== text) hint.textContent = text;
+    if (note.held) text = 'Put down note';
+    else if (canRead) text = 'Read note';
+    else if (canToggle) text = open ? 'Close door' : 'Open door';
+    if (text && hintLabel.textContent !== text) hintLabel.textContent = text;
     hint.classList.toggle('show', !!text && !(note.held && !note.moving && hintShownFor > 2.5));
     hintShownFor = note.held ? hintShownFor + dt : 0;
   }

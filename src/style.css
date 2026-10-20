@@ -13,25 +13,60 @@ canvas {
   display: block;
 }
 
-/* "Tap to open the door" near the cabin door (cabin.js) */
+/* the interaction prompt near the cabin door / note (cabin.js): [E] Open door, [Tap] Read note */
 #hint {
   position: fixed;
   bottom: 22%;
   left: 50%;
-  transform: translateX(-50%);
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: rgba(20, 30, 25, 0.55);
+  transform: translate(-50%, 6px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px 5px 5px;
+  border-radius: 10px;
+  background: rgba(14, 20, 17, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   color: #fff;
   font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   opacity: 0;
-  transition: opacity 0.25s;
+  transition: opacity 0.2s, transform 0.2s;
   pointer-events: none;
 }
 
 #hint.show {
   opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* a keycap */
+.hint-key {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: #f2f4f1;
+  color: #18201c;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.22);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* on touch screens: a round "Tap" button instead of a key */
+.hint-key.tap {
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  box-shadow: none;
 }
 
 #overlay {
