@@ -336,7 +336,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `.cache/ph/`): `wreck` = Poly Haven *Dutch Ship Medium* with the sails deleted, the rigging bisected by a slanting plane
   (masts snapped at 7–10 m) and the bowsprit cut, loose rope bits dropped, and every yard and spar left up a mast removed
   (pieces above 6 m spanning > 1.2 m, any level crosswise spar above 4 m: the spritsail yard hung in the air under the cut
-  bowsprit, the user), small fittings above 7 m dropped, three ragged holes (faces inside jagged
+  bowsprit, the user), small fittings above 7 m dropped, and **all the rope** (the user: "wire things floating"): components long and thin
+  (surface area / bbox diagonal < 0.4 m) plus the blocks/deadeyes up the masts (< 1.2 m across, above 4.5 m), three ragged holes (faces inside jagged
   ellipsoids deleted) on the side that ends up on top, decimated to 23k tris; `barrel`/`crate` (Poly Haven flotsam);
   modelled `lighthouse` (stone plinth 1 m into the ground, tapered white tower 14 m, iron gallery with corbels and rail,
   glazed lantern room (`LhGlass`), a ribbed Fresnel lens (`LhLamp`), red cap + ventilator + rod, door +Y, windows; 2.2k

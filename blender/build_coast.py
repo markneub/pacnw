@@ -151,7 +151,14 @@ def build_wreck():
         high_spar = min(zs) > 6.0 and (max(xs) - min(xs) > 1.2 or max(ys) - min(ys) > 1.2)
         # and every yard (a long crosswise spar lying level), e.g. the spritsail yard that hung under the bowsprit
         high_spar = high_spar or (min(zs) > 4.0 and max(ys) - min(ys) > 2.5 and max(zs) - min(zs) < 0.6)
-        if (len(comp) < 12 and min(zs) > 4.0) or high_spar or (min(zs) > 7.0 and len(comp) < 70):
+        # all the rope (the user: "wire things floating ... they should all be gone by now"): long and thin, i.e.
+        # little surface for its length; and the blocks and deadeyes it hung from up the masts
+        faces = {f for c in comp for f in c.link_faces}
+        area = sum(f.calc_area() for f in faces)
+        size = math.dist((min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs)))
+        rope = size > 0.8 and area / size < 0.4
+        fitting = size < 1.2 and min(zs) > 4.5
+        if (len(comp) < 12 and min(zs) > 4.0) or high_spar or rope or fitting or (min(zs) > 7.0 and len(comp) < 70):
             drop.extend(comp)
     bmesh.ops.delete(bm, geom=drop, context="VERTS")
     bm.to_mesh(rig.data)
