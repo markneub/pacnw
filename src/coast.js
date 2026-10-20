@@ -386,11 +386,5 @@ export async function buildCoast(plan, assets) {
     lamp.emissiveIntensity = on * (2.2 + 4 * flash);
   }
 
-  /** The HUD's place name, if any. */
-  function zone(x, z) {
-    if (Math.hypot(x - plan.lighthouse.x, z - plan.lighthouse.z) < 45) return 'Lighthouse';
-    if (Math.hypot(x - plan.wreck.x, z - plan.wreck.z) < 30) return 'Shipwreck';
-    return null;
-  }
-  return { group, collide, update, zone, plan, lampPos };
+  return { group, collide, update, plan, lampPos };
 }

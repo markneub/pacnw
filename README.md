@@ -33,7 +33,7 @@ until the sources change). The dev server serves the bake once it has one for th
 page generates the world itself while it bakes in the background. `?world=live` always generates it in the page.
 
 Controls: click to start · **WASD** move · **Shift** run · mouse look ·
-**R** cycle weather (auto → rain → snow → clear) · **H** toggle HUD · **M** map · **E** or click to open a door or read the note · **Esc** release the mouse.
+**R** cycle weather (auto → rain → snow → clear) · **M** map · **E** or click to open a door or read the note · **Esc** release the mouse.
 
 Pushes to the default branch are built and published to GitHub Pages by
 `.github/workflows/pages.yml` (other branches just get a build check).
@@ -73,7 +73,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `blender/build_rocks.py` | Turns photogrammetry scans into game boulders with two detail levels → `public/models/rocks.glb` |
 | `src/terrain.js` | Height function (valley, lake basin, a staircase of snowy benches between ridged peaks, mountain rim, the beach and dunes in the south), vertex-coloured terrain with moss, rock and snow |
 | `src/vegetation.js` | Loads the GLB, scatters ~70k trees/rocks/ferns by altitude, slope and forest-density noise, chunked `InstancedMesh`es with distance culling, trunk collisions |
-| `src/trail.js` | Hiking trail: A* route over the terrain (grade-penalised, so it switchbacks), smoothed and draped as a dirt/packed-snow ribbon; distance queries keep vegetation off the tread; HUD guide to the next stop |
+| `src/trail.js` | Hiking trail: A* route over the terrain (grade-penalised, so it switchbacks), smoothed and draped as a dirt/packed-snow ribbon; distance queries keep vegetation off the tread |
 | `src/materials.js` | Shader patches: wind sway for foliage, moss/snow cover on rocks and logs |
 | `src/atmosphere.js` | Height fog (pools in valleys), overcast sky dome, environment map for reflections, drifting mist |
 | `src/detail.js` | Near pools: full-detail trees and ferns around the walker, refilled as you move |

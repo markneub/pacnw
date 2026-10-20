@@ -12,17 +12,6 @@ canvas {
   display: block;
 }
 
-#hud {
-  position: fixed;
-  left: 16px;
-  bottom: 14px;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  opacity: 0.8;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
-  pointer-events: none;
-}
-
 #toast {
   position: fixed;
   top: 18px;
@@ -152,21 +141,7 @@ canvas {
   touch-action: none;
 }
 
-body.touch #hud {
-  left: 50%;
-  right: auto;
-  top: calc(10px + env(safe-area-inset-top));
-  bottom: auto;
-  transform: translateX(-50%);
-  max-width: calc(100vw - 32px);
-  text-align: center;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#perf {
+body.touch #perf {
   position: fixed;
   right: 8px;
   top: calc(8px + env(safe-area-inset-top));

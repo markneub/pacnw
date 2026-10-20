@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain, sandMap, sandAt, streams } from './terrain.js';
+import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain, sandMap, streams } from './terrain.js';
 import { drawMap, PaperMap } from './map.js';
 import { onLoadProgress, loadTick, loadTickNow, loadYielded, longestStall } from './loadprogress.js';
 import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors, bakeShrubImpostors } from './vegetation.js';
@@ -7,7 +7,7 @@ import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
 import { shared } from './materials.js';
-import { SNOWLINE, SPAWN, VIEW_DIST, WORLD_SIZE, CAVE } from './config.js';
+import { SPAWN, VIEW_DIST, WORLD_SIZE, CAVE } from './config.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround, setBakedHorizonAO } from './bake.js';
@@ -83,7 +83,6 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 
 const overlay = document.getElementById('overlay');
 const status = document.getElementById('status');
-const hud = document.getElementById('hud');
 
 // ?perf also logs how long each loading step takes, under the build's commit (shown from the
 // start of loading, so you can tell whether a new version has arrived)
@@ -371,12 +370,7 @@ async function init() {
     if (params.has('bench')) startBench();
   }
 
-  let showHud = true;
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyH') {
-      showHud = !showHud;
-      hud.style.display = showHud ? '' : 'none';
-    }
     if (e.code === 'KeyR') cycleWeather();
   });
 
@@ -561,7 +555,6 @@ async function init() {
   };
 
   const clock = new THREE.Clock();
-  const lookDir = new THREE.Vector3();
   let visTimer = 0;
   veg.updateVisibility(camera.position);
 
@@ -576,7 +569,6 @@ async function init() {
     });
   const pacer = new FramePacer(renderer);
   if (perf) perf.pacer = pacer;
-  let hudTimer = 0;
 
   let frames = 0;
   const tick = () => {
@@ -609,26 +601,6 @@ async function init() {
     if (visTimer <= 0) {
       veg.updateVisibility(detailCam.position);
       visTimer = 0.25;
-    }
-
-    hudTimer -= dt;
-    if (showHud && hudTimer <= 0) {
-      hudTimer = 0.25; // DOM text updates are cheap at 4 Hz, wasteful at 60
-      const alt = Math.round(player.pos.y);
-      const sand = sandAt(player.pos.x, player.pos.z) > 0.5;
-      const zone = cave.state.inside ? 'Cave' : cabin.contains(player.pos.x, player.pos.z) ? 'Mountain cabin'
-        : coast.zone(player.pos.x, player.pos.z) ?? (sand ? (alt < 4 ? 'Ocean beach' : 'Dunes') : alt > SNOWLINE + 10 ? 'Subalpine snowfield'
-          : alt > SNOWLINE - 30 ? 'Upper slopes'
-            : alt < 8 ? 'Lakeshore' : 'Temperate rainforest');
-      let text = `${zone} · ${alt} m`;
-      camera.getWorldDirection(lookDir);
-      const g = trail.guide(player.pos.x, player.pos.z, lookDir.x, lookDir.z);
-      if (g) {
-        text += g.next
-          ? ` · Trail: ${g.next.label} ${g.metres >= 950 ? `${(g.metres / 1000).toFixed(1)} km` : `${Math.round(g.metres / 10) * 10} m`}`
-          : ' · On the trail';
-      }
-      hud.textContent = text;
     }
 
     cullOutdoors(hideOutdoors);

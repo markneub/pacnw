@@ -324,7 +324,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   skipped where the sand rises into it or falls away, on rock or near the trail (~130). Trail stops now trailhead → **Ocean
   beach** (−60, 942) → along the berm → **Dune trail** (300, 948) → marsh → lake → snowfield → basin (3.95 km); on sand the
   A* grade cost is 60% lower so the path goes up the dunes like the photo, not in switchbacks; trail grid MAX_Z 1000. Signs
-  list the 5 nearest stops (`MAX_ROWS`). The HUD says "Ocean beach"/"Dunes". Views (`weather=sun`): berm
+  list the 5 nearest stops (`MAX_ROWS`). Views (`weather=sun`): berm
   `x=50&z=962&yaw=3.14&pitch=-0.08`, in the swash `x=50&z=985&yaw=2.9&pitch=-0.12`, dunes `x=80&z=880&yaw=3.0&pitch=-0.15`.
 - **Headland, lighthouse, wreck** (the user: "something cool on the beach ... a shipwreck ... a lighthouse? Both? Go
   wild"). Terrain (terrain.js `seaRocks`, in `baseHeight` after the hillock): `HEADLAND` (540, 1040), an ellipse 72 × 112 m
@@ -357,7 +357,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   disc at the lamp flashes as a beam sweeps past the viewer (pow(align, 60)). Colliders: the tower (circle), house and
   hull (rotated rects). **Beyond the far plane** (420 m on phones; the beach is ~500 m away: the tower was clipped and the
   beams hung in the sky, the user) `pullIn` draws the lighthouse, house, beams and glare pulled in along the view ray to
-  0.92 × far and scaled by the same factor: the same size and place on screen. HUD: "Lighthouse" / "Shipwreck". Views: wreck `x=205&z=1012&yaw=2.41&weather=sun`, headland from
+  0.92 × far and scaled by the same factor: the same size and place on screen. Views: wreck `x=205&z=1012&yaw=2.41&weather=sun`, headland from
   the beach `x=430&z=1005&yaw=-1.95&pitch=0.12` (add `&night` for the beams), lighthouse `x=545&z=1080&yaw=-2.6&pitch=0.2`.
 - **Paper map** (`src/map.js`, the user: a translucent map icon, tap → "a cool, fast animation of a map unfolding",
   real paper, lay of the land, no writing but a title, where you are + which way you face, compass, scale, maybe
@@ -457,7 +457,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (trees/ferns → wind sway, rocks/logs/stumps → moss/snow cover) from `src/materials.js`.
 - `src/trail.js`: A* over a 6 m grid between `TRAIL_STOPS` (trailhead → lake → ridge at (120,−510),
   the only gentle snowy spot). The grade penalty makes it switchback. Chaikin smoothing, then resampled
-  every 1.5 m. `distanceTo` keeps scatter off the tread; `guide()` feeds the HUD. Furniture is placed in
+  every 1.5 m. `distanceTo` keeps scatter off the tread; `guide()` used to feed the HUD (the HUD is gone: the user asked to drop it). Furniture is placed in
   `vegetation.js` `placeTrailFurniture`. Mesh winding must face up (+Y) or it gets back-face culled.
 - The trail is a **bench cut**: `benchHeight` (registered via `setGroundModifier`) levels the ground across
   the tread and blends cut/fill banks back to natural ground by `BANK_OUTER`, with the nearest leg winning
@@ -706,7 +706,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   transparent reflective material. **Door:** tap (touch `onTap`: a touch that neither walked nor looked), click while
   playing or E, when `#hint` shows (within ~2 m of the door, looking at it; not closing on the player inside its swing).
   Eases over ~0.5 s to 105° inward; a segment collider follows it. Walls/furniture/posts are rect/circle colliders in the
-  cabin frame; floor, porch and step are walk modifiers (`setWalkModifier` now keeps a list). HUD: "Mountain cabin".
+  cabin frame; floor, porch and step are walk modifiers (`setWalkModifier` now keeps a list).
   **Smoke:** 30 instanced soft puffs on the GPU (12 s life, rise and drift, lumpy edges), colours in *linear* (the shader
   writes untone-mapped into the sRGB target: "grey" values came out nearly white and vanished against snow and cloud),
   darker fresh out of the pipe, lighter in sun. **No rain/snow under the roof:** `shared.uShelter*` (weather.js drops
@@ -799,8 +799,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   end shows the night forest (dim), by night the day (bright): no "prick of white light" any more.
   **Walking** (`cave.state.inside`, set crossing the doorway on foot): floor via `setWalkModifier`, kept between the
   walls (`collide`), trees overhead don't collide; outside, the raised patch is a collider. Deep inside with
-  the mouth out of the frustum, everything outside is hidden (`cullOutdoors`; shown again for the far view). HUD
-  "Cave". Audio (weather.js `Ambience`): outdoors fades inside (depth from the nearer end), a reverb (synthesised
+  the mouth out of the frustum, everything outside is hidden (`cullOutdoors`; shown again for the far view).
+  Audio (weather.js `Ambience`): outdoors fades inside (depth from the nearer end), a reverb (synthesised
   impulse), room tone, drips, torch crackle near torches; crickets at night (no birds).
   Budget (container `still`, all passes counted): phone spawn 188 → 196 draws; in the cave 30 m in 37 draws / 0.17M
   (the scene 18, + shadows + the far view, amortised), 115 m in 26 / 0.13M; at the mouth looking in 201 / 1.17M
@@ -952,6 +952,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   instance tints and `shadeGround` (terrain + corridor), and `horizonAO` from the terrain grid.
   `shared.uWet` (from `weather.js`) drives wet darkening/gloss (`wetChunks`), trail puddles and lake rain
   rings.
+- **No HUD** (the user: drop the place/altitude line; the H key went with it).
 - Loading screen: one fixed-size box (title + a single slot holding the bar, then "Tap/Click to start"). Keep
   it that simple, with no instructions or flavour text and nothing that changes the box mid-load. A one-line
   controls hint toasts once on start. `progress(to, expectedMs)` in `main.js` animates the bar with a
