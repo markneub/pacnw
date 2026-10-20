@@ -783,7 +783,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   mouth after the swap. The far opening (the last ring, filled) shows a render of the scene from `END_TO_MOUTH` ×
   the camera, under `weather.atOtherTime()` (capture/restore of everything `update()`/`setNight()` set), cropped to the
   opening's screen rect (`setViewOffset`), into an sRGB target (scale 1 desktop / 0.75 phone); it's projected by world
-  position with the view-proj it was rendered for (`uVP`), so a small (far) one is refreshed only every 6th frame.
+  position with the view-proj it was rendered for (`uVP`), so a small (far) one is refreshed only every 6th frame. Its camera's **near plane is the mouth** (an oblique
+  projection, `obliqueNear` in main.js, as three's Reflector): from deep in the tunnel it also drew the tunnel between it
+  and the mouth, which then showed in the opening as a dark band sliding across as you walked (the user).
   From outside it's rendered only when the line to the far end passes through the mouth (`canSeeFarEnd`). At s >
   L − 8 (`turnAt`) the player is moved by the same turn (yaw + π, velocity reversed) and `setNight(!night)`; deep in
   the tunnel with only the far end in view, the near trees, grass and chunk visibility follow the far view's camera.

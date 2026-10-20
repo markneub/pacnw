@@ -494,6 +494,29 @@ async function init() {
   const lightThere = new THREE.Color();
   let portalAge = 1e9;
   let portalShown = false;
+  // The far view's near plane is the mouth itself (an oblique near plane, as three's Reflector does): from
+  // deep in the tunnel its camera also drew the tunnel between it and the mouth, which then slid across the
+  // opening as you walked (the user: "ground or rock passing across the exit").
+  const mouthPlane = new THREE.Plane();
+  const clip4 = new THREE.Vector4();
+  const q4 = new THREE.Vector4();
+  const obliqueNear = (cam) => {
+    const o = shared.uCaveO.value;
+    const d = shared.uCaveDir.value;
+    // keep what's out past the mouth (s < 0.2): the normal points out of the cave
+    mouthPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(-d.x, 0, -d.y), new THREE.Vector3(o.x + d.x * 0.2, o.y, o.z + d.y * 0.2));
+    mouthPlane.applyMatrix4(cam.matrixWorldInverse);
+    if (mouthPlane.constant >= 0) return; // (the camera is already outside it: nothing to cut)
+    clip4.set(mouthPlane.normal.x, mouthPlane.normal.y, mouthPlane.normal.z, mouthPlane.constant);
+    const e = cam.projectionMatrix.elements;
+    q4.set((Math.sign(clip4.x) + e[8]) / e[0], (Math.sign(clip4.y) + e[9]) / e[5], -1, (1 + e[10]) / e[14]);
+    clip4.multiplyScalar(2 / clip4.dot(q4));
+    e[2] = clip4.x;
+    e[6] = clip4.y;
+    e[10] = clip4.z + 1;
+    e[14] = clip4.w;
+    cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+  };
   const renderPortal = (on, t) => {
     const pu = cave.portal.uniforms;
     cave.setDaylight(daylight(lightHere), portalShown ? null : lightHere);
@@ -518,6 +541,7 @@ async function init() {
     portalRT.viewport.set(0, 0, vw, vh);
     portalRT.scissor.set(0, 0, vw, vh);
     portalCam.updateProjectionMatrix();
+    obliqueNear(portalCam);
     if (hiddenOutdoors) for (const o of hiddenOutdoors) o.visible = true;
     cave.portal.cap.visible = false;
     weather.atOtherTime(t, portalCam, () => {
