@@ -34,7 +34,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 - **After pushing a change, tell the user its short git sha** (`git rev-parse --short HEAD`). The build embeds it
   (`__BUILD_SHA__`, vite.config.js `define`: `git rev-parse --short HEAD`, else `GITHUB_SHA`): `?perf` shows
   `build <sha>` on the start screen from the start of loading and at the end of the overlay's third line, so the user
-  can tell whether the new version has loaded yet.
+  can tell whether the new version has loaded yet. Line 4 of the overlay is where the player stands as URL parameters
+  (`x=..&z=..&yaw=..&pitch=..`): ask for a `?perf` screenshot to get a view's exact spot.
 - Pages source is set to "GitHub Actions". The proxy blocks enabling or configuring Pages via `gh api`,
   and github.io isn't reachable from the container, so check deploys with `gh run watch <id> --repo markneub/pacnw`.
 

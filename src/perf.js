@@ -13,6 +13,9 @@
  *    but on iOS that wait reads 2-4x the true cost (measured with ?bench), so
  *    treat it as an upper bound.
  *
+ * Line 4 is the player's spot as URL parameters (x, z, yaw, pitch), so a screenshot of a view says
+ * where it was taken.
+ *
  * Budget: 16.7 ms at 60 Hz. Leave a few ms for the browser's own compositing.
  */
 const WINDOW_MS = 2000;
@@ -73,6 +76,7 @@ export class PerfOverlay {
     this.sync = !this.ext && mode === 'sync';
     this.pixel = new Uint8Array(4);
     this.pacer = null; // set by main.js
+    this.player = null; // set by main.js: line 4 is where you stand, as URL parameters
     this.drawnSincePaint = 0;
   }
 
@@ -158,6 +162,8 @@ export class PerfOverlay {
       wait = ` · gpu-bound ${Math.round((100 * skipped) / Math.max(1, skipped + drawn))}%`;
     }
     this.drawnSincePaint = 0;
-    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris · dpr ${this.renderer.getPixelRatio()}${wait} · ${__BUILD_SHA__}`;
+    const p = this.player;
+    const pos = p ? `\nx=${p.pos.x.toFixed(1)}&z=${p.pos.z.toFixed(1)}&yaw=${(Math.atan2(Math.sin(p.yaw), Math.cos(p.yaw))).toFixed(2)}&pitch=${p.pitch.toFixed(2)}` : '';
+    this.el.textContent = `${text}\n${calls} draws · ${(triangles / 1e6).toFixed(2)}M tris · dpr ${this.renderer.getPixelRatio()}${wait} · ${__BUILD_SHA__}${pos}`;
   }
 }

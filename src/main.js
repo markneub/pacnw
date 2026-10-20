@@ -568,7 +568,10 @@ async function init() {
         : () => Math.min(renderer.getPixelRatio(), Math.max(0.5, Math.min(1, Math.sqrt(2.1e6 / (window.innerWidth * window.innerHeight))))),
     });
   const pacer = new FramePacer(renderer);
-  if (perf) perf.pacer = pacer;
+  if (perf) {
+    perf.pacer = pacer;
+    perf.player = player;
+  }
 
   let frames = 0;
   const tick = () => {
