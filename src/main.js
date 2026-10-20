@@ -571,6 +571,9 @@ async function init() {
     const t = clock.elapsedTime;
     shared.uTime.value = t;
 
+    // crouch a little in the cave, from a few metres in (either end: its far end is its mouth again)
+    const caveDepth = Math.min(cave.state.s, CAVE.length - cave.state.s);
+    player.crouchTarget = cave.state.inside ? THREE.MathUtils.smoothstep(caveDepth, 0.5, 3) : 0;
     player.update(dt);
     cabin.update(dt, t, camera, player, scene);
     paperMap.update(player.pos.x, player.pos.z, player.yaw);

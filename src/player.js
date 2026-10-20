@@ -36,6 +36,9 @@ export class Player {
     // themselves when you're close and facing them (addGaze). Looking up or down yourself lets go of one until you
     // walk away from it.
     this.gaze = [];
+    // a crouch (0..1): eye level only, eased; set from outside (main.js: in the cave)
+    this.crouchTarget = 0;
+    this.crouch = 0;
     this.pitchInput = 0; // how far the player tilted the view themselves this frame (rad)
 
     camera.rotation.order = 'YXZ';
@@ -72,7 +75,7 @@ export class Player {
   attend() {
     const fx = -Math.sin(this.yaw);
     const fz = -Math.cos(this.yaw);
-    const eye = this.pos.y + PLAYER.eyeHeight;
+    const eye = this.pos.y + this.eye();
     this.gazeS = 0;
     for (const t of this.gaze) {
       const dx = t.pos.x - this.pos.x;
@@ -202,7 +205,13 @@ export class Player {
     if (this.onGround) this.bob += (dt * moving * 2 * Math.PI) / (1 + 0.27 * moving);
     const want = this.onGround ? Math.min(1, moving / PLAYER.walkSpeed) * (1 + 0.5 * Math.min(1, Math.max(0, moving - PLAYER.walkSpeed) / 6)) : 0;
     this.bobAmp += (want - this.bobAmp) * Math.min(1, dt * 6);
+    this.crouch += (this.crouchTarget - this.crouch) * (1 - Math.exp(-dt * 5));
     this.syncCamera();
+  }
+
+  /** Eye height above the feet (lower crouched: 1.7 → 1.4 m). */
+  eye() {
+    return PLAYER.eyeHeight - 0.3 * this.crouch;
   }
 
   syncCamera() {
@@ -212,7 +221,7 @@ export class Player {
     const sway = Math.sin(stride) * 0.012 * a;
     this.camera.position.set(
       this.pos.x + Math.cos(this.yaw) * sway,
-      this.pos.y + PLAYER.eyeHeight + dip,
+      this.pos.y + this.eye() + dip,
       this.pos.z - Math.sin(this.yaw) * sway,
     );
     this.camera.rotation.set(this.pitch, this.yaw, Math.sin(stride) * 0.004 * a);

@@ -847,6 +847,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   **Walking** (`cave.state.inside`, set crossing the doorway on foot): floor via `setWalkModifier`, kept between the
   walls (`collide`), trees overhead don't collide; outside, the raised patch is a collider. Deep inside with
   the mouth out of the frustum, everything outside is hidden (`cullOutdoors`; shown again for the far view).
+  **Crouch** (the user: crouch a little in the cave, eye level only): `player.crouchTarget` (main.js, before
+  `player.update`) = smoothstep(0.5, 3, min(s, L − s)) while inside, so either end (the far end is the mouth again, and
+  the turn is seamless); `player.crouch` eases at 5/s; `player.eye()` = 1.7 − 0.3 × crouch (camera, gaze). No pitch/yaw.
   Audio (weather.js `Ambience`): outdoors fades inside (depth from the nearer end), a reverb (synthesised
   impulse), room tone, drips, torch crackle near torches; crickets at night (no birds).
   Budget (container `still`, all passes counted): phone spawn 188 → 196 draws; in the cave 30 m in 37 draws / 0.17M
