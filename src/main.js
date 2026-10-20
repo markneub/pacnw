@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain, sandMap, streams } from './terrain.js';
-import { drawMap, PaperMap } from './map.js';
+import { MapSheet, PaperMap } from './map.js';
 import { onLoadProgress, loadTick, loadTickNow, loadYielded, longestStall } from './loadprogress.js';
-import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors, bakeShrubImpostors } from './vegetation.js';
+import { loadPrototypes, prepareVegetation, buildVegetation, applyRockTextures, bakeTreeImpostors, bakeShrubImpostors } from './vegetation.js';
 import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
@@ -101,25 +101,21 @@ function step(label) {
 }
 
 /**
- * Loading bar. Each loading step has a fixed share of the bar, and the long loops inside the
- * steps report how far along they are (loadprogress.js loadTick), yielding every ~40 ms so the
- * bar can paint. Each report glides the bar to the new spot over 0.2 s and then lets it creep a
- * little further toward the step's end, so even a block that can't report keeps it moving.
- *
- * The bar is a compositor animation (it keeps running while JS is busy). Each move starts from
- * where the bar is now by our own timeline (a CSS transition would start from the main thread's
- * stale value and jump backwards), and it never goes back.
+ * Loading progress. Each loading step has a fixed share, and the long loops inside the steps
+ * report how far along they are (loadprogress.js loadTick), yielding every ~40 ms so the page can
+ * paint. Each report glides the progress to the new spot over 0.2 s and then lets it creep a little
+ * further toward the step's end, so even a block that can't report keeps it moving. It never goes
+ * back. The loading screen is the paper map being drawn (map.js MapSheet), which follows it.
  */
-const LOAD_SHARE = { terrain: 0.08, trail: 0.1, impostors: 0.15, vegetation: 0.33, shading: 0.06, map: 0.02, textures: 0.01, warmup: 0.22 };
+const LOAD_SHARE = { terrain: 0.08, trail: 0.1, map: 0.04, impostors: 0.15, vegetation: 0.31, shading: 0.06, textures: 0.01, warmup: 0.22 };
 const loadSpan = {}; // [start, end] of each step's share (the last 3% is the finish)
 {
   let acc = 0;
   for (const [k, w] of Object.entries(LOAD_SHARE)) loadSpan[k] = [acc, (acc += w)];
 }
-const fill = document.getElementById('progress-fill');
-const bar = { t0: 0, ms: 1, pts: [[0, 0]] }; // the running animation: [offset, scaleX] points
+const bar = { t0: 0, ms: 1, pts: [[0, 0]] }; // the running timeline: [offset, progress] points
 let span = [0, 0];
-// where the bar is now, from our own copy of the running animation
+// where the progress is now
 function barNow() {
   const u = Math.min(1, (performance.now() - bar.t0) / bar.ms);
   const { pts } = bar;
@@ -130,8 +126,6 @@ function barNow() {
 }
 function animateBar(ms, pts) {
   Object.assign(bar, { t0: performance.now(), ms, pts });
-  fill.getAnimations().forEach((a) => a.cancel());
-  return fill.animate(pts.map(([offset, x]) => ({ offset, transform: `scaleX(${x})` })), { duration: ms, easing: 'linear', fill: 'forwards' });
 }
 /** Move the bar to f (0..1) of the current step: glide there, then creep on a little. */
 function barTo(f) {
@@ -141,17 +135,11 @@ function barTo(f) {
   animateBar(4200, [[0, from], [200 / 4200, to], [1, creep]]);
 }
 onLoadProgress(barTo);
-/** Start the named loading step, or with null fill the rest of the bar (resolves when shown). */
+/** Start the named loading step. */
 function progress(name) {
   loadYielded();
-  if (!name) {
-    const a = animateBar(350, [[0, barNow()], [1, 1]]);
-    // (don't wait on a busy compositor: the start prompt comes after at most 0.5 s)
-    return Promise.race([a.finished.catch(() => {}), new Promise((r) => setTimeout(r, 500))]);
-  }
   span = loadSpan[name].map((v) => v * 0.97);
   barTo(0);
-  return null;
 }
 
 async function init() {
@@ -168,6 +156,11 @@ async function init() {
     : Promise.all([loadGroundDetail(renderer, { lowPower }), loadSurfaceDetail(renderer, { lowPower })]);
   // scanned boulders' photos and baked normals (glTF UVs: no flip)
   const rockTexReady = loadTextureSet(renderer, 'rocks', { lowPower, flipY: false });
+  // the loading screen: the paper map unfolds, and is drawn as the world is built
+  const sheet = await MapSheet.create(SPAWN);
+  const paperMap = new PaperMap(sheet.canvas);
+  paperMap.loading(sheet.view);
+  sheet.run(barNow);
   progress('terrain');
   await nextFrame();
   const world = await worldReady;
@@ -187,6 +180,7 @@ async function init() {
   }
   scene.add(terrain);
   scene.add(buildWater());
+  sheet.setTerrain(streams());
   step('terrain');
   await loadTickNow(1);
 
@@ -196,23 +190,29 @@ async function init() {
   await loadTickNow(0.75);
   scene.add(trail.mesh);
   if (!off.has('water')) scene.add(buildStreamWater(trail)); // (the rocks in it skip the footbridges)
+  const cabinPlan = planCabin(trail); // (the scatter keeps clear of it, and of the cave's mouth)
+  const cavePlan = planCave();
+  const coastPlan = planCoast(); // (the lighthouse, its house and the wreck)
+  sheet.setTrail(trail, { cave: { x: CAVE.x, z: CAVE.z }, cabin: cabinPlan, lighthouse: coastPlan.lighthouse, wreck: coastPlan.wreck });
   step('trail');
 
-  progress('impostors'); // models + impostor bake
+  // the placements (less the clear zones) and their canopy, which the map's land needs
+  progress('map');
   const protos = await protosReady;
-  await loadTickNow(0.1);
+  const exclude = (x, z, margin, tree) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin) || coastPlan.blocked(x, z, margin, tree);
+  const prepared = await prepareVegetation(protos, trail, { exclude, placements: world?.placements });
+  await sheet.setLand(prepared.canopyAt, (f) => loadTick(f));
+  step('map');
+
+  progress('impostors'); // the impostor bake
   // far trees as billboards (?farTrees=lod: the old 3D far models, for comparison)
   const impostors = params.get('farTrees') === 'lod' ? null : await bakeTreeImpostors(renderer, protos, { lowPower });
   // and the ferns and salal, as a far tier past where the full-detail ones dissolve
   const shrubImpostors = await bakeShrubImpostors(renderer, protos, { lowPower });
   await loadTickNow(1);
   step('tree impostors');
-  progress('vegetation'); // the scatter and the instanced chunks
-  const cabinPlan = planCabin(trail); // (the scatter keeps clear of it, and of the cave's mouth)
-  const cavePlan = planCave();
-  const coastPlan = planCoast(); // (the lighthouse, its house and the wreck)
-  const exclude = (x, z, margin, tree) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin) || coastPlan.blocked(x, z, margin, tree);
-  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, exclude, placements: world?.placements });
+  progress('vegetation'); // the instanced chunks
+  const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, prepared });
   scene.add(veg.group);
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
   step('vegetation');
@@ -301,21 +301,6 @@ async function init() {
     if (e.button === 0 && document.pointerLockElement === renderer.domElement) cabin.interact(player);
   });
 
-  // the paper map (drawn once now; the corner icon or M unfolds it)
-  progress('map');
-  const mapCanvas = await drawMap({
-    canopyAt: veg.canopyAt,
-    streams: streams(),
-    trail,
-    marks: { cave: { x: CAVE.x, z: CAVE.z }, cabin: cabinPlan, lighthouse: coastPlan.lighthouse, wreck: coastPlan.wreck },
-    tick: (f) => loadTick(f),
-  });
-  const paperMap = new PaperMap(mapCanvas);
-  document.addEventListener('keydown', (e) => { if (e.code === 'KeyM') paperMap.toggle(); });
-  document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement) paperMap.close(); });
-  if (params.has('map')) paperMap.open();
-  step('map');
-
   progress('textures');
   const [ground, surface] = await detailReady; // before warm-up so their shaders compile now
   const rockTex = await rockTexReady;
@@ -334,9 +319,20 @@ async function init() {
     loadTimes.textContent = `build ${__BUILD_SHA__}\n${line.split(' · ').join('\n')}`;
   }
 
-  await progress(null); // fill the rest where it can be seen, then offer the start
+  // the map's last strokes, then the arrow where you stand and the start prompt
+  animateBar(1, [[0, 1], [1, 1]]);
+  await sheet.finish();
+  await paperMap.loaded(player.pos.x, player.pos.z, player.yaw);
   status.textContent = touch ? 'Tap to start' : 'Click to start';
   overlay.classList.add('ready');
+  // starting folds the map away into its corner icon (?map: it stays open); from then on the icon
+  // or M unfolds it
+  const begin = () => {
+    overlay.classList.remove('loading');
+    if (!params.has('map')) paperMap.close();
+    document.addEventListener('keydown', (e) => { if (e.code === 'KeyM') paperMap.toggle(); });
+    document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement) paperMap.close(); });
+  };
   let started = false;
   // ?bench: once started, pause play and run the benchmark (see bench.js)
   const startBench = () => setTimeout(async () => {
@@ -355,6 +351,7 @@ async function init() {
     else player.lock();
     if (!started) {
       started = true;
+      begin();
       if (params.has('bench')) startBench();
       // the start box has no instructions, so give a brief hint once
       flash(touch ? 'Slide up to walk · sideways to turn · hold, then drag to look' : 'WASD to walk · Shift to run · mouse to look', 4000);
@@ -366,6 +363,8 @@ async function init() {
     if (!locked) status.textContent = 'Click to resume';
   });
   if (params.has('autostart')) {
+    started = true;
+    begin();
     overlay.classList.add('hidden');
     if (params.has('bench')) startBench();
   }

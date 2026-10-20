@@ -379,7 +379,23 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (rotateX 178° → 0, slight overshoot); shade layers darken panels while they turn. Tapping anywhere folds it back into
   the icon (the same animations reversed, 0.65 s). The marker (an SVG arrow with a pulse, rotate(−yaw)) appears once
   it's open and follows the player each frame. The world keeps running behind it. `#overlay` is z-index 8 so the
-  start/pause screen covers the map. Dev: `?map` opens it at start. Test trick: a page with just `PaperMap` on a saved
+  pause screen covers the map. Dev: `?map` keeps it open after starting.
+  **The loading screen is the map being drawn** (the user picked it from 5 ideas): `MapSheet` (map.js) unfolds blank at
+  once (`PaperMap.loading(sheet.view)`, dark backdrop `#map-view.loading::before`) and is inked as loading progresses:
+  each part has a window of the load progress (`barNow()` in main.js, the old bar's timeline; the bar itself is gone)
+  and draws incrementally once its data exists, catching up over ≥ `dur` s: neat line + ticks (0–0.05), title wiped in,
+  compass, scale bar; sea lines and contours level by level, low to high (0.08–0.3, `setTerrain`); the land as soft
+  dabs of the finished raster spreading out from the spawn (0.2–0.62), creeks from their sources, tree symbols in the
+  same spreading order (`setLand(canopyAt)`); the red trail from the trailhead (0.7–0.93, `setTrail`) and the pictures
+  as it nears them. While drawing, the layers are stacked canvases blended by the compositor (`mix-blend-mode`
+  multiply for the aged paper, screen for the crease highlights), so a frame only adds strokes; `compose()` makes the
+  finished `canvas` once at the end (redrawing it all each frame doubled the map step and slowed the load). For the
+  land early, `prepareVegetation` (the clear-zone filter + `bakeCanopy`) runs before the impostor bake, and the
+  cabin/cave/coast plans right after the trail (load share `map` 0.04, between trail and impostors). When done:
+  the arrow at the spawn and "Tap to start" (IM Fell, `#overlay.loading`) under the sheet; starting folds it into the
+  icon (`begin()` in main.js; `?autostart` too). Container load: no slower (ready 70 s vs 79–84 s for the old build the
+  same day). Test trick: compose `.map-live`'s canvases with their blend modes into one canvas and `toDataURL` it during
+  the load; for the ready/fold screens stop the loop (`__pacnw.renderer.setAnimationLoop(null)`) and `page.screenshot()`. Test trick: a page with just `PaperMap` on a saved
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).
 - **The note in the cabin** (`src/note.js`, the user: a paper with an ~8-line poem on the hut's desk, tap to bring it
   close and read, tap again to put it down, no hands). `POEM` holds the lines (**filler**: the user will supply the
@@ -956,11 +972,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `shared.uWet` (from `weather.js`) drives wet darkening/gloss (`wetChunks`), trail puddles and lake rain
   rings.
 - **No HUD** (the user: drop the place/altitude line; the H key went with it).
-- Loading screen: one fixed-size box (title + a single slot holding the bar, then "Tap/Click to start"). Keep
-  it that simple, with no instructions or flavour text and nothing that changes the box mid-load. A one-line
-  controls hint toasts once on start. `progress(to, expectedMs)` in `main.js` animates the bar with a
-  compositor transform (Web Animations, linear), so it keeps moving while a blocking step runs. Each segment starts from our own
-  computed position, never lower: CSS transitions restarted from the main thread's stale value and jumped backwards.
+- Loading screen: the paper map being drawn (see Paper map), then "Tap/Click to start" under it; no instructions or
+  flavour text. A one-line controls hint toasts once on start. The progress (`barNow()`) is our own timeline that
+  never goes back.
   **Real progress, no stalls** (the user: it stalled halfway, then the end flashed by; saved per-device timings were tried
   and dropped at the user's request): each step has a fixed share (`LOAD_SHARE` in main.js) and the long loops report
   how far along they are with `await loadTick(f)` (`src/loadprogress.js`), which every ~40 ms reports to the bar and
@@ -972,10 +986,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   KHR_parallel_shader_compile, then `getUniforms()`), then 24 draws of cost-balanced batches (vertices × instances) to a
   16×16 target with a pixel readback each; `post.warmUp` runs after visibility is restored, with the normal culled view:
   with everything visible and unculled it drew the whole world at full resolution). `loadTickNow(f)` forces a yield
-  between sync steps. Each report glides the bar there in 0.2 s and then creeps 25% further toward the step's end over
+  between sync steps. Each report glides the progress there in 0.2 s and then creeps 25% further toward the step's end over
   4 s. Awaits keep the scatter's rng order: instance counts are identical. `?perf` logs `longest stall` (SwiftShader:
-  2.4 s, was 7+ s and ~30 s of silent warm-up; a real GPU is far faster). `await progress(null)` fills the last 3% over
-  350 ms (≤ 0.5 s wait) before "Tap to start".
+  2.4 s, was 7+ s and ~30 s of silent warm-up; a real GPU is far faster). At the end `sheet.finish()` draws whatever's
+  left (each part ≤ its `dur`) before "Tap to start".
 
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216

@@ -1054,12 +1054,11 @@ export async function placeVegetation(protos, trail) {
 }
 
 /**
- * Builds the vegetation as per-chunk InstancedMeshes so far-away chunks can be
- * hidden cheaply, and a spatial hash of trunks/rocks for player collisions.
- * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
- * chunk for all tree types, instead of the *_lod models per type.
+ * The placements to build (the world bake's, or scattered here), minus anything in the clear zones
+ * (`exclude`), and the canopy cover baked from them. Separate from buildVegetation so the loading
+ * map can paint the forest before the instanced chunks are built.
  */
-export async function buildVegetation(protos, trail, { impostors = null, shrubImpostors = null, exclude = null, placements: baked = null } = {}) {
+export async function prepareVegetation(protos, trail, { exclude = null, placements: baked = null } = {}) {
   const placements = baked ?? await placeVegetation(protos, trail);
   // nothing where the cabin stands (filtered, so the scatter's rng sequence stays put; and after the
   // world bake, which doesn't know the cabin: every step before is per item, so the order doesn't matter)
@@ -1094,7 +1093,17 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
     }
   }
   await loadTick(0.8);
-  const canopyAt = bakeCanopy(placements);
+  return { placements, canopyAt: bakeCanopy(placements) };
+}
+
+/**
+ * Builds the vegetation as per-chunk InstancedMeshes so far-away chunks can be
+ * hidden cheaply, and a spatial hash of trunks/rocks for player collisions.
+ * With `impostors` (bakeTreeImpostors), far trees are billboards: one draw per
+ * chunk for all tree types, instead of the *_lod models per type.
+ */
+export async function buildVegetation(protos, trail, { impostors = null, shrubImpostors = null, exclude = null, placements: baked = null, prepared = null } = {}) {
+  const { placements, canopyAt } = prepared ?? await prepareVegetation(protos, trail, { exclude, placements: baked });
   await loadTick(0.82);
   const nPlaced = Object.keys(placements).length;
   let placed = 0;

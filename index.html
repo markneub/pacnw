@@ -11,15 +11,9 @@
   <body>
     <div id="app"></div>
     <div id="toast"></div>
-    <div id="overlay">
-      <div class="card">
-        <h1>Cascadia Woods</h1>
-        <!-- one fixed-size slot: the loading bar, then the start prompt in its place -->
-        <div class="slot">
-          <div id="progress" role="progressbar" aria-label="Loading"><div id="progress-fill"></div></div>
-          <p id="status"></p>
-        </div>
-      </div>
+    <!-- loading: the paper map (map.js) is drawn behind this, the start prompt under it; later the pause screen -->
+    <div id="overlay" class="loading">
+      <p id="status"></p>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>
