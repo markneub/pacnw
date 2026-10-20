@@ -1012,7 +1012,7 @@ export class PaperMap {
     // the accordion: each panel turns about its left edge, alternately
     for (let r = 0; r < ROWS; r++) {
       for (let c = 1; c < COLS; c++) {
-        const a = c % 2 ? -178 : 178;
+        const a = c % 2 ? 178 : -178;
         all.push(this.cols[r][c].animate([
           { offset: 0, transform: `rotateY(${a}deg)` },
           { offset: 0.3, transform: `rotateY(${a}deg)`, easing: 'cubic-bezier(0.45, 0.05, 0.3, 1)' },
