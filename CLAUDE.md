@@ -668,10 +668,17 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   "tube coming out of the ground" made no sense): no crag. A fine **ground patch** (`buildPatch`, 0.5 m cells over whole
   5 m grid cells s −5…10, v ±10, so its edge lies on the terrain's own lines; drawn with `terrainMaterial`, coloured by
   `groundColor`/`groundLayers`, `shadeGround`ed) rises from the level approach into a ~4 m bank the tunnel opens out of
-  (steep only round the opening, leaning back to the sides, blended to the raw ground over its last 1.5 m). The terrain
+  (blended to the raw ground over its last 1.5 m). **Shape from the user's photos** ("too round": a dome with a round hole):
+  a ~5–6 m face of fractured rock (`faceAt(v)`: 1.3 m columns standing out 0–0.9 m by a per-column draw, flush beside
+  the doorway, a buttress at v ≈ −3.7 out 1.1 m more; a ledge set back 0.5–0.85 m at ~half height), near vertical in
+  the middle and leaning back into mossy slopes toward the sides (height × 0.15 and the rise widening to ~7 m by
+  W ≈ 6 ± 1 m), the top climbing into the hill. The opening is a **lopsided pointed arch**: within 7 m of each end the
+  ring's top is drawn up into a kink (`ARCH_PEAK` 0.75 × (1 − |cos φ|)²) and its apex pushed sideways (`ARCH_LEAN`
+  −0.4 × sin³φ); the mouth is taller (+0.5 m) and wider (+0.1 m) instead of narrower. `inCaveMouth` mirrors both.
+  The collider is wherever the patch stands > 0.45 m above the terrain the player walks on (pushed to the nearest free
+  spot, the approach first), except the doorway. The terrain
   discards under it (`shared.uCavePatch`, inset 5 cm: T-junction cracks); its `aHollow` is −1 … −2 = "I'm the patch"
-  and how much bare rock (`RK_HOLLOW` in rockyslope.js): rock only in a rim round the opening, the rest moss and duff
-  (all-rock read as a boulder dome). The tube's
+  and how much bare rock (`RK_HOLLOW` in rockyslope.js): rock on the face, moss and duff on its top and sides. The tube's
   first 6 m get bigger, blockier lumps, so the mouth is ragged, not a pipe's end. No stones at the mouth and no
   boulders inside (both tried; the user: unnatural, out of place): only small rubble along the floor and stalactites.
   A floor apron under the threshold. Terrain, patch and grass are hidden only inside the tube's own arch over the
@@ -681,7 +688,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   hide while the camera is inside (`uCaveIn`). The scatter keeps off the bank and the approach (`planCave().blocked`).
   **Light** (no three.js lights): `caveMaterial` (standard + patch, triplanar `public/textures/cave` = Poly Haven
   dark_rock_02 walls, forest_ground_04 floor; `fetch_textures.py cave`): outdoor light fades over the first ~4 m (rock
-  above the roof or in front of the mouth (`aOut`) counts as outdoors), 12 torches (a pair 3 m in, then every 12 m
+  above the roof or in front of the mouth (`aOut`) counts as outdoors), 12 torches (a pair 4.5 m in (deeper than the arch, so its rim stays grey by day), then every 12 m
   alternating sides; each bracket on the wall at ~1.5 m with the stick leaning out so the flame is 0.3 m clear: the walls
   curve in above ~1.1 m and the first placement buried the flames in rock, which looked like "the near torches don't
   light"), `TORCH_I` 6.5 / (d² + 1.2), windowed at 18 m, flicker from sines, the light jittering a few cm. The 4
@@ -699,8 +706,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (`END_TO_MOUTH`: rotation by π about the vertical through the tunnel's middle, and `D` = −7.65 m lower): rings
   (`tunnelPoint`: the mouth's ring at L − s with `mirrorJ` vertex order, blended in over the 6 m before), the floor
   (`floorAt` rises again over the last 20 m), the wiggle (antisymmetric about L/2), width/height (of min(s, L − s)),
-  rubble and stalactites (copies), torches (copies with the same flicker phase and mirrored jitter). Torches run 3 (pair),
-  15, 27 … 99, then the far end's 115, 127 (pair). Beyond `SEAM` (L − 23) the shaders texture the rock at the
+  rubble and stalactites (copies), torches (copies with the same flicker phase and mirrored jitter). Torches run 4.5 (pair),
+  15, 27 … 99, then the far end's 115, 125.5 (pair). Beyond `SEAM` (L − 23) the shaders texture the rock at the
   counterpart's position (`cvP`, normals turned), so the photo and noise match too. Inside, walls get no scene light:
   a model of the light coming in at each end (`uOutA` this time of day at the mouth, `uOutB` the other at the far end:
   hemisphere × 0.45 + key light × 0.12, falling off over 2.5 m), so the far end lit "at the other time" equals the
@@ -720,7 +727,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   difference ≈ 2–3/255, overall brightness within the torches' frame-to-frame flicker. When you go in by day the far
   end shows the night forest (dim), by night the day (bright): no "prick of white light" any more.
   **Walking** (`cave.state.inside`, set crossing the doorway on foot): floor via `setWalkModifier`, kept between the
-  walls (`collide`), trees overhead don't collide; outside, an ellipse over the bank is a collider. Deep inside with
+  walls (`collide`), trees overhead don't collide; outside, the raised patch is a collider. Deep inside with
   the mouth out of the frustum, everything outside is hidden (`cullOutdoors`; shown again for the far view). HUD
   "Cave". Audio (weather.js `Ambience`): outdoors fades inside (depth from the nearer end), a reverb (synthesised
   impulse), room tone, drips, torch crackle near torches; crickets at night (no birds).

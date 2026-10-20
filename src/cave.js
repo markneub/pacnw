@@ -60,11 +60,11 @@ const wiggle0 = (s) => (0.55 * Math.sin(0.047 * s + 1.0) + 0.3 * Math.sin(0.13 *
 const wiggle = (s) => (s <= L / 2 ? wiggle0(s) : -wiggle0(L - s)); // (turned round: the other side)
 const halfW = (s) => {
   const m = Math.min(s, L - s);
-  return 1.75 + 0.22 * Math.sin(0.21 * m + 0.3) + 0.15 * Math.sin(0.53 * m + 1.7) - 0.3 * (1 - smooth(0, 5, m));
+  return 1.75 + 0.22 * Math.sin(0.21 * m + 0.3) + 0.15 * Math.sin(0.53 * m + 1.7) + 0.1 * (1 - smooth(0, 6, m));
 };
 const height = (s) => {
   const m = Math.min(s, L - s);
-  return 3.1 + 0.35 * Math.sin(0.17 * m + 2.2) + 0.2 * Math.sin(0.41 * m) - 0.5 * (1 - smooth(0, 4, m));
+  return 3.1 + 0.35 * Math.sin(0.17 * m + 2.2) + 0.2 * Math.sin(0.41 * m) + 0.5 * (1 - smooth(0, 6, m));
 };
 /** The turn: maps a point near the far end to its counterpart near the mouth (it's its own inverse, apart from D). */
 const MID = toWorldEarly(L / 2, 0);
@@ -117,6 +117,8 @@ const rng = mulberry32(SEED + 4111);
 const noise3 = createNoise3D(rng);
 const fbm3 = (x, y, z) => 0.6 * noise3(x * 0.32, y * 0.32, z * 0.32) + 0.27 * noise3(x * 0.85 + 5, y * 0.85, z * 0.85) + 0.13 * noise3(x * 2.1, y * 2.1 + 3, z * 2.1);
 
+const ARCH_PEAK = 0.75;
+const ARCH_LEAN = -0.4;
 /** Local (s, x, y) of ring vertex j at s (x is across, before the wiggle). Arch first, then the floor. */
 function ringPoint(s, j, out) {
   const a = halfW(s);
@@ -138,6 +140,11 @@ function ringPoint(s, j, out) {
     const l = Math.hypot(nx, ny);
     nx /= l;
     ny /= l;
+    // the mouth (and so the far end) is a lopsided pointed arch, not a round hole: the top drawn
+    // up into a point (a kink: (1 − |cos φ|)²), the apex pushed to one side (CAVE_GLSL mirrors this)
+    const pk = 1 - smooth(0, 7, s);
+    y += ARCH_PEAK * pk * (1 - Math.abs(Math.cos(phi))) ** 2;
+    x += ARCH_LEAN * pk * Math.max(0, Math.sin(phi)) ** 3;
   } else {
     const k = j - NA; // 1 .. NF-1, left to right
     x = -edge + (2 * edge * k) / NF;
@@ -284,21 +291,36 @@ function buildTube() {
 }
 
 /**
- * The ground round the mouth, finer than the 5 m terrain grid (which can't hold a steep bank): a
- * patch over whole grid cells (its edges on grid lines, so it meets the terrain exactly; the
- * terrain hides under it: shared.uCavePatch), rising from the level approach into a ~4 m bank the
- * tunnel opens out of, blending back into the hill. Drawn with the terrain's own material.
+ * The ground round the mouth, finer than the 5 m terrain grid (which can't hold a cliff): a patch
+ * over whole grid cells (its edges on grid lines, so it meets the terrain exactly; the terrain
+ * hides under it: shared.uCavePatch). The hill's nose is a ~6–7 m face of fractured rock the tunnel
+ * opens out of (the user's photos): columns standing out by different amounts, a buttress on one
+ * side, a ledge set back partway up, a ragged top with the hill's moss over it, and sides that drop
+ * into the slope. Drawn with the terrain's own material.
  */
 const PATCH = { s0: -5, s1: 10, v0: -10, v1: 10, step: 0.5 };
+/** The face at v: its foot (s), its height, how far out its sides run, and its column's random draw. */
+function faceAt(v) {
+  const av = Math.abs(v);
+  const col = Math.floor(v / 1.3 + 0.35 * noise3(v * 0.21, 7.0, 0.0));
+  const hc = noise3(col * 1.71, 11.0, 0.5);
+  const out = (0.45 + 0.45 * hc) * smooth(2.3, 3.1, av); // (the doorway's sides stay flush with it)
+  const sf = -0.15 - out - 1.1 * Math.exp(-(((v + 3.7) / 1.0) ** 2));
+  const W = 6.0 + 1.0 * noise3(v * 0.05, 13.0, 0.0);
+  const H = (5.3 + 0.6 * noise3(v * 0.27, 5.0, 0.0) + 0.2 * hc) * (1 - 0.85 * smooth(W - 3.5, W + 2.5, av));
+  return { sf, W, H, hc };
+}
 function patchHeight(x, z) {
   const raw = rawGroundAt(x, z);
   const [s, v] = toLocal(x, z);
   const n = noise3(s * 0.55, 3.0, v * 0.55) * 0.4 + noise3(s * 1.6, 9.0, v * 1.6) * 0.15;
-  // steep (a rock face) only right round the opening; to the sides it leans back into a grassy slope
-  const side = Math.max(0, Math.abs(v) - 3);
-  const rise = smooth(-0.45 + 0.1 * n - 0.4 * side, 0.8 + 0.3 * n + 0.7 * side, s);
-  const lat = 1 - smooth(3.5 + n, 9.5, Math.abs(v));
-  const bank = Y0 + (4.2 + n) * rise * lat;
+  const { sf, W, H, hc } = faceAt(v);
+  // near vertical in the middle, leaning back into a slope toward the sides
+  const rw = 0.3 + 6.5 * smooth(W - 4, W + 1.5, Math.abs(v)) + 0.1 * n;
+  const lf = 0.5 + 0.15 * hc; // (where the ledge is, as a share of the height)
+  const back = 0.5 + 0.35 * noise3(v * 0.4, 17.0, 0.0); // (how far it's set back)
+  const prof = lf * smooth(sf, sf + rw, s) + (1 - lf) * smooth(sf + back, sf + back + rw, s);
+  const bank = Y0 + H * prof + (0.3 + 0.08 * n) * Math.max(0, s - sf - back - rw) + 0.3 * n * smooth(sf, sf + 2, s);
   const edge = Math.min(s - PATCH.s0, PATCH.s1 - s, v - PATCH.v0, PATCH.v1 - v);
   return raw + (Math.max(raw, bank) - raw) * smooth(0, 1.5, edge);
 }
@@ -322,9 +344,10 @@ function buildPatch() {
       pos.set([x, y, z], k * 3);
       n.set(patchHeight(x - e, z) - patchHeight(x + e, z), 2 * e, patchHeight(x, z - e) - patchHeight(x, z + e)).normalize();
       nrm.set([n.x, n.y, n.z], k * 3);
-      // bare rock only in a rim round the opening; the rest of the bank is the hill's own moss and duff
+      // bare rock on the face; above it and down its sides the hill's own moss and duff
       const [ls, lv] = toLocal(x, z);
-      const rim = (1 - smooth(2.6, 4.2, Math.hypot(lv, (y - Y0 - 1.0) * 1.15))) * (1 - smooth(1.5, 3, ls));
+      const f = faceAt(lv);
+      const rim = (1 - smooth(1.4, 2.6, ls - f.sf)) * (1 - smooth(f.W - 1, f.W + 2.5, Math.abs(lv)));
       const slope = (1 - n.y) * (0.35 + 0.65 * rim);
       hollow[k] = -2 + rim;
       groundColor(x, y, z, slope, c);
@@ -482,10 +505,11 @@ function torchPlan(tube) {
   const torches = [];
   // two a few metres in, one on each wall (they light the ground outside too)
   for (const side of [-1, 1]) {
-    const ss = 3;
+    const ss = 4.5; // (deeper than the arch, so its rim stays grey rock by day)
     const lo = wallAt(tube, ss, side, 1.45);
     const hi = wallAt(tube, ss, side, 2.05);
-    torches.push({ s: ss, v: lo.x - side * 0.03, y: floorAt(ss) + lo.y, top: [hi.x - side * 0.36, hi.y], side });
+    const w = wiggle(ss);
+    torches.push({ s: ss, v: lo.x - side * 0.03 + w, y: floorAt(ss) + lo.y, top: [hi.x - side * 0.36 + w, hi.y], side });
   }
   // inside, every 12 m, alternating sides: the bracket on the wall at ~1.5 m, the stick leaning
   // out so its flame burns ~0.3 m clear of the wall (which curves in above ~1.1 m)
@@ -1093,15 +1117,28 @@ export async function buildCave(plan, texReady, { lowPower }) {
     }
     let ns = s;
     let nv = v;
-    // the bank: an ellipse over it, except the way in
+    // the bank: wherever the patch stands up out of the ground the player walks on (the terrain),
+    // except the way in; pushed out to the nearest spot it doesn't
     const door = 0.79 * halfW(0) - r;
-    if (!(Math.abs(nv) < door && ns < 1.5)) {
-      const es = (ns - 3) / 3.5; // (the bank round the mouth)
-      const ev = nv / 7;
-      const e = Math.hypot(es, ev);
-      if (e < 1 && e > 1e-6) {
-        ns = 3 + (es / e) * 3.5;
-        nv = (ev / e) * 7;
+    const raised = (ss, vv) => {
+      if (Math.abs(vv) < door && ss < 1.5) return false;
+      if (ss < -5 || ss > 10 || Math.abs(vv) > 10) return false;
+      for (const [ds, dv] of [[0, 0], [-r, 0], [r, 0], [0, -r], [0, r]]) {
+        const [x, z] = toWorld(ss + ds, vv + dv);
+        if (patchHeight(x, z) - rawGroundAt(x, z) > 0.45) return true;
+      }
+      return false;
+    };
+    if (raised(ns, nv)) {
+      search: for (let d = 0.1; d < 4; d += 0.1) {
+        for (let k = 0; k < 12; k++) {
+          const a = Math.PI + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6); // (back toward the approach first)
+          if (!raised(ns + d * Math.cos(a), nv + d * Math.sin(a))) {
+            ns += d * Math.cos(a);
+            nv += d * Math.sin(a);
+            break search;
+          }
+        }
       }
     }
     if (ns !== s || nv !== v) [pos.x, pos.z] = toWorld(ns, nv);
