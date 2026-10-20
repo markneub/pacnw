@@ -11,6 +11,8 @@
     "assets": "blender -b -P blender/build_assets.py"
   },
   "dependencies": {
+    "@fontsource/dancing-script": "^5.3.0",
+    "@fontsource/im-fell-english-sc": "^5.3.0",
     "simplex-noise": "^4.0.3",
     "three": "^0.180.0"
   },

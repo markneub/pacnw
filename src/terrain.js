@@ -145,6 +145,7 @@ export function baseHeight(x, z) {
   } else h += rimH;
 
   h += hillock(x, z);
+  h = seaRocks(x, z, h);
 
   // lake basin
   const dl = Math.hypot((x - LAKE.x) * 1.0, (z - LAKE.z) * 1.4);
@@ -184,6 +185,68 @@ function hillock(x, z) {
   return 8 * along * Math.exp(-(v / wide) * (v / wide)) * (1 + 0.12 * nDetail(x * 0.06 - 4, z * 0.06 + 9));
 }
 
+/**
+ * The rocky headland east of the dunes (a bluff ~16 m up with cliffs into the sea, the lighthouse
+ * on it: coast.js) and the sea stacks off it (Oregon's Haystack Rock and its neighbours).
+ * HEADLAND.z is its middle (~30 m out from the shoreline there).
+ */
+export const HEADLAND = { x: 540, z: 1040, rx: 72, rz: 112, h: 16 };
+const STACKS = [
+  { x: 452, z: 1172, r: 17, h: 26 },
+  { x: 612, z: 1186, r: 8, h: 14 },
+  { x: 425, z: 1138, r: 5.5, h: 8 },
+  { x: 476, z: 1201, r: 4.5, h: 6 },
+];
+/** The headland's distance field: < 1 inside its outline (the cliff tops round 0.86). */
+function headlandD(x, z) {
+  const dx = (x - HEADLAND.x) / HEADLAND.rx;
+  const dz = (z - HEADLAND.z) / HEADLAND.rz;
+  if (Math.abs(dx) > 1.4 || Math.abs(dz) > 1.4) return 9;
+  return Math.hypot(dx, dz) + nDetail(x * 0.018 + 5, z * 0.018) * 0.13 + nDetail(x * 0.06, z * 0.06 - 2) * 0.04;
+}
+/** 0..1: on the headland or its cliffs and their rocky foot (no sand, few trees). */
+export function headlandAt(x, z) {
+  return 1 - smoothstep(0.98, 1.08, headlandD(x, z));
+}
+/** 0..1: a sea stack (its rock). */
+function stackAt(x, z) {
+  let m = 0;
+  for (const k of STACKS) {
+    const dx = x - k.x;
+    const dz = z - k.z;
+    if (Math.abs(dx) > k.r * 1.6 || Math.abs(dz) > k.r * 1.6) continue;
+    m = Math.max(m, 1 - smoothstep(0.7, 1.3, Math.hypot(dx, dz) / k.r));
+  }
+  return m;
+}
+/** Bare rock round the coast: the headland's cliffs and the stacks (no sand there). */
+export function coastRockAt(x, z) {
+  if (z < 900 || x < 380 || x > 680) return 0;
+  return Math.max(headlandAt(x, z), stackAt(x, z));
+}
+function seaRocks(x, z, h) {
+  if (z < 900 || x < 380 || x > 680) return h;
+  const hd = headlandD(x, z);
+  if (hd < 1.05) {
+    // a rolling top, highest toward the sea; cliffs (steep, ragged: the rim's own noise in their
+    // line) falling to a rocky foot
+    const top = HEADLAND.h + nDetail(x * 0.025 + 1, z * 0.025) * 2.2 + nDetail(x * 0.09, z * 0.09 + 4) * 0.5 + (z - HEADLAND.z) * 0.02;
+    const k = (1 - smoothstep(0.86, 1.0, hd)) * 0.92 + (1 - smoothstep(0.98, 1.05, hd)) * 0.08;
+    if (top > h) h += (top - h) * k;
+  }
+  for (const st of STACKS) {
+    const dx = x - st.x;
+    const dz = z - st.z;
+    if (Math.abs(dx) > st.r * 1.6 || Math.abs(dz) > st.r * 1.6) continue;
+    const d = Math.hypot(dx, dz) / st.r + nDetail(x * 0.08 + st.r, z * 0.08) * 0.12;
+    // a haystack: a domed top on near-vertical sides, a skirt of rubble at its foot
+    const dome = Math.sqrt(Math.max(0, 1 - Math.pow(Math.min(d, 1) / 1.0, 2.6)));
+    const skirt = (1 - smoothstep(0.9, 1.5, d)) * 1.5;
+    h = Math.max(h, h + skirt, SEA_LEVEL - 2 + (st.h + 2) * dome);
+  }
+  return h;
+}
+
 /** Sea level: the ocean along the south edge (the lake sits higher, at WATER_LEVEL). */
 export const SEA_LEVEL = 0;
 /** z of the shoreline at x: the beach runs east–west across the south of the map, in gentle bays. */
@@ -216,7 +279,7 @@ export function sandAt(x, z) {
   const s = coastZ(x) - z;
   if (s > 300) return 0;
   const edge = 190 + nDetail(x * 0.02 + 3, z * 0.02) * 35 + nDetail(x * 0.07, z * 0.07) * 8;
-  return 1 - smoothstep(edge - 15, edge + 15, s);
+  return (1 - smoothstep(edge - 15, edge + 15, s)) * (1 - coastRockAt(x, z));
 }
 
 /** The marsh: 1 in its flat middle, easing to 0 at its edge (an irregular oval by the lake). */

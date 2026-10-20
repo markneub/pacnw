@@ -187,6 +187,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   the empty corners (it's the needles themselves, overlapping).
   **Veterans:** in the low, dense forest (`oldGrowth` = forest noise × below ~50–95 m), up to 13% of fir/hemlock/cedar are
   scaled ×1.45–1.85 (~585 trees, up to ~60 m tall, trunks ~2 m). Chosen by `hash2(x, z)`, not the scatter rng, so nothing moves.
+  The coast's wreck, flotsam, lighthouse and keeper's house: `blender/build_coast.py` (see Headland, lighthouse, wreck).
   Boulders are Poly Haven scans via `blender/build_rocks.py` → `public/models/rocks.glb` + `public/textures/rocks/` (see below).
 - No Blender binary in the container. Use the PyPI module:
   `python3 -m venv <scratch>/bvenv && <scratch>/bvenv/bin/pip install bpy` (bpy 5.x works with Python 3.13),
@@ -325,6 +326,61 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   A* grade cost is 60% lower so the path goes up the dunes like the photo, not in switchbacks; trail grid MAX_Z 1000. Signs
   list the 5 nearest stops (`MAX_ROWS`). The HUD says "Ocean beach"/"Dunes". Views (`weather=sun`): berm
   `x=50&z=962&yaw=3.14&pitch=-0.08`, in the swash `x=50&z=985&yaw=2.9&pitch=-0.12`, dunes `x=80&z=880&yaw=3.0&pitch=-0.15`.
+- **Headland, lighthouse, wreck** (the user: "something cool on the beach ... a shipwreck ... a lighthouse? Both? Go
+  wild"). Terrain (terrain.js `seaRocks`, in `baseHeight` after the hillock): `HEADLAND` (540, 1040), an ellipse 72 × 112 m
+  (`headlandD`, noisy outline) east of the dune trail, a rolling top at ~16–18 m with cliffs falling over ~0.14 of its
+  radius to a rocky foot, and 4 sea **stacks** (`STACKS`, haystack domes 6–26 m, Oregon's Haystack Rock) off it.
+  `coastRockAt` (headland incl. its foot, stacks) takes the sand away (`sandAt` × (1 − it)), so the rocky-slope shader
+  draws the cliffs. ocean.js `bakeCoast`: a column's shoreline is now the *last* wet→dry crossing (behind a stack, the
+  beach). Models: `blender/build_coast.py` → `public/models/coast.glb` (1.75 MB; Poly Haven CC0 downloads cached in
+  `.cache/ph/`): `wreck` = Poly Haven *Dutch Ship Medium* with the sails deleted, the rigging bisected by a slanting plane
+  (masts snapped at 7–10 m) and the bowsprit cut, loose rope bits dropped, three ragged holes (faces inside jagged
+  ellipsoids deleted) on the side that ends up on top, decimated to 23k tris; `barrel`/`crate` (Poly Haven flotsam);
+  modelled `lighthouse` (stone plinth 1 m into the ground, tapered white tower 14 m, iron gallery with corbels and rail,
+  glazed lantern room (`LhGlass`), a ribbed Fresnel lens (`LhLamp`), red cap + ventilator + rod, door +Y, windows; 2.2k
+  tris) and `keeper_house` (white gabled walls, red roof slabs, brick chimney, trim, step). Textures: no metal/roughness
+  maps, 512 px (hull 1024) JPEG q80. JS `src/coast.js`: `planCoast()` puts the lighthouse on the highest, flattest spot
+  toward the headland's seaward end (score = height − 3 × relief + the ground 12 m seaward), the house 20 m landward,
+  the wreck at x 172, 50 m out (heel 0.52 rad about its length, bow down 0.09, yaw 0.62: the stove-in deck faces the
+  beach), 6 barrels/crates on the drift line (one in the swash). `blocked()` keeps the scatter off them, and the
+  headland top is a windswept meadow: only shore pines/saplings (30% of them), none within 30 m of the light (a tall
+  fir on the cliff hid the tower from the beach; `exclude(x, z, margin, treeName)` now gets the placement name).
+  Wood (hull, flotsam): `addGroundCover` (bleached, sand at the base) + greyed, weedy/dark below a wavy tide line ~1.1 m,
+  barnacles; the hull is DoubleSide (you see in through the holes). **At night** (`shared.uNight`, eased): the lens
+  glows, two additive cone beams (140 m, open, view-angle soft, fading with distance) turn once every 12 s, and a glare
+  disc at the lamp flashes as a beam sweeps past the viewer (pow(align, 60)). Colliders: the tower (circle), house and
+  hull (rotated rects). HUD: "Lighthouse" / "Shipwreck". Views: wreck `x=205&z=1012&yaw=2.41&weather=sun`, headland from
+  the beach `x=430&z=1005&yaw=-1.95&pitch=0.12` (add `&night` for the beams), lighthouse `x=545&z=1080&yaw=-2.6&pitch=0.2`.
+- **Paper map** (`src/map.js`, the user: a translucent map icon, tap → "a cool, fast animation of a map unfolding",
+  real paper, lay of the land, no writing but a title, where you are + which way you face, compass, scale, maybe
+  topo lines). `drawMap()` at load (step 'map', ~1.1 s in the container): a 1024² canvas of x −1300…1300, z −1250…1350
+  inside a 44 px paper margin: the land raster (heights first, then colours from the neighbours: sea/lake/ponds by
+  depth, meadow → forest by `canopyAt`, marsh, sand (`uSandMap` data), rock by slope, snow by `snowAmount`; gentle NW
+  hill shading clamped −0.42…+0.2), marching-squares contours on the height grid (water lines at −1 … −15 m, the
+  coastline, land every 20 m, 100 m heavier), little conifer symbols by canopy, creeks (`streams()`), the trail as red
+  dashes, pictograms (cave arch, cabin, lighthouse with rays, wreck), a double neat line with 250 m ticks, a title
+  cartouche (IM Fell English SC, `@fontsource`), compass rose (bottom right, in the sea), scale bar 0–500 m, then foxing,
+  edge darkening, fold creases on the 4 × 2 panel lines and a multiplied fibre tile. `PaperMap`: the icon (top left;
+  `?perf` is top right; translucent, `pointerdown` so it never steers) or **M** toggles. The sheet is 2 rows × 4 nested
+  panels (CSS 3D, preserve-3d, each a canvas slice + a plain paper back, `backface-visibility`): over 1.05 s the folded
+  packet flies out of the icon (scale 0.08 → 1, a spin; the sheet's transform-origin is the packet's middle 12.5% 25%),
+  the accordion opens (panels rotateY ±178° → 0 about their left edges, alternating), then the bottom row swings down
+  (rotateX 178° → 0, slight overshoot); shade layers darken panels while they turn. Tapping anywhere folds it back into
+  the icon (the same animations reversed, 0.65 s). The marker (an SVG arrow with a pulse, rotate(−yaw)) appears once
+  it's open and follows the player each frame. The world keeps running behind it. `#overlay` is z-index 8 so the
+  start/pause screen covers the map. Dev: `?map` opens it at start. Test trick: a page with just `PaperMap` on a saved
+  canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).
+- **The note in the cabin** (`src/note.js`, the user: a paper with an ~8-line poem on the hut's desk, tap to bring it
+  close and read, tap again to put it down, no hands). `POEM` holds the lines (**filler**: the user will supply the
+  poem). A 19 × 26 cm sheet (canvas: warm paper, edge darkening, a stain, two fold creases, fibres; Dancing Script 600
+  in dark blue-black ink, each line slightly uneven) lying on the table beside the lantern (cabin local
+  (lamp.x + 0.39, 0.779, lamp.z − 0.1), turned 0.35 rad). Basic material (readable whatever the light), brightness 0.4 ×
+  the fire flicker on the table, warm 0.8 held. `cabin.interact`: put it down if held, else pick it up if `canRead`
+  (within 1.9 m, looking at it: cos > 0.88), else the door. Held: it eases (0.7 s, cubic) along an arc (+12 cm) to face
+  the camera at the distance where it fills ~95% of the view's height or 90% of its width (portrait phones), with a
+  slight sway; `depthFunc` Always + renderOrder 20 while off the table (walls can't cut it; it still writes depth, or the
+  window glass blended over it). Walking > 2.6 m away lays it down. Hint: "Tap to read the note" / "Tap to put it down"
+  (fades after 2.5 s so it doesn't sit over the words). View: `x=62.03&z=-927.4&yaw=2.61&pitch=-0.7&door=open`.
 - **Ocean** (`src/ocean.js`, `?off=water`, bench row `ocean` + opt-in view `beach`): one swell train (10 s, from 0.22 rad
   west of shore-normal). `bakeCoast` (load, ~0.1 s) marches each 4 m column in from the south edge in 2 m steps
   accumulating travel time with linear dispersion (Eckart), k_z = √(k² − k_x²) (Snell), into an RGBA32F texture: R travel
@@ -454,7 +510,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   >10 px before that commits to walking, and the slide so far counts as turning. Releasing a look drag mid-swipe sets
   `player.spin` (horizontal glide only, decays at e^-6t). On release `levelPitch` turns on, so the pitch eases back to the slope ahead
   (the user asked for this); the new heading is kept. An optional second
-  finger (only while walking) is free look. No on-screen touch UI apart from that faint look-mode vignette, and no jumping (both at the user's request). Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
+  finger (only while walking) is free look. No on-screen touch UI apart from that faint look-mode vignette (and the translucent map icon the user asked for: map.js), and no jumping (both at the user's request). Touch mode is on when `(pointer: coarse)` matches. It skips pointer lock (tap to start) and
   turns on the low-power profile in `main.js` (`VIEW_DIST` is mutated, camera far 420, half the
   particles). Override with `?quality=low|high`.
 - `src/weather.js`: GPU rain lines (**sheltered**: below ~18 m above the ground, a streak is dropped with probability up to 88% ×

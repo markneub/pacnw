@@ -65,6 +65,7 @@ canvas {
 #overlay {
   position: fixed;
   inset: 0;
+  z-index: 8; /* (over the map and its icon, under ?perf) */
   display: grid;
   place-items: center;
   background: rgba(30, 40, 36, 0.45);
@@ -233,3 +234,130 @@ body.touch #hud {
   opacity: 1;
 }
 
+
+/* The paper map (map.js): a translucent icon, top left (?perf is top right); the sheet unfolds in the middle */
+#map-icon {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  left: calc(10px + env(safe-area-inset-left));
+  width: 46px;
+  height: 46px;
+  padding: 3px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(20, 30, 25, 0.18);
+  opacity: 0.42;
+  cursor: pointer;
+  z-index: 6;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.2s;
+}
+#map-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+#map-icon:hover,
+#map-icon.active {
+  opacity: 0.8;
+}
+#map-view {
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 5;
+  background: radial-gradient(ellipse at center, rgba(12, 16, 14, 0.28), rgba(12, 16, 14, 0.62));
+  perspective: 1700px;
+  touch-action: none;
+  overflow: hidden;
+}
+#map-view.open {
+  display: block;
+}
+.map-sheet {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-style: preserve-3d;
+  transform-origin: 12.5% 25%; /* the folded packet's middle (map.js) */
+}
+.map-row {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  transform-style: preserve-3d;
+}
+.map-row-0 {
+  top: 0;
+}
+.map-row-1 {
+  top: 50%;
+  transform-origin: 50% 0;
+}
+.map-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 25%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.map-panel-hinged {
+  left: 100%;
+  width: 100%;
+  transform-origin: 0 50%;
+}
+.map-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.map-face canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.map-back {
+  transform: rotateY(180deg);
+  background:
+    repeating-linear-gradient(35deg, rgba(120, 90, 50, 0.05) 0 2px, transparent 2px 7px),
+    linear-gradient(160deg, #eadfc4, #d9caa6);
+}
+.map-shade {
+  position: absolute;
+  inset: 0;
+  background: #1a120a;
+  opacity: 0;
+  pointer-events: none;
+}
+.map-marker {
+  position: absolute;
+  width: 6%;
+  aspect-ratio: 1;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.map-marker.show {
+  opacity: 1;
+}
+.map-marker svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.map-marker .pulse {
+  transform-origin: 0 0;
+  animation: map-pulse 1.6s ease-out infinite;
+}
+@keyframes map-pulse {
+  from { transform: scale(0.6); opacity: 0.9; }
+  to { transform: scale(1.8); opacity: 0; }
+}

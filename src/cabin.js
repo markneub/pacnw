@@ -5,6 +5,7 @@ import { groundAt, setWalkModifier } from './terrain.js';
 import { shared, patchSunlight, sunKey } from './materials.js';
 import { loadTextureSet } from './textures.js';
 import { addSurfaceDetail, surfaceLayerFor } from './surfacedetail.js';
+import { buildNote } from './note.js';
 
 /**
  * The mountain cabin at the end of the trail in the high basin (model: blender/build_cabin.py,
@@ -329,6 +330,15 @@ export async function buildCabin(plan, assets) {
   const root = new THREE.Group();
   root.add(group, smoke, path);
 
+  // a handwritten note on the table, by the lantern (note.js: tap it to read it)
+  const note = await buildNote(group.matrixWorld.clone().multiply(new THREE.Matrix4().compose(
+    new THREE.Vector3(L.lamp[0] + 0.39, 0.779, L.lamp[2] - 0.1),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0.35)),
+    new THREE.Vector3(1, 1, 1),
+  )));
+  root.add(note.mesh);
+  let canRead = false;
+
   // ---- the door, the hint ----
   const hint = document.createElement('div');
   hint.id = 'hint';
@@ -350,6 +360,14 @@ export async function buildCabin(plan, assets) {
   const inSwing = (x, z, r) => x > HINGE.x - r && x < HINGE.x + DOOR_W + r && z > D - DOOR_W - r && z < D + 0.5 * r;
 
   function interact(player) {
+    if (note.held) {
+      note.held = false; // (put it back down)
+      return true;
+    }
+    if (canRead) {
+      note.held = true;
+      return true;
+    }
     if (!canToggle) return false;
     open = !open;
     return true;
@@ -435,6 +453,7 @@ export async function buildCabin(plan, assets) {
 
   // the key light's direction, in the cabin frame (found once: weather.js moves it)
   let keyLight = null;
+  let hintShownFor = 0; // (the put-down hint fades after a moment, so it doesn't sit over the words)
   const v = new THREE.Vector3();
   const inv3 = new THREE.Matrix3().setFromMatrix4(U.uCabInv.value);
 
@@ -459,6 +478,14 @@ export async function buildCabin(plan, assets) {
     // the furnishings only near (they're behind walls and glass from further off)
     const dist = camera.position.distanceTo(doorCentre);
     interior.visible = dist < 45;
+    note.mesh.visible = dist < 45;
+    // the note: readable when you're by the table looking at it; laid down if you walk off
+    camera.getWorldDirection(fwd);
+    const nd = camera.position.distanceTo(note.restPos);
+    v.copy(note.restPos).sub(camera.position).normalize();
+    canRead = !note.held && nd < 1.9 && fwd.dot(v) > 0.88;
+    if (note.held && nd > 2.6) note.held = false;
+    note.update(dt, camera, 0.4 * (0.92 + 0.08 * f));
 
     // the hint: near the door and looking at it
     const pl = local(player.pos.x, player.pos.z);
@@ -468,13 +495,17 @@ export async function buildCabin(plan, assets) {
     const dd = Math.hypot(tx, tz);
     const facing = (fwd.x * tx + fwd.z * tz) / Math.max(1e-4, dd * Math.hypot(fwd.x, fwd.z));
     const near = Math.abs(pl.x - (L.door.x0 + DOOR_W / 2)) < 1.6 && Math.abs(pl.z - D) < 2.2;
-    canToggle = near && (facing > 0.45 || dd < 0.9) && !(open && inSwing(pl.x, pl.z, 0.45));
-    if (canToggle) {
+    canToggle = near && (facing > 0.45 || dd < 0.9) && !(open && inSwing(pl.x, pl.z, 0.45)) && !canRead && !note.held;
+    let text = null;
+    if (note.held) text = touch ? 'Tap to put it down' : 'Click or press E to put it down';
+    else if (canRead) text = touch ? 'Tap to read the note' : 'Click or press E to read the note';
+    else if (canToggle) {
       const verb = open ? 'close' : 'open';
-      const text = touch ? `Tap to ${verb} the door` : `Click or press E to ${verb} the door`;
-      if (hint.textContent !== text) hint.textContent = text;
+      text = touch ? `Tap to ${verb} the door` : `Click or press E to ${verb} the door`;
     }
-    hint.classList.toggle('show', canToggle);
+    if (text && hint.textContent !== text) hint.textContent = text;
+    hint.classList.toggle('show', !!text && !(note.held && !note.moving && hintShownFor > 2.5));
+    hintShownFor = note.held ? hintShownFor + dt : 0;
   }
 
   /** (dev: ?door=open, for screenshots) */
@@ -482,7 +513,7 @@ export async function buildCabin(plan, assets) {
     open = v;
     angle = v ? DOOR_OPEN : 0;
   };
-  return { group: root, collide, update, interact, contains, plan, setOpen };
+  return { group: root, collide, update, interact, contains, plan, setOpen, note };
 }
 
 /**

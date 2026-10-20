@@ -13,6 +13,10 @@ down the tunnel the forest shows through its other end. Walk out of it and you'r
 you went in by, and day has turned to night: a full moon low over the sea, a sky full of stars, moonlight falling
 through the crowns. Go through again and it's day.
 
+Down on the beach a wrecked ship lies heeled over in the surf, and east of the dunes a lighthouse stands on a rocky
+headland above sea stacks; at night its beams sweep over the water. In the cabin, a handwritten note waits on the
+table. Tap the map in the corner (or press **M**) and a folded paper map opens out, showing where you are.
+
 **Play it online:** https://markneub.github.io/pacnw/
 
 ## Running
@@ -29,13 +33,14 @@ until the sources change). The dev server serves the bake once it has one for th
 page generates the world itself while it bakes in the background. `?world=live` always generates it in the page.
 
 Controls: click to start · **WASD** move · **Shift** run · mouse look ·
-**R** cycle weather (auto → rain → snow → clear) · **H** toggle HUD · **E** or click to open a door · **Esc** release the mouse.
+**R** cycle weather (auto → rain → snow → clear) · **H** toggle HUD · **M** map · **E** or click to open a door or read the note · **Esc** release the mouse.
 
 Pushes to the default branch are built and published to GitHub Pages by
 `.github/workflows/pages.yml` (other branches just get a build check).
 
 On phones and tablets, put your thumb down anywhere: slide up to walk (further up to run, down to back up)
-and slide sideways to turn. A second finger looks up and down. Tap to open the cabin door. Nothing is drawn on screen, and weather always
+and slide sideways to turn. A second finger looks up and down. Tap to open the cabin door or read the note, and tap
+the map icon (top left) to unfold the map. Apart from that icon nothing is drawn on screen, and weather always
 follows altitude on phones. Touch devices also get a
 lighter render profile (lower resolution, shorter draw distance, fewer particles); force either with
 `?quality=low` or `?quality=high`.
@@ -60,6 +65,10 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | `blender/build_assets.py` | Procedurally models trees, ferns, logs and furniture in Blender → `public/models/forest.glb` |
 | `blender/build_cabin.py` | Models the mountain cabin (shell, door, furnishings) → `public/models/cabin.glb` + `src/cabin_layout.json` |
 | `src/cave.js` | The cave north of the trailhead: its tunnel and the bank it opens out of, torches (flames, flickering light, cube-map shadows), a far end that opens onto its own mouth at the other time of day; walking in and out |
+| `blender/build_coast.py` | The shipwreck (from Poly Haven's CC0 Dutch ship), flotsam, the lighthouse and its keeper's house → `public/models/coast.glb` |
+| `src/coast.js` | Places the lighthouse, house and wreck on the coast; the lighthouse's beams at night |
+| `src/map.js` | The paper map: drawn from the world at load, unfolds from the corner icon, shows where you are |
+| `src/note.js` | The handwritten note on the cabin table (its poem is in `POEM`) |
 | `src/cabin.js` | Places the cabin at the trail's end; its door, colliders, walkable floor, chimney smoke and interior lighting |
 | `blender/build_rocks.py` | Turns photogrammetry scans into game boulders with two detail levels → `public/models/rocks.glb` |
 | `src/terrain.js` | Height function (valley, lake basin, a staircase of snowy benches between ridged peaks, mountain rim, the beach and dunes in the south), vertex-coloured terrain with moss, rock and snow |

@@ -65,6 +65,7 @@ async function bakeCoast([p0, p1]) {
     const coast = coastZ(x);
     let t = 0;
     let shore = -1;
+    let wet = true;
     for (let iz = nz - 1; iz >= 0; iz--) {
       const z = zMin + iz * STEP_Z;
       const d = SEA_LEVEL - rawGroundAt(x, z);
@@ -72,7 +73,8 @@ async function bakeCoast([p0, p1]) {
         const k = wavenumber(d);
         t += (Math.sqrt(Math.max(k * k - KX * KX, 0.25 * k * k)) / OMEGA) * STEP_Z;
       }
-      if (shore < 0 && d <= 0) shore = t;
+      if (d <= 0 && wet) shore = t; // (the last way onto land: behind a sea stack, the beach)
+      wet = d > 0;
       const o = (iz * nx + ix) * 4;
       data[o] = t;
       data[o + 2] = 1 - THREE.MathUtils.smoothstep(coast - z, MASK_S - 15, MASK_S + 15);

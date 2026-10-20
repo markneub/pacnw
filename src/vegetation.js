@@ -1066,8 +1066,9 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
   if (exclude) {
     for (const name of Object.keys(placements)) {
       if (name === 'signpost') continue;
-      const margin = KIND(name) === 'trees' ? 3.5 : 0.8;
-      placements[name] = placements[name].filter((q) => !exclude(q.x, q.z, margin));
+      const tree = KIND(name) === 'trees';
+      const margin = tree ? 3.5 : 0.8;
+      placements[name] = placements[name].filter((q) => !exclude(q.x, q.z, margin, tree && name));
     }
   }
   await loadTick(0.8);

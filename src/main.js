@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain, sandMap, sandAt } from './terrain.js';
+import { buildTerrain, buildWater, heightAt, groundAt, terrainGrid, prepareTerrain, sandMap, sandAt, streams } from './terrain.js';
+import { drawMap, PaperMap } from './map.js';
 import { onLoadProgress, loadTick, loadTickNow, loadYielded, longestStall } from './loadprogress.js';
 import { loadPrototypes, buildVegetation, applyRockTextures, bakeTreeImpostors, bakeShrubImpostors } from './vegetation.js';
 import { buildTrail } from './trail.js';
 import { Weather } from './weather.js';
 import { Player } from './player.js';
 import { shared } from './materials.js';
-import { SNOWLINE, SPAWN, VIEW_DIST, WORLD_SIZE } from './config.js';
+import { SNOWLINE, SPAWN, VIEW_DIST, WORLD_SIZE, CAVE } from './config.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround, setBakedHorizonAO } from './bake.js';
@@ -27,6 +28,7 @@ import { Post } from './post.js';
 import { planCabin, buildCabin, loadCabinAssets } from './cabin.js';
 import { loadWorld } from './world.js';
 import { planCave, buildCave, loadCaveAssets } from './cave.js';
+import { planCoast, buildCoast, loadCoastAssets } from './coast.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -109,7 +111,7 @@ function step(label) {
  * where the bar is now by our own timeline (a CSS transition would start from the main thread's
  * stale value and jump backwards), and it never goes back.
  */
-const LOAD_SHARE = { terrain: 0.08, trail: 0.1, impostors: 0.15, vegetation: 0.35, shading: 0.06, textures: 0.01, warmup: 0.22 };
+const LOAD_SHARE = { terrain: 0.08, trail: 0.1, impostors: 0.15, vegetation: 0.33, shading: 0.06, map: 0.02, textures: 0.01, warmup: 0.22 };
 const loadSpan = {}; // [start, end] of each step's share (the last 3% is the finish)
 {
   let acc = 0;
@@ -161,6 +163,7 @@ async function init() {
   const protosReady = loadPrototypes(['forest', 'rocks'].map((m) => `${import.meta.env.BASE_URL}models/${m}.glb`));
   const cabinReady = loadCabinAssets(renderer, { lowPower });
   const caveReady = loadCaveAssets(renderer, { lowPower });
+  const coastReady = loadCoastAssets();
   // close-up ground and bark/rock textures download while the world is being built
   const detailReady = off.has('detail') ? Promise.resolve([false, false])
     : Promise.all([loadGroundDetail(renderer, { lowPower }), loadSurfaceDetail(renderer, { lowPower })]);
@@ -208,7 +211,8 @@ async function init() {
   progress('vegetation'); // the scatter and the instanced chunks
   const cabinPlan = planCabin(trail); // (the scatter keeps clear of it, and of the cave's mouth)
   const cavePlan = planCave();
-  const exclude = (x, z, margin) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin);
+  const coastPlan = planCoast(); // (the lighthouse, its house and the wreck)
+  const exclude = (x, z, margin, tree) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin) || coastPlan.blocked(x, z, margin, tree);
   const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, exclude, placements: world?.placements });
   scene.add(veg.group);
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
@@ -245,6 +249,9 @@ async function init() {
   shadeGround(cave.patch, veg.canopyAt);
   scene.add(cabin.group);
   if (params.get('door') === 'open') cabin.setOpen(true);
+  // the lighthouse on the headland, the wreck in the shallows
+  const coast = await buildCoast(coastPlan, coastReady);
+  scene.add(coast.group);
   const player = new Player(camera, renderer.domElement, (pos, r) => {
     if (cave.state.inside) {
       cave.collide(pos, r); // (in the tunnel the trees overhead don't count)
@@ -253,6 +260,7 @@ async function init() {
     veg.collide(pos, r);
     cabin.collide(pos, r);
     cave.collide(pos, r);
+    coast.collide(pos, r);
   });
 
   // Spawn in the southern valley looking north toward the mountains.
@@ -293,6 +301,21 @@ async function init() {
   renderer.domElement.addEventListener('mousedown', (e) => {
     if (e.button === 0 && document.pointerLockElement === renderer.domElement) cabin.interact(player);
   });
+
+  // the paper map (drawn once now; the corner icon or M unfolds it)
+  progress('map');
+  const mapCanvas = await drawMap({
+    canopyAt: veg.canopyAt,
+    streams: streams(),
+    trail,
+    marks: { cave: { x: CAVE.x, z: CAVE.z }, cabin: cabinPlan, lighthouse: coastPlan.lighthouse, wreck: coastPlan.wreck },
+    tick: (f) => loadTick(f),
+  });
+  const paperMap = new PaperMap(mapCanvas);
+  document.addEventListener('keydown', (e) => { if (e.code === 'KeyM') paperMap.toggle(); });
+  document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement) paperMap.close(); });
+  if (params.has('map')) paperMap.open();
+  step('map');
 
   progress('textures');
   const [ground, surface] = await detailReady; // before warm-up so their shaders compile now
@@ -543,6 +566,8 @@ async function init() {
 
     player.update(dt);
     cabin.update(dt, t, camera, player, scene);
+    paperMap.update(player.pos.x, player.pos.z, player.yaw);
+    coast.update(dt, t, camera);
     cave.track(player);
     crossCave();
     cave.update(dt, t, camera, renderer);
@@ -568,9 +593,9 @@ async function init() {
       const alt = Math.round(player.pos.y);
       const sand = sandAt(player.pos.x, player.pos.z) > 0.5;
       const zone = cave.state.inside ? 'Cave' : cabin.contains(player.pos.x, player.pos.z) ? 'Mountain cabin'
-        : sand ? (alt < 4 ? 'Ocean beach' : 'Dunes') : alt > SNOWLINE + 10 ? 'Subalpine snowfield'
-        : alt > SNOWLINE - 30 ? 'Upper slopes'
-          : alt < 8 ? 'Lakeshore' : 'Temperate rainforest';
+        : coast.zone(player.pos.x, player.pos.z) ?? (sand ? (alt < 4 ? 'Ocean beach' : 'Dunes') : alt > SNOWLINE + 10 ? 'Subalpine snowfield'
+          : alt > SNOWLINE - 30 ? 'Upper slopes'
+            : alt < 8 ? 'Lakeshore' : 'Temperate rainforest');
       let text = `${zone} · ${alt} m`;
       camera.getWorldDirection(lookDir);
       const g = trail.guide(player.pos.x, player.pos.z, lookDir.x, lookDir.z);
@@ -597,7 +622,7 @@ async function init() {
   });
 
   // (scripted screenshots: one frame of the loop, also after ?still has stopped it)
-  window.__pacnw = { tick: () => tick(), cave, scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, worldSize: WORLD_SIZE };
+  window.__pacnw = { tick: () => tick(), cave, scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, coast, paperMap, worldSize: WORLD_SIZE };
 }
 
 let flashTimer;
