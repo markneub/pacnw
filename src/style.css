@@ -195,6 +195,10 @@ body.touch #perf {
   -webkit-tap-highlight-color: transparent;
   transition: opacity 0.2s;
 }
+#map-icon.waiting {
+  visibility: hidden;
+  opacity: 0;
+}
 #map-icon svg {
   display: block;
   width: 100%;
@@ -213,7 +217,6 @@ body.touch #perf {
   /* the world behind the map, blurred (the loading screen's picture of it is blurred the same) */
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
-  perspective: 1700px;
   touch-action: none;
   overflow: hidden;
 }
@@ -242,6 +245,16 @@ body.touch #perf {
   #map-view::before {
     background-image: radial-gradient(ellipse at center, rgba(12, 16, 14, 0.28), rgba(12, 16, 14, 0.62)), url('./loading/start-portrait.jpg');
   }
+}
+.map-stage {
+  position: absolute;
+  inset: 0;
+  perspective: 1700px;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.4));
+}
+/* (loading: the flat live view has its own box-shadow, so no filter over its reveal animations) */
+#map-view.loading .map-stage {
+  filter: none;
 }
 /* while it's being drawn, the sheet's canvas itself lies over the panels */
 .map-live {
@@ -313,7 +326,6 @@ body.touch #perf {
   overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 .map-face canvas {
   display: block;

@@ -371,12 +371,12 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   coastline, land every 20 m, 100 m heavier), little conifer symbols by canopy, creeks (`streams()`), the trail as red
   dashes, pictograms (cave arch, cabin, lighthouse with rays, wreck), a double neat line with 250 m ticks, a title
   cartouche (IM Fell English SC, `@fontsource`), compass rose (bottom right, in the sea), scale bar 0–500 m, then foxing,
-  edge darkening, fold creases on the 4 × 2 panel lines and a multiplied fibre tile. `PaperMap`: the icon (top left;
+  edge darkening, fold creases on the 4 × 2 panel lines and a multiplied fibre tile. `PaperMap`: the icon (top left; hidden (`.waiting`) until the loading map first folds away into it;
   `?perf` is top right; translucent, `pointerdown` so it never steers) or **M** toggles. The sheet is 2 rows × 4 nested
   panels (CSS 3D, preserve-3d, each a canvas slice + a plain paper back, `backface-visibility`): over 1.05 s the folded
   packet flies out of the icon (scale 0.08 → 1, a spin; the sheet's transform-origin is the packet's middle 12.5% 25%),
   the accordion opens (panels rotateY ±178° → 0 about their left edges, alternating), then the bottom row swings down
-  (rotateX 178° → 0, slight overshoot); shade layers darken panels while they turn. Tapping anywhere folds it back into
+  (rotateX 178° → 0, slight overshoot); shade layers darken panels while they turn. **One drop shadow** for the whole sheet (`filter` on `.map-stage`, the perspective parent; off while loading): a box-shadow on each panel face was depth-sorted in among the nearly parallel folded panels and flickered through the paper's back as dark bands/slivers (the user). Tapping anywhere folds it back into
   the icon (the same animations reversed, 0.65 s). The marker (an SVG arrow with a pulse, rotate(−yaw)) appears once
   it's open and follows the player each frame. The world keeps running behind it. `#overlay` is z-index 8 so the
   pause screen covers the map. Dev: `?map` keeps it open after starting.

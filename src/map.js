@@ -865,6 +865,7 @@ export class PaperMap {
     this.icon.id = 'map-icon';
     this.icon.setAttribute('aria-label', 'Map');
     this.icon.innerHTML = ICON_SVG;
+    this.icon.classList.add('waiting'); // (hidden until the loading map is first folded away into it)
     document.body.appendChild(this.icon);
     const toggle = (e) => {
       e.preventDefault();
@@ -882,9 +883,14 @@ export class PaperMap {
       e.stopPropagation();
       this.close();
     });
+    // one drop shadow for the whole sheet, whatever its fold: shadows on the panels themselves were
+    // depth-sorted in among the nearly parallel panels and showed through them as flickering bands
+    const stage = document.createElement('div');
+    stage.className = 'map-stage';
+    this.backdrop.appendChild(stage);
     this.sheet = document.createElement('div');
     this.sheet.className = 'map-sheet';
-    this.backdrop.appendChild(this.sheet);
+    stage.appendChild(this.sheet);
     this.slices = []; // each panel's part of the sheet
     this.cols = []; // [row][col] panel elements
     this.rows = [];
@@ -1072,6 +1078,7 @@ export class PaperMap {
     if (first) {
       this.onFirstFold?.();
       this.refresh();
+      this.icon.classList.remove('waiting');
     }
     this.isOpen = false;
     this.busy = false;
