@@ -402,7 +402,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   No fold creases while it's drawn or waiting (`foldShadows`/`creaseLines` only in `compose(true)`, for the panels
   when it folds away). Smoother colouring: each part advances at most a frame's worth (1/30 s ÷ dur) per frame, so after
   a stall in the loading it carries on instead of jumping, and a dab is drawImage + a prebuilt soft brush
-  (destination-in). The sheet is 86% of the height on landscape screens (was 90%) to leave room for the prompt. Container load: no slower (ready 70 s vs 79–84 s for the old build the
+  (destination-in). The sheet is 86% of the height on landscape screens (was 90%) to leave room for the prompt.
+  **Smoother loading (v3, the user: "a little jerky"; speed matters less):** `loadTick` yields about every 16 ms of
+  work (was 40) and each yield waits for a *painted frame* (`afterPaint`: rAF → setTimeout; 100 ms fallback for hidden
+  tabs; a plain task in node): a setTimeout(0) yield often let the work carry on without a paint. The impostor bake
+  reads back and yields after each of its 8 views (was each type), the warm-up compiles 2 objects per batch (was 8) and
+  draws in 60 batches (was 24), the contours are computed with ticks, the clear-zone filter ticks per placement type.
+  **`?perf` smoothness readout** on the start screen: per loading step, frames drawn, the longest freeze and how
+  many gaps were > 100 ms (a gap counts against the step running when it began). Ask the user for a screenshot of it
+  to find what stutters on their phone; SwiftShader's freezes (seconds, software GPU) say nothing about phones. Container load: no slower (ready 70 s vs 79–84 s for the old build the
   same day). Test trick: compose `.map-live`'s canvases with their blend modes into one canvas and `toDataURL` it during
   the load; for the ready/fold screens stop the loop (`__pacnw.renderer.setAnimationLoop(null)`) and `page.screenshot()`. Test trick: a page with just `PaperMap` on a saved
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).

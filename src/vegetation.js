@@ -1090,6 +1090,7 @@ export async function prepareVegetation(protos, trail, { exclude = null, placeme
         return false;
       };
       placements[name] = placements[name].filter((q) => !out(q));
+      await loadTick(0.5); // (between types: the loading screen gets a frame)
     }
   }
   await loadTick(0.8);

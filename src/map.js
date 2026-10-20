@@ -139,7 +139,7 @@ async function drawLand(ctx, { canopyAt, tick }) {
  * Marching squares over the height grid: for each of `levels` (in that order) the segments where
  * the ground crosses it, [x0, y0, x1, y1, ...] in canvas px, with style(level).
  */
-function contourLevels(levels, style) {
+async function contourLevels(levels, style, tick) {
   const { heights, n, step } = terrainGrid();
   const half = WORLD_SIZE / 2;
   const i0 = Math.max(0, Math.floor((X0 + half) / step));
@@ -174,6 +174,7 @@ function contourLevels(levels, style) {
         for (let k = 0; k + 1 < pts.length; k += 2) segs.push(pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]);
       });
     }
+    await tick?.((iz - j0) / (j1 - j0 + 1));
   }
   return out.filter((l) => l.segs.length);
 }
@@ -798,18 +799,18 @@ export class MapSheet {
     this.parts.push({ p0, p1, dur, ready, draw, overlay, done: 0 });
   }
 
-  /** The terrain is ready: the contours and creeks. */
-  setTerrain(streams) {
+  /** The terrain is ready: the contours and creeks (tick(f) as it goes). */
+  async setTerrain(streams, tick) {
     const sea = [SEA_LEVEL, -1, -2.5, -4.5, -7, -10.5, -15];
     const land = [];
     for (let h = 20; h < 520; h += 20) land.push(h);
     const levels = [
-      ...contourLevels(sea, (lv) => (lv === SEA_LEVEL
+      ...await contourLevels(sea, (lv) => (lv === SEA_LEVEL
         ? { color: 'rgba(48, 72, 86, 0.85)', width: 1.4 }
-        : { color: `rgba(70, 110, 130, ${0.42 - 0.018 * -lv})`, width: 0.8 })),
-      ...contourLevels(land, (h) => (h % 100 === 0
+        : { color: `rgba(70, 110, 130, ${0.42 - 0.018 * -lv})`, width: 0.8 }), (f) => tick?.(f * 0.3)),
+      ...await contourLevels(land, (h) => (h % 100 === 0
         ? { color: 'rgba(120, 80, 45, 0.55)', width: 1.15 }
-        : { color: 'rgba(130, 92, 58, 0.32)', width: 0.6 })),
+        : { color: 'rgba(130, 92, 58, 0.32)', width: 0.6 }), (f) => tick?.(0.3 + f * 0.7)),
     ];
     this.data.levels = levels;
     this.data.total = levels.reduce((n, l) => n + l.segs.length / 4, 0);

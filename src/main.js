@@ -94,6 +94,28 @@ if (loadTimes) {
   overlay.appendChild(loadTimes);
 }
 let stepStart = performance.now();
+// ?perf: how smoothly the loading screen ran, per loading step: frames drawn, the longest gap
+// between two frames (a freeze) and how many gaps were over 100 ms
+const smooth = loadTimes ? { step: 'start', rows: new Map(), last: 0, done: false } : null;
+if (smooth) {
+  const frame = () => {
+    const now = performance.now();
+    let r = smooth.rows.get(smooth.step);
+    if (!r) smooth.rows.set(smooth.step, (r = { frames: 0, worst: 0, long: 0 }));
+    r.frames++;
+    if (smooth.last) {
+      // (a gap counts against the step that was running when it began)
+      const g = now - smooth.last;
+      const w = smooth.rows.get(smooth.lastStep) ?? r;
+      w.worst = Math.max(w.worst, g);
+      if (g > 100) w.long++;
+    }
+    smooth.last = now;
+    smooth.lastStep = smooth.step;
+    if (!smooth.done) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
 function step(label) {
   const now = performance.now();
   timings.push(`${label} ${(now - stepStart).toFixed(0)} ms`);
@@ -102,8 +124,8 @@ function step(label) {
 
 /**
  * Loading progress. Each loading step has a fixed share, and the long loops inside the steps
- * report how far along they are (loadprogress.js loadTick), yielding every ~40 ms so the page can
- * paint. Each report glides the progress to the new spot over 0.2 s and then lets it creep a little
+ * report how far along they are (loadprogress.js loadTick), yielding for a painted frame about every
+ * 16 ms of work. Each report glides the progress to the new spot over 0.2 s and then lets it creep a little
  * further toward the step's end, so even a block that can't report keeps it moving. It never goes
  * back. The loading screen is the paper map being drawn (map.js MapSheet), which follows it.
  */
@@ -138,6 +160,7 @@ onLoadProgress(barTo);
 /** Start the named loading step. */
 function progress(name) {
   loadYielded();
+  if (smooth) smooth.step = name;
   span = loadSpan[name].map((v) => v * 0.97);
   barTo(0);
 }
@@ -180,7 +203,7 @@ async function init() {
   }
   scene.add(terrain);
   scene.add(buildWater());
-  sheet.setTerrain(streams());
+  await sheet.setTerrain(streams(), (f) => loadTick(0.7 + 0.3 * f));
   step('terrain');
   await loadTickNow(1);
 
@@ -316,7 +339,9 @@ async function init() {
     const line = `${timings.join(' · ')} · longest stall ${longestStall().toFixed(0)} ms · ready ${(performance.now() / 1000).toFixed(1)} s after navigation`;
     console.info('load:', line);
     // and on the start screen, for phones (no console there): one step per line
-    loadTimes.textContent = `build ${__BUILD_SHA__}\n${line.split(' · ').join('\n')}`;
+    smooth.done = true;
+    const rows = [...smooth.rows].map(([k, r]) => `${k.padEnd(10)} ${String(r.frames).padStart(4)} fr · worst ${r.worst.toFixed(0).padStart(4)} ms · ${r.long} over 100`);
+    loadTimes.textContent = `build ${__BUILD_SHA__}\n${line.split(' · ').join('\n')}\nsmoothness (frames, longest freeze):\n${rows.join('\n')}`;
   }
 
   // the map's last strokes, then the arrow where you stand and the start prompt
@@ -657,7 +682,7 @@ async function warmUp() {
     return !lit;
   });
   for (const c of lightless) c.visible = false;
-  const COMPILE_BATCH = 8;
+  const COMPILE_BATCH = 2; // (small: the loading screen gets a frame between them)
   for (let i = 0; i < drawn.length; i += COMPILE_BATCH) {
     for (const o of drawn.slice(i, i + COMPILE_BATCH)) renderer.compile(o, camera, scene);
     await loadTick((0.3 * (i + COMPILE_BATCH)) / drawn.length);
@@ -685,7 +710,7 @@ async function warmUp() {
     return 1000 + verts * (o.isInstancedMesh ? o.count : g?.isInstancedBufferGeometry ? g.instanceCount : 1);
   });
   const total = cost.reduce((a, b) => a + b, 0);
-  const BATCHES = 24;
+  const BATCHES = 60;
   let done = 0;
   for (let i = 0; i < drawn.length;) {
     let j = i;
