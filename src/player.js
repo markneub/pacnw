@@ -42,6 +42,14 @@ export class Player {
     this.crouchTarget = 0;
     this.crouch = 0;
     this.pitchInput = 0; // how far the player tilted the view themselves this frame (rad)
+    // sitting on a bench (seat.js): the seat, how far down onto it (0 standing .. 1 seated, eased both
+    // ways) and where the move started (where you stood; getting up, the spot in front of it)
+    this.seat = null;
+    this.lastSeat = null;
+    this.sitK = 0;
+    this.sitEye = PLAYER.eyeHeight;
+    this.seatFrom = new THREE.Vector3();
+    this.seatYaw0 = 0;
 
     camera.rotation.order = 'YXZ';
 
@@ -112,6 +120,23 @@ export class Player {
     this.syncCamera();
   }
 
+  /** Sit on a bench (seat.js): ease over and down onto it, turned to face its way. */
+  sitDown(seat, eye) {
+    this.seat = seat;
+    this.lastSeat = seat;
+    this.sitEye = eye;
+    this.seatFrom.copy(this.pos);
+    this.seatYaw0 = this.yaw;
+    this.vel.set(0, 0, 0);
+  }
+
+  /** Get up off the bench, to the spot in front of it. */
+  standUp() {
+    if (!this.seat) return;
+    this.seatFrom.set(this.seat.standX, 0, this.seat.standZ);
+    this.seat = null;
+  }
+
   update(dt) {
     if (this.spin.x !== 0 || this.spin.y !== 0) {
       this.look(this.spin.x * dt, this.spin.y * dt);
@@ -121,6 +146,12 @@ export class Player {
     const k = this.keys;
     const fwd = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    if (this.seat || this.sitK > 0) {
+      // walking gets you up (once you're down: not halfway onto the seat)
+      if (this.seat && this.sitK >= 1 && (fwd || strafe || this.stick.length() > 0.12)) this.standUp();
+      this.updateSeat(dt);
+      return;
+    }
     let running = k.has('ShiftLeft') || k.has('ShiftRight');
     let fwdIn = fwd;
     let strafeIn = strafe;
@@ -211,9 +242,30 @@ export class Player {
     this.syncCamera();
   }
 
-  /** Eye height above the feet (lower crouched: 1.7 → 1.4 m). */
+  /** Sitting down or getting up (sitK eases 0 ↔ 1 over 0.8 s): over to the seat and down, and back. */
+  updateSeat(dt) {
+    const s = this.lastSeat;
+    this.sitK = THREE.MathUtils.clamp(this.sitK + (this.seat ? dt : -dt) / 0.8, 0, 1);
+    const e = this.sitK * this.sitK * (3 - 2 * this.sitK);
+    this.pos.x = THREE.MathUtils.lerp(this.seatFrom.x, s.seatX, e);
+    this.pos.z = THREE.MathUtils.lerp(this.seatFrom.z, s.seatZ, e);
+    this.pos.y = THREE.MathUtils.lerp(groundAt(this.pos.x, this.pos.z), s.seatY, e);
+    if (this.seat && this.sitK < 1) {
+      // turn to face the way the bench does, the short way round
+      const d = Math.atan2(Math.sin(s.yaw - this.seatYaw0), Math.cos(s.yaw - this.seatYaw0));
+      this.yaw = this.seatYaw0 + d * e;
+    }
+    this.vel.set(0, 0, 0);
+    this.onGround = true;
+    this.bobAmp *= Math.exp(-dt * 8);
+    this.slopePitch = this.pitch; // (back on your feet, the view eases from here)
+    this.syncCamera();
+  }
+
+  /** Eye height above the feet (lower crouched: 1.7 → 1.4 m; seated: the seat's eye height). */
   eye() {
-    return PLAYER.eyeHeight - 0.3 * this.crouch;
+    const e = this.sitK * this.sitK * (3 - 2 * this.sitK);
+    return PLAYER.eyeHeight - 0.3 * this.crouch - (PLAYER.eyeHeight - this.sitEye) * e;
   }
 
   syncCamera() {

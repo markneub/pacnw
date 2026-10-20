@@ -224,6 +224,7 @@ export async function buildOcean(skyUniforms, { lowPower, progress = [0, 1] }) {
     uOSun: shared.uSun,
     uONight: shared.uNight,
     uOWet: shared.uWet,
+    uORain: shared.uRain,
   };
 
   const mat = new THREE.MeshStandardMaterial({
@@ -276,7 +277,20 @@ export async function buildOcean(skyUniforms, { lowPower, progress = [0, 1] }) {
         uniform float uOSun;
         uniform float uONight;
         uniform float uOWet;
+        uniform float uORain;
         varying vec3 vOPos;
+        // a raindrop's ring spreading on the water (as the lake's, terrain.js): one per cell, at its own time
+        vec2 oRainRing(vec2 p, float t) {
+          vec2 cell = floor(p);
+          vec2 f = fract(p) - 0.5;
+          float h = oHash(dot(cell, vec2(1.0, 57.0)));
+          float ph = fract(t * 0.8 + h * 7.0);
+          vec2 c = (vec2(oHash(h * 91.3 + 3.1), oHash(h * 47.9 + 7.7)) - 0.5) * 0.5;
+          vec2 d = f - c;
+          float r = length(d) + 1e-4;
+          float ring = exp(-pow((r - ph * 0.45) * 22.0, 2.0)) * (1.0 - ph);
+          return d / r * ring;
+        }
         varying vec2 vOT;
         varying float vOMask;
         float oF = 0.0;      // Fresnel weight of the reflection
@@ -366,6 +380,12 @@ export async function buildOcean(skyUniforms, { lowPower, progress = [0, 1] }) {
           vec2 s2 = texture2D(uOWaves, wp * 2.7 + vec2(-uOTime * 0.02, uOTime * 0.013)).rg * 2.0 - 1.0;
           vec2 chop = (s1 * 0.6 + s2 * 0.4) * mix(0.16, 0.05, oFilm) * (1.0 - 0.6 * oFoam) * (0.8 + 0.4 * uOWet);
           vec3 nW = normalize(nG + vec3(chop.x, 0.0, chop.y));
+          // rain: drops ringing the water (not on foam or the wet film; too small to see far off)
+          float rk = uORain * (1.0 - smoothstep(25.0, 70.0, dist)) * (1.0 - oFoam) * (1.0 - oFilm);
+          if (rk > 0.01) {
+            vec2 rr = oRainRing(oP.xz * 0.9, uOTime) + oRainRing(oP.xz * 1.3 + 17.0, uOTime * 1.1);
+            nW = normalize(nW - vec3(rr.x, 0.0, rr.y) * 0.35 * rk);
+          }
           normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
         }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>

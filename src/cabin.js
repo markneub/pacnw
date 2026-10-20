@@ -340,18 +340,8 @@ export async function buildCabin(plan, assets) {
   let canRead = false;
   let insideNow = false; // (the player, this frame)
 
-  // ---- the door, the hint ----
-  // a two-part prompt: the input (Tap on phones, the E key on desktop) and what it does
-  const hint = document.createElement('div');
-  hint.id = 'hint';
-  const touch = document.body.classList.contains('touch');
-  const hintKey = document.createElement('span');
-  hintKey.className = touch ? 'hint-key tap' : 'hint-key';
-  hintKey.textContent = touch ? 'TAP' : 'E';
-  const hintLabel = document.createElement('span');
-  hintLabel.className = 'hint-label';
-  hint.append(hintKey, hintLabel);
-  document.body.appendChild(hint);
+  // ---- the door ----
+  let prompt = null; // what the hint says (main.js shows it: hint.js)
   let open = false;
   let angle = 0;
   let canToggle = false;
@@ -508,8 +498,7 @@ export async function buildCabin(plan, assets) {
     // (none while the note is held: you've just picked it up, so you know how to put it down)
     if (canRead) text = 'Read Note';
     else if (canToggle) text = open ? 'Close Door' : 'Open Door';
-    if (text && hintLabel.textContent !== text) hintLabel.textContent = text;
-    hint.classList.toggle('show', !!text);
+    prompt = text;
   }
 
   /** (dev: ?door=open, for screenshots) */
@@ -519,7 +508,7 @@ export async function buildCabin(plan, assets) {
   };
   // the note draws your eye down to the table as you come up to it (player.addGaze), from inside only
   const gaze = { pos: note.restPos, reach: 2.4, active: () => !note.held && insideNow };
-  return { group: root, collide, update, interact, contains, plan, setOpen, note, gaze };
+  return { group: root, collide, update, interact, contains, plan, setOpen, note, gaze, get prompt() { return prompt; } };
 }
 
 /**

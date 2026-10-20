@@ -414,6 +414,15 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   same day). Test trick: compose `.map-live`'s canvases with their blend modes into one canvas and `toDataURL` it during
   the load; for the ready/fold screens stop the loop (`__pacnw.renderer.setAnimationLoop(null)`) and `page.screenshot()`. Test trick: a page with just `PaperMap` on a saved
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).
+- **Sitting on the bench** (`src/seat.js`, the user: "tap to sit on the bench"): within 2.2 m of a bench and looking at
+  it (cos > 0.6) the prompt says "Sit"; tap / E / click → `player.sitDown(seat)`: `sitK` eases 0 → 1 over 0.8 s, the
+  feet move to the seat's middle (+8 cm forward), eye height 1.7 → 1.28 m (`eye()`), the yaw turns to the bench's facing
+  (the short way), then free look. Walking input (keys or the touch throttle > 0.12) or another tap stands you up
+  (`standUp`) to 1.4 m in front (outside its 0.9 m collider). No collisions, slope pitch or gaze while seated; no prompt
+  while seated. The one bench (the lake viewpoint) now sits on the lake's side of the trail facing `LAKE`'s centre (it
+  was on the lower side facing away from the trail: north into the bank). **The prompt is shared**: `src/hint.js`
+  `createHint()` → `hint(text)`; cabin.js and seat.js expose `prompt`, main.js shows `cabin.prompt ?? seats.prompt` and
+  routes taps/E/clicks to `seats.interact(player) || cabin.interact(player)`. View: `x=58.2&z=381.7&yaw=1.56`.
 - **The note in the cabin** (`src/note.js`, the user: a paper with an ~8-line poem on the hut's desk, tap to bring it
   close and read, tap again to put it down, no hands). `POEM` holds the lines (**filler**: the user will supply the
   poem; now Robert Frost's "Stopping by Woods on a Snowy Evening" (public domain), 2 pages, in its own commit "Cabin
@@ -457,7 +466,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   streams' `foamTexture` thresholded by amount (soft white far off). Water: turbid green-grey in the surf, darker offshore,
   light through a steepening face; alpha 1 − exp(−depth·k). Reflection: the sky dome's colours (`oSky`: overcast/sunny
   gradient from the sky's own uniforms, passed in from weather.js) + glitter; composed as R·F + (1−F)(W·a + dst(1−a)) by
-  replacing `opaque_fragment`. Swell amplitude `uOSwell` 0.7 m. Debug trick: output (oFoam, cycle, oFilm) as the colour.
+  replacing `opaque_fragment`. Swell amplitude `uOSwell` 0.7 m. **Rain rings** like the lake's (`oRainRing`, × `shared.uRain`,
+  faded out 25–70 m, not on foam or the wet film). Debug trick: output (oFoam, cycle, oFilm) as the colour.
   Budget (container, `still`): beach view phone 22 draws / 0.13M tris (0.10M with `off=water`), desktop 41 / 0.40M;
   phone spawn 186 / 1.19M (the grid is drawn whenever the coast is within the far plane; out of sight it's depth-rejected).
   **Phone bench** (`?bench=ocean&views=beach`, DPR 1.75, full clock): beach full frame 3.4 ms, ocean 0.5 ±0.3 ms (14 draws, 0.10M tris).

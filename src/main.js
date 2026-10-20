@@ -29,6 +29,8 @@ import { planCabin, buildCabin, loadCabinAssets } from './cabin.js';
 import { loadWorld } from './world.js';
 import { planCave, buildCave, loadCaveAssets } from './cave.js';
 import { planCoast, buildCoast, loadCoastAssets } from './coast.js';
+import { buildSeats } from './seat.js';
+import { createHint } from './hint.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -288,11 +290,15 @@ async function init() {
     scene.fog = null;
   }
 
-  if (touch) new TouchControls(renderer.domElement, player).onTap = () => cabin.interact(player);
-  // desktop: E, or a click while playing, opens the cabin door when the hint shows
-  document.addEventListener('keydown', (e) => { if (e.code === 'KeyE') cabin.interact(player); });
+  // the bench(es) you can sit on, and the one prompt for everything you can tap
+  const seats = buildSeats(veg.placements.bench);
+  const hint = createHint();
+  const interact = () => seats.interact(player) || cabin.interact(player);
+  if (touch) new TouchControls(renderer.domElement, player).onTap = interact;
+  // desktop: E, or a click while playing, does what the hint says
+  document.addEventListener('keydown', (e) => { if (e.code === 'KeyE') interact(); });
   renderer.domElement.addEventListener('mousedown', (e) => {
-    if (e.button === 0 && document.pointerLockElement === renderer.domElement) cabin.interact(player);
+    if (e.button === 0 && document.pointerLockElement === renderer.domElement) interact();
   });
 
   progress('textures');
@@ -577,6 +583,8 @@ async function init() {
     player.crouchTarget = cave.state.inside ? THREE.MathUtils.smoothstep(caveDepth, 0.5, 3) : 0;
     player.update(dt);
     cabin.update(dt, t, camera, player, scene);
+    seats.update(camera, player);
+    hint(cabin.prompt ?? seats.prompt);
     paperMap.update(player.pos.x, player.pos.z, player.yaw);
     coast.update(dt, t, camera);
     cave.track(player);

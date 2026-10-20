@@ -63,7 +63,7 @@ function ridged(x, z, octaves) {
 }
 
 // The lake sits in the valley just north-east of the spawn point.
-const LAKE = { x: 170, z: 380, r: 150 };
+export const LAKE = { x: 170, z: 380, r: 150 };
 
 /**
  * The high country, north of the valley: a staircase of broad, gentle benches

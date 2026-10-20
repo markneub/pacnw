@@ -4,7 +4,7 @@ import {
   WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, SNOWLINE, TREELINE, SEED, CLEARING,
 } from './config.js';
 import {
-  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt, marshAt, MARSH, sandAt, coastZ, SEA_LEVEL,
+  heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt, marshAt, MARSH, sandAt, coastZ, SEA_LEVEL, LAKE,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
 import { addWindSway, addGroundCover, addTrunkMoss, shared } from './materials.js';
@@ -553,17 +553,14 @@ function placeTrailFurniture(trail, add) {
 
   const lake = stops.find((s) => s.name === 'lake');
   if (lake) {
-    // bench on whichever side is lower (the water side), facing away from the
-    // trail; the bench model faces local +Z
-    let best = null;
-    for (const side of [1, -1]) {
-      const c = beside(lake.index, side * (TRAIL_WIDTH + 1.4));
-      const h = groundAt(c.x, c.z);
-      if (!best || h < best.h) best = { ...c, h, side };
-    }
-    const fx = -best.t.y * best.side;
-    const fz = best.t.x * best.side;
-    put('bench', best.x, best.z, Math.atan2(fx, fz));
+    // the bench beside the trail on the lake's side, facing the water (seat.js: you can sit on it); the
+    // bench model faces local +Z. (It was put on the lower side, facing away from the trail: that sat it
+    // looking north into the bank.)
+    const p = points[lake.index];
+    const t = tangent(lake.index);
+    const side = -t.y * (LAKE.x - p.x) + t.x * (LAKE.z - p.y) >= 0 ? 1 : -1;
+    const c = beside(lake.index, side * (TRAIL_WIDTH + 1.4));
+    put('bench', c.x, c.z, Math.atan2(LAKE.x - c.x, LAKE.z - c.z));
   }
 
   // Cairns in the snow every ~45 m. Each takes the spot at the tread's edge or beside it (either
