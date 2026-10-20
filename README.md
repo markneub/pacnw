@@ -33,7 +33,7 @@ until the sources change). The dev server serves the bake once it has one for th
 page generates the world itself while it bakes in the background. `?world=live` always generates it in the page.
 
 Controls: click to start · **WASD** move · **Shift** run · mouse look ·
-**R** cycle weather (auto → rain → snow → clear) · **M** map · **E** or click to open a door or read the note · **Esc** release the mouse.
+**M** map · **E** or click to open a door or read the note · **Esc** release the mouse.
 
 Pushes to the default branch are built and published to GitHub Pages by
 `.github/workflows/pages.yml` (other branches just get a build check).

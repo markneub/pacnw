@@ -285,7 +285,6 @@ async function init() {
     scene.fog = null;
   }
 
-  const cycleWeather = () => flash(`Weather: ${weather.cycleOverride()}`);
   if (touch) new TouchControls(renderer.domElement, player).onTap = () => cabin.interact(player);
   // desktop: E, or a click while playing, opens the cabin door when the hint shows
   document.addEventListener('keydown', (e) => { if (e.code === 'KeyE') cabin.interact(player); });
@@ -360,10 +359,6 @@ async function init() {
     overlay.classList.add('hidden');
     if (params.has('bench')) startBench();
   }
-
-  document.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyR') cycleWeather();
-  });
 
   // The cave's far end is its mouth turned round (cave.js): its opening shows the view out of the
   // mouth at the other time of day, and walking out of it you're moved to the matching spot by the
@@ -613,15 +608,6 @@ async function init() {
 
   // (scripted screenshots: one frame of the loop, also after ?still has stopped it)
   window.__pacnw = { tick: () => tick(), cave, scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, coast, paperMap, worldSize: WORLD_SIZE };
-}
-
-let flashTimer;
-function flash(msg, ms = 1500) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
 /**

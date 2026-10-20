@@ -352,12 +352,6 @@ export class Weather {
     this.scene.environmentIntensity = on ? NIGHT.envIntensity : 0.55;
   }
 
-  cycleOverride() {
-    const order = [null, 'rain', 'snow', 'clear'];
-    this.override = order[(order.indexOf(this.override) + 1) % order.length];
-    return this.override ?? 'auto';
-  }
-
   /** Everything update() and setNight() set (to render a view at the other time of day, then put it all back). */
   stateRefs() {
     const fog = this.scene.fog ?? this.fogOff;

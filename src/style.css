@@ -13,24 +13,6 @@ canvas {
   display: block;
 }
 
-#toast {
-  position: fixed;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: rgba(20, 30, 25, 0.55);
-  font-size: 14px;
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
-}
-
-#toast.show {
-  opacity: 1;
-}
-
 /* "Tap to open the door" near the cabin door (cabin.js) */
 #hint {
   position: fixed;
