@@ -683,7 +683,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   torches nearest the camera get **cube-map shadows** (`WebGLCubeRenderTarget` 256/192 px, RGBA-packed distance, 5-tap
   PCF; casters = tube and rubble (not the crag: the far end has none), re-rendered each frame for the nearest 2 (phones 1), every 3rd/4th for the
   rest, so shadows sway with the flames. Soot above each torch, damp seeps that gloss in the torchlight, moss outside.
-  Flames: camera-facing quads (fbm teardrop, additive) + a soft glow + sparks. The outside torches also light the
+  Flames: camera-facing quads (fbm teardrop, additive) + a soft glow + sparks. The flame's foot sits 6 cm down over the
+  head (pulled 5 cm toward the camera), rounded (lowest mid-flame) and soft, and the head's top is glowing embers
+  (vertex colours > 1 = emissive in the 'plain' material); the user saw the flame floating above the head. Shadows use
+  a slope-scaled bias (+0.12 (1 − |N·L|), normal offset 5 cm): grazing walls shadowed themselves and the cube's face
+  edges showed as a bright rectangle round each flame. The outside torches also light the
   ground and plants round the mouth through `patchSunlight` (`shared.uCaveTorch`; the cave's own materials pass
   `{ torches: false }`). No fog over the part of a view inside the cave (`caveFogK`: the fog hid the light at the end).
   **The far end is the mouth again** (a portal, seamless): the last `S` = 20 m are the first 20 m turned round

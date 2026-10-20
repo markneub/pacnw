@@ -512,7 +512,7 @@ function torchPlan(tube) {
       t.axis = new THREE.Vector3(t.out[0] * t.lean, 1, t.out[1] * t.lean).normalize();
     }
     t.head = t.base.clone().addScaledVector(t.axis, 0.5);
-    t.flame = t.head.clone().addScaledVector(t.axis, 0.07).add(new THREE.Vector3(0, 0.1, 0));
+    t.flame = t.head.clone().addScaledVector(t.axis, 0.04).add(new THREE.Vector3(0, 0.09, 0)); // (just over the head's top: the flame grows out of it)
     t.phase = t.s * 1.7 + t.v * 3.1;
     t.light = t.flame.clone();
     t.intensity = TORCH_I;
@@ -557,7 +557,19 @@ function torchGeometry(torches) {
       const k = 1 + 0.18 * noise3(p.getX(i) * 30 + t.phase, p.getY(i) * 30, p.getZ(i) * 30);
       p.setXYZ(i, p.getX(i) * k, p.getY(i), p.getZ(i) * k);
     }
-    parts.push(col(at(head, 0.46), pitch));
+    col(head, pitch);
+    // the top of the head burns: embers glowing through the charred pitch (colours above 1 glow, caveMaterial 'plain')
+    {
+      const hp = head.getAttribute('position');
+      const hc = head.getAttribute('color');
+      for (let i = 0; i < hp.count; i++) {
+        const y = hp.getY(i); // -0.08 .. 0.08
+        const n = noise3(hp.getX(i) * 40 + t.phase, y * 40, hp.getZ(i) * 40);
+        const hot = smooth(-0.04, 0.07, y + 0.03 * n) * (0.55 + 0.45 * n);
+        if (hot > 0.05) hc.setXYZ(i, 1 + 1.6 * hot, 1 + 0.45 * hot, 1 + 0.08 * hot);
+      }
+    }
+    parts.push(at(head, 0.46));
     // bracket: a ring round the stick and a strap back to the wall
     const ring = new THREE.TorusGeometry(0.034, 0.008, 5, 10).rotateX(Math.PI / 2);
     parts.push(col(at(ring, 0.16), iron));
@@ -632,7 +644,8 @@ function buildFlames(torches) {
           float h = 0.36 * (0.8 + 0.35 * flick);
           float lean = sin(uTime * 1.3 + aSeed.x) * 0.03;
           float yy = aCorner.y * 0.5 + 0.5;
-          vec3 p = c + right * (aCorner.x * 0.11 + lean * yy) + vec3(0.0, yy * h - 0.09, 0.0);`}
+          // (its foot wraps the burning head, a little below its rim)
+          vec3 p = c + right * (aCorner.x * 0.12 + lean * yy) + vec3(0.0, yy * h - 0.15, 0.0) + normalize(cameraPosition - c) * 0.05;`}
           vUv = aCorner * 0.5 + 0.5;
           vSeed = aSeed.x;
           vFlick = flick;
@@ -655,8 +668,11 @@ function buildFlames(torches) {
           float n2 = fFbm(vec2(q.x * 5.0 - vSeed, q.y * 6.0 - t * 5.5));
           // a teardrop that wavers and tears at the tip
           float x = q.x + (n - 0.5) * 0.7 * q.y;
-          float w = mix(0.78, 0.04, pow(q.y, 0.85)) * (0.75 + 0.5 * n);
-          float body = smoothstep(w, w * 0.25, abs(x)) * smoothstep(0.0, 0.14, q.y);
+          // wide and ragged at the foot (licking round the head), narrowing to a tip
+          float w = mix(0.82, 0.04, pow(q.y, 0.75)) * (0.75 + 0.5 * n) * (1.0 + 0.25 * smoothstep(0.3, 0.0, q.y) * (n2 - 0.4));
+          // a rounded foot, lowest in the middle (no straight edge across the head), soft and dim
+          float foot = q.y - 0.16 * pow(abs(x) / max(w, 1e-3), 2.0);
+          float body = smoothstep(w, w * 0.25, abs(x)) * smoothstep(0.0, 0.16, foot);
           float tip = 1.0 - smoothstep(0.35 + 0.35 * n2, 0.95, q.y);
           float f = body * tip;
           float heat = f * (1.15 - q.y);
@@ -744,9 +760,11 @@ function caveGLSL(nTorch) {
   }
   // distance cube shadow (RGBA-packed distance / far), 5 taps across a flame-sized light
   float cvShadow(samplerCube m, vec3 lp) {
-    vec3 L = vCvW + cvN * 0.03 - lp;
+    vec3 L = vCvW + cvN * 0.05 - lp;
     float d = length(L);
-    float bias = 0.04 + d * 0.015;
+    // slope-scaled: at grazing angles the wall shadowed itself, and the cube's face edges showed on it
+    float ndl = abs(dot(cvN, L / d));
+    float bias = 0.04 + d * 0.02 + 0.12 * (1.0 - ndl);
     vec3 a = normalize(cross(L, abs(L.y) < 0.9 * d ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
     vec3 b = cross(normalize(L), a);
     float r = d * 0.018;
@@ -885,6 +903,17 @@ function caveMaterial(kind, nTorch) {
         float cvLo = min(cvCamS, cvS), cvHi = max(cvCamS, cvS);
         float caveFogK = 1.0 - clamp((cvHi - max(cvLo, 0.0)) / max(cvHi - cvLo, 1e-3), 0.0, 1.0);
         ${THREE.ShaderChunk.fog_fragment.replaceAll('vFogDepth', '(vFogDepth * caveFogK)')}`);
+    if (kind === 'plain') {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        {
+          // vertex colours above 1 are glowing embers (the torches' burning heads)
+          vec3 hot = max(vColor.rgb - 1.0, 0.0);
+          if (hot.r > 0.0) {
+            diffuseColor.rgb = vec3(0.03, 0.02, 0.015);
+            totalEmissiveRadiance += hot * vec3(1.6, 0.9, 0.5) * (0.8 + 0.2 * sin(vCvW.x * 50.0 + vCvW.y * 30.0));
+          }
+        }`);
+    }
   };
   mat.customProgramCacheKey = () => `cave|${kind}|${nTorch}|${sunKey()}`;
   return mat;
