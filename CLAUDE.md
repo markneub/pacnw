@@ -334,7 +334,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   draws the cliffs. ocean.js `bakeCoast`: a column's shoreline is now the *last* wet→dry crossing (behind a stack, the
   beach). Models: `blender/build_coast.py` → `public/models/coast.glb` (1.75 MB; Poly Haven CC0 downloads cached in
   `.cache/ph/`): `wreck` = Poly Haven *Dutch Ship Medium* with the sails deleted, the rigging bisected by a slanting plane
-  (masts snapped at 7–10 m) and the bowsprit cut, loose rope bits dropped, three ragged holes (faces inside jagged
+  (masts snapped at 7–10 m) and the bowsprit cut, loose rope bits dropped, and every yard and spar left up a mast removed
+  (pieces above 6 m spanning > 1.2 m, any level crosswise spar above 4 m: the spritsail yard hung in the air under the cut
+  bowsprit, the user), small fittings above 7 m dropped, three ragged holes (faces inside jagged
   ellipsoids deleted) on the side that ends up on top, decimated to 23k tris; `barrel`/`crate` (Poly Haven flotsam);
   modelled `lighthouse` (stone plinth 1 m into the ground, tapered white tower 14 m, iron gallery with corbels and rail,
   glazed lantern room (`LhGlass`), a ribbed Fresnel lens (`LhLamp`), red cap + ventilator + rod, door +Y, windows; 2.2k
@@ -345,8 +347,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   beach), 6 barrels/crates on the drift line (one in the swash). `blocked()` keeps the scatter off them, and the
   headland top is a windswept meadow: only shore pines/saplings (30% of them), none within 30 m of the light (a tall
   fir on the cliff hid the tower from the beach; `exclude(x, z, margin, treeName)` now gets the placement name).
-  Wood (hull, flotsam): `addGroundCover` (bleached, sand at the base) + greyed, weedy/dark below a wavy tide line ~1.1 m,
-  barnacles; the hull is DoubleSide (you see in through the holes). **At night** (`shared.uNight`, eased): the lens
+  Wood (hull, flotsam): `addGroundCover` (bleached, sand at the base) + greyed, smooth dark weed patches below a wavy tide
+  line ~1.1 m, barnacles as small round 3D dots (4.5 cm cells) in a band under it (11 cm blocky cells read as camouflage); the hull is DoubleSide (you see in through the holes). **At night** (`shared.uNight`, eased): the lens
   glows, two additive cone beams (140 m, open, view-angle soft, fading with distance) turn once every 12 s, and a glare
   disc at the lamp flashes as a beam sweeps past the viewer (pow(align, 60)). Colliders: the tower (circle), house and
   hull (rotated rects). HUD: "Lighthouse" / "Shipwreck". Views: wreck `x=205&z=1012&yaw=2.41&weather=sun`, headland from

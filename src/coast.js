@@ -97,12 +97,20 @@ function weather(mat) {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lum) * vec3(1.05, 1.0, 0.92), 0.5) * 0.7;
         float tide = 1.1 + 0.25 * sin(vCoverPos.x * 0.9 + sin(vCoverPos.z * 0.7) * 2.0) + 0.1 * sin(vCoverPos.z * 3.1);
         float wet = 1.0 - smoothstep(tide - 0.15, tide + 0.35, vCoverPos.y);
-        vec3 weed = mix(vec3(0.05, 0.07, 0.03), vec3(0.09, 0.11, 0.05), 0.5 + 0.5 * sin(vCoverPos.x * 7.0 + vCoverPos.y * 11.0));
-        diffuseColor.rgb = mix(diffuseColor.rgb, weed, wet * 0.85);
-        vec3 bh = fract(vec3(floor(vCoverPos * 9.0).xzy) * 0.1031);
+        // weed: soft dark-green patches (smooth, so up close it isn't a pattern)
+        float wp = 0.5 + 0.25 * sin(vCoverPos.x * 1.7 + sin(vCoverPos.y * 2.3) * 1.5) + 0.25 * sin(vCoverPos.z * 2.1 + vCoverPos.y * 1.1);
+        vec3 weed = mix(vec3(0.05, 0.065, 0.035), vec3(0.085, 0.1, 0.05), wp);
+        diffuseColor.rgb = mix(diffuseColor.rgb, weed, wet * 0.8);
+        // barnacles: small round crusts (3D dots, so they're round on any face), in a band under the tide line
+        vec3 bq = vCoverPos * 22.0;
+        vec3 bc = floor(bq);
+        vec3 bh = fract(bc * 0.1031);
         bh += dot(bh, bh.yzx + 33.33);
-        float barn = step(0.82, fract((bh.x + bh.y) * bh.z)) * (1.0 - smoothstep(tide - 0.4, tide + 0.1, vCoverPos.y));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.29, 0.26), barn * 0.5);
+        bh = fract((bh.xxy + bh.yzz) * bh.zyx);
+        float bd = length(fract(bq) - 0.5 - (bh - 0.5) * 0.4);
+        float band = smoothstep(tide - 0.9, tide - 0.5, vCoverPos.y) * (1.0 - smoothstep(tide - 0.05, tide + 0.1, vCoverPos.y));
+        float barn = (1.0 - smoothstep(0.18, 0.26, bd)) * step(0.6, bh.x) * band;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.35, 0.31), barn * 0.6);
       }`);
   });
 }
