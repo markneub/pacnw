@@ -7,11 +7,14 @@ export const SNOWLINE = 115; // average altitude where ground snow starts
 export const TREELINE = 230; // trees thin out and stop above this
 export const SEED = 1873;
 
-// Southern valley, looking north toward the mountains.
-export const SPAWN = { x: 20, z: 640, yaw: 0.15, pitch: 0.03 };
+// At the trailhead, the sign on the right and the trail running off west toward the beach (the
+// user picked this view). The scatter keeps a clearing round the old spawn point (CLEARING), so
+// moving the spawn moved no tree.
+export const SPAWN = { x: 24.2, z: 651, yaw: 2.03, pitch: 0 };
+export const CLEARING = { x: 20, z: 640 };
 
 // The cave (cave.js): its mouth at the foot of a hillock's south face, 50 m north of the
-// trailhead (straight ahead from the spawn point), the tunnel running north (`dir`: x, z),
+// trailhead (behind you to the right at the spawn), the tunnel running north (`dir`: x, z),
 // `length` m to the light at its end (about 10 s of running). The mouth sits exactly on a row of
 // the 5 m terrain grid, so the ground is level right up to it while the hill rises from the
 // next row (terrain.js hillock; the cave's ground patch makes the bank over that step).

@@ -199,7 +199,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 
 ## Code map / conventions
 
-- `src/config.js`: world size, `SNOWLINE` (115), `TREELINE`, `SPAWN`, view distances, player tuning.
+- `src/config.js`: world size, `SNOWLINE` (115), `TREELINE`, `SPAWN`, view distances, player tuning. **Spawn** (the
+  user's pick, from a phone screenshot): on the trailhead at (24.2, 651), yaw 2.03, looking west along the trail with the
+  trailhead sign on the right. The scatter's spawn clearing stays at the old spawn (`CLEARING` (20, 640)), so no tree moved.
 - **Map (landscape rework):** 2.8 km square (`WORLD_SIZE` 2800, `TERRAIN_SEGMENTS` 560 = 5 m cells; was 2 km). The valley
   (spawn, lake, old growth) kept its coordinates; the north is `highCountry()` in terrain.js: a `STAIR` of rises along z
   (foothills ~50 m → lower snow bench ~150 m, z −420…−680 → upper basin ~225 m, z −820…−1000, walled like a cirque → the pass

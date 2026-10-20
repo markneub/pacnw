@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
-  WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, SNOWLINE, TREELINE, SEED, SPAWN,
+  WORLD_SIZE, CHUNK_SIZE, VIEW_DIST, SNOWLINE, TREELINE, SEED, CLEARING,
 } from './config.js';
 import {
   heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt, marshAt, MARSH, sandAt, coastZ, SEA_LEVEL,
@@ -640,7 +640,7 @@ async function scatter(trail) {
       const z = gz + rng() * cell;
       const h = heightAt(x, z);
       if (h < waterLevelAt(x, z) + 1.5) continue;
-      if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue;
+      if (Math.hypot(x - CLEARING.x, z - CLEARING.z) < 14) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 2.3) continue;
       if (offStream(x, z) < 2.5) continue; // trees stand back from the water
       const slope = slopeAt(x, z);
@@ -786,7 +786,7 @@ async function scatter(trail) {
       if (slopeAt(x, z) > 0.4 || sandAt(x, z) > 0.3) continue;
       if (trail.distanceTo(x, z) < TRAIL_WIDTH + 1.5) continue;
       if (offStream(x, z) < 2) continue;
-      if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 6) continue;
+      if (Math.hypot(x - CLEARING.x, z - CLEARING.z) < 6) continue;
       add('vine_maple', { x, y: groundAt(x, z) - 0.25, z, rotY: rng() * 6.28, scale: 0.8 + rng() * 0.45, tint: rng() });
     }
     await row(4, gz);
@@ -819,7 +819,7 @@ async function scatter(trail) {
       for (let k = -2; k <= 2; k++) {
         const px = x + dx * half_ * k * 0.5;
         const pz = z + dz * half_ * k * 0.5;
-        if (trail.distanceTo(px, pz) < TRAIL_WIDTH + 2.5 || Math.hypot(px - SPAWN.x, pz - SPAWN.z) < 12 || offStream(px, pz) < 3) ok = false;
+        if (trail.distanceTo(px, pz) < TRAIL_WIDTH + 2.5 || Math.hypot(px - CLEARING.x, pz - CLEARING.z) < 12 || offStream(px, pz) < 3) ok = false;
       }
       if (!ok) continue;
       // Seat it so that nowhere along or across it does the ground come up more than 0.9 of a
