@@ -768,7 +768,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   5 m grid cells s −5…10, v ±10, so its edge lies on the terrain's own lines; drawn with `terrainMaterial`, coloured by
   `groundColor`/`groundLayers`, `shadeGround`ed) rises from the level approach into a ~4 m bank the tunnel opens out of
   (blended to the raw ground over its last 1.5 m). Across the doorway (|v| < 1.6–2.8, s −4.5 … 0.4…1) it eases
-  down to exactly the floor (Y0 − 0.02): it stood ~20 cm higher, a step down onto the apron ("a tear", the user). **Shape from the user's photos** ("too round": a dome with a round hole):
+  down to exactly the floor (Y0 − 0.02): it stood ~20 cm higher, a step down onto the apron ("a tear", the user). Only ground near floor level eases beside the doorway, and the face's ledge isn't set
+  back within ~2–3 m of it: both put the face ~1 m behind the tunnel's lip, and close to the mouth you saw past the lip
+  through the hill where `inCaveMouth` cuts it away (holes, the user). The patch keeps its mesh normals (steep faces shade
+  right) except across the threshold (analytic: the mesh's averaged in the face behind and painted a cliff strip). **Shape from the user's photos** ("too round": a dome with a round hole):
   a ~5–6 m face of fractured rock (`faceAt(v)`: 1.3 m columns standing out 0–0.9 m by a per-column draw, flush beside
   the doorway, a buttress at v ≈ −3.7 out 1.1 m more; a ledge set back 0.5–0.85 m at ~half height), near vertical in
   the middle and leaning back into mossy slopes toward the sides (height × 0.15 and the rise widening to ~7 m by

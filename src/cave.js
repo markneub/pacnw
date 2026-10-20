@@ -318,14 +318,21 @@ function patchHeight(x, z) {
   // near vertical in the middle, leaning back into a slope toward the sides
   const rw = 0.3 + 6.5 * smooth(W - 4, W + 1.5, Math.abs(v)) + 0.1 * n;
   const lf = 0.5 + 0.15 * hc; // (where the ledge is, as a share of the height)
-  const back = 0.5 + 0.35 * noise3(v * 0.4, 17.0, 0.0); // (how far it's set back)
+  // (how far it's set back; not round the doorway, or the face over its shoulders stood behind the tunnel's lip
+  // and you saw past the lip through the hill where it's cut away for the tunnel)
+  const back = (0.5 + 0.35 * noise3(v * 0.4, 17.0, 0.0)) * smooth(2.0, 3.2, Math.abs(v));
   const prof = lf * smooth(sf, sf + rw, s) + (1 - lf) * smooth(sf + back, sf + back + rw, s);
   const bank = Y0 + H * prof + (0.3 + 0.08 * n) * Math.max(0, s - sf - back - rw) + 0.3 * n * smooth(sf, sf + 2, s);
   const edge = Math.min(s - PATCH.s0, PATCH.s1 - s, v - PATCH.v0, PATCH.v1 - v);
   const h = raw + (Math.max(raw, bank) - raw) * smooth(0, 1.5, edge);
   // the doorway: the ground eases down to exactly the tunnel's floor at the threshold (it stood ~20 cm above it,
   // a step down onto the strip under the threshold: "a tear on the ground", the user)
-  const door = smooth(-4.5, -1.5, s) * (1 - smooth(1.6, 2.8, Math.abs(v))) * (1 - smooth(0.4, 1.0, s));
+  // Across the doorway itself; beside it only ground near the floor's level: easing the face there down too set it
+  // back ~1 m behind the tunnel's lip, and rays past the lip saw through the hill where it's cut away for the
+  // tunnel (holes, the user)
+  const av = Math.abs(v);
+  const low = Math.max(1 - smooth(0.4, 0.9, h - Y0), (1 - smooth(1.3, 1.9, av)) * (1 - smooth(0.3, 0.45, s)));
+  const door = smooth(-4.5, -1.5, s) * (1 - smooth(1.6, 2.8, av)) * (1 - smooth(0.4, 1.0, s)) * low;
   return h + (Y0 - 0.02 - h) * door;
 }
 function buildPatch() {
@@ -368,7 +375,6 @@ function buildPatch() {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setAttribute('aLayers', new THREE.BufferAttribute(lay, 4));
   g.setAttribute('aHollow', new THREE.BufferAttribute(hollow, 1)); // (≤ −1: the terrain shader's "I'm the patch", and how much rock)
@@ -376,12 +382,23 @@ function buildPatch() {
   g.setIndex(idx);
   // face up (the terrain is single-sided)
   g.computeVertexNormals();
-  const up = g.getAttribute('normal').getY(0) > 0;
-  if (!up) {
+  if (g.getAttribute('normal').getY(0) < 0) {
     for (let t = 0; t < idx.length; t += 3) [idx[t + 1], idx[t + 2]] = [idx[t + 2], idx[t + 1]];
     g.setIndex(idx);
+    g.computeVertexNormals();
   }
-  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  // The mesh's own normals (the steep faces shade right with them), but across the threshold the smooth ones:
+  // there the mesh's averaged in the face rising behind it, and the level ground read as a strip of cliff
+  const gn = g.getAttribute('normal');
+  for (let i = 0; i < ns; i++) {
+    for (let j = 0; j < nv; j++) {
+      const ls = PATCH.s0 + i * PATCH.step;
+      const lv = PATCH.v0 + j * PATCH.step;
+      if (ls < -1 || ls > 0.25 || Math.abs(lv) > 1.5) continue;
+      const k = i * nv + j;
+      gn.setXYZ(k, nrm[k * 3], nrm[k * 3 + 1], nrm[k * 3 + 2]);
+    }
+  }
   g.computeBoundingSphere();
   const mesh = new THREE.Mesh(g, terrainMaterial);
   mesh.name = 'cave ground';
