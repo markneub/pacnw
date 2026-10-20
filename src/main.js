@@ -243,6 +243,7 @@ async function init() {
   // the lighthouse on the headland, the wreck in the shallows
   const coast = await buildCoast(coastPlan, coastReady);
   scene.add(coast.group);
+  shadeGround(coast.headland, veg.canopyAt); // (its copy of the ground for past the far plane, shaded like the tiles)
   const player = new Player(camera, renderer.domElement, (pos, r) => {
     if (cave.state.inside) {
       cave.collide(pos, r); // (in the tunnel the trees overhead don't count)

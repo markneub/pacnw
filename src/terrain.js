@@ -581,10 +581,13 @@ export function terrainSurface() {
  * and normals come from the shared grid so tiles meet without shading seams.
  */
 function buildTile(tx, tz) {
-  const g = heightGrid();
   const seg = TERRAIN_SEGMENTS / TILES;
-  const ix0 = tx * seg;
-  const iz0 = tz * seg;
+  return buildGridPatch(tx * seg, tz * seg, seg);
+}
+
+/** A square of the height grid, seg cells a side from grid vertex (ix0, iz0), as a tile. */
+function buildGridPatch(ix0, iz0, seg, minY = -Infinity) {
+  const g = heightGrid();
   const n = seg + 1;
   const positions = new Float32Array(n * n * 3);
   const normals = new Float32Array(n * n * 3);
@@ -620,6 +623,7 @@ function buildTile(tx, tz) {
       colors[k + 1] = c.g;
       colors[k + 2] = c.b;
       const gk = iz * GRID_N + ix;
+      if (!surface) continue;
       surface.color[gk * 3] = c.r;
       surface.color[gk * 3 + 1] = c.g;
       surface.color[gk * 3 + 2] = c.b;
@@ -633,7 +637,9 @@ function buildTile(tx, tz) {
       const b = (j + 1) * n + i;
       const cc = (j + 1) * n + i + 1;
       const d = j * n + i + 1;
-      index.push(a, b, d, b, cc, d);
+      const y = (v) => positions[v * 3 + 1];
+      if (Math.max(y(a), y(b), y(d)) > minY) index.push(a, b, d);
+      if (Math.max(y(b), y(cc), y(d)) > minY) index.push(b, cc, d);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -646,6 +652,18 @@ function buildTile(tx, tz) {
   geo.setIndex(index);
   geo.computeBoundingSphere();
   return geo;
+}
+
+/**
+ * A copy of the terrain over the rect (world x0..x1, z0..z1), whole grid cells, the same triangles and
+ * colours as the tiles (shade it with them), leaving out triangles wholly below minY. coast.js draws the
+ * headland with it past the camera's far plane.
+ */
+export function buildTerrainPatch(x0, z0, x1, z1, minY) {
+  const i0 = Math.max(0, Math.floor((x0 + WORLD_SIZE / 2) / GRID_STEP));
+  const j0 = Math.max(0, Math.floor((z0 + WORLD_SIZE / 2) / GRID_STEP));
+  const seg = Math.min(GRID_N - 1 - Math.max(i0, j0), Math.ceil(Math.max(x1 - x0, z1 - z0) / GRID_STEP));
+  return buildGridPatch(i0, j0, seg, minY);
 }
 
 /** The terrain's material (cave.js draws its finer ground patch with it). */

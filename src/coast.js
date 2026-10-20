@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { groundAt, coastZ, HEADLAND, headlandAt } from './terrain.js';
+import { groundAt, coastZ, HEADLAND, headlandAt, buildTerrainPatch, terrainMaterial, SEA_LEVEL } from './terrain.js';
 import { shared, addGroundCover } from './materials.js';
 
 /**
@@ -218,14 +218,13 @@ function buildBeam() {
 /** The lamp's glare: a soft camera-facing disc, brighter as a beam swings past the viewer. */
 function buildGlare() {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uI: { value: 0 }, uS: { value: 1 } },
+    uniforms: { uI: { value: 0 } },
     vertexShader: /* glsl */ `
-      uniform float uS;
       varying vec2 vUv;
       void main() {
         vUv = uv * 2.0 - 1.0;
         vec4 c = viewMatrix * modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-        c.xy += position.xy * 6.0 * uS;
+        c.xy += position.xy * 6.0;
         gl_Position = projectionMatrix * c;
       }`,
     fragmentShader: /* glsl */ `
@@ -252,6 +251,41 @@ function buildGlare() {
 
 const LAMP_Y = 15.9; // the lens's middle above the lighthouse's origin
 const TURN = 12; // s per turn
+
+// ---------------------------------------------------------------------------
+// Past the far plane
+// ---------------------------------------------------------------------------
+
+// Seen from up the beach the headland is past the camera's far plane (420 m on phones): it was clipped away
+// while the lighthouse (then pulled in toward the camera) floated over the horizon (the user). Now the
+// headland's ground, the lighthouse, house, beams and glare are drawn where they are, and only their depth is
+// squeezed: view depths past `uFarSqueeze.x` (90% of far) ease toward `.y` (97.5%), always in front of the
+// sky (atmosphere.js draws it at depth 0.99999 w, i.e. ~98% of far) and still in order. Nothing moves on screen, and the fog is the fog at their real distance.
+const uFarSqueeze = { value: new THREE.Vector2(378, 410) };
+
+function squeezeFar(mat) {
+  const cb = mat.onBeforeCompile;
+  const key = Object.prototype.hasOwnProperty.call(mat, 'customProgramCacheKey') ? mat.customProgramCacheKey : null;
+  const base = key ? () => key.call(mat) : () => cb.toString();
+  mat.onBeforeCompile = (shader, renderer) => {
+    cb.call(mat, shader, renderer);
+    shader.uniforms.uFarSqueeze = uFarSqueeze;
+    const vs = shader.vertexShader;
+    const end = vs.lastIndexOf('}');
+    shader.vertexShader = `uniform vec2 uFarSqueeze;\n${vs.slice(0, end)}
+      {
+        float fsD = gl_Position.w; // (the view depth)
+        if (fsD > uFarSqueeze.x) {
+          float fsR = uFarSqueeze.y - uFarSqueeze.x;
+          float fsD2 = uFarSqueeze.x + fsR * (1.0 - exp(-(fsD - uFarSqueeze.x) / fsR));
+          gl_Position.z = (projectionMatrix[3][2] - projectionMatrix[2][2] * fsD2) / fsD2 * gl_Position.w;
+        }
+      }
+    ${vs.slice(end)}`;
+  };
+  mat.customProgramCacheKey = () => `${base()}|farSqueeze`;
+  return mat;
+}
 
 export async function buildCoast(plan, assets) {
   const gltf = await assets;
@@ -301,6 +335,29 @@ export async function buildCoast(plan, assets) {
   glare.position.copy(lampPos);
   group.add(beam, glare);
 
+  // the headland's ground, for when it's past the far plane: the terrain's own triangles and material
+  // (drawn just behind it, so wherever the terrain itself is drawn, it wins)
+  const hlMat = terrainMaterial.clone();
+  hlMat.onBeforeCompile = terrainMaterial.onBeforeCompile;
+  hlMat.customProgramCacheKey = terrainMaterial.customProgramCacheKey;
+  hlMat.polygonOffset = true;
+  hlMat.polygonOffsetFactor = 1;
+  hlMat.polygonOffsetUnits = 1;
+  squeezeFar(hlMat);
+  const headland = new THREE.Mesh(buildTerrainPatch(405, 915, 655, 1215, SEA_LEVEL + 0.2), hlMat); // (and the stacks)
+  headland.name = 'headland (far)';
+  headland.frustumCulled = false;
+  group.add(headland);
+  const hlBox = new THREE.Box3().setFromBufferAttribute(headland.geometry.getAttribute('position'));
+  const sq = new Set();
+  for (const o of [lh, house, beam, glare, headland]) {
+    o.traverse((m) => {
+      if (!m.isMesh) return;
+      m.frustumCulled = false; // (three's culling stops at the far plane)
+      if (m.material !== hlMat && !sq.has(m.material)) sq.add(squeezeFar(m.material));
+    });
+  }
+
   // ---- colliders ----
   const wc = Math.cos(plan.wreck.yaw);
   const ws = Math.sin(plan.wreck.yaw);
@@ -349,24 +406,13 @@ export async function buildCoast(plan, assets) {
   const toCam = new THREE.Vector3();
   const dir = new THREE.Vector3();
   let on = 0;
-  // Past the camera's far plane (420 m on phones; the beach is ~500 m away) the lighthouse would be clipped away
-  // and its beams left hanging in the sky (the user): beyond 92% of it, the lighthouse, house, beams and glare
-  // are drawn pulled in along the view ray and scaled down by the same factor, so they look exactly the same
-  // size, in the same place (a dark shape under the beams).
-  const far = [lh, house, beam, glare].map((o) => ({ o, pos: o.position.clone(), scale: o.scale.clone() }));
-  const ctr = new THREE.Vector3(plan.lighthouse.x, plan.lighthouse.y + 8, plan.lighthouse.z);
-  function pullIn(camera) {
-    const d = camera.position.distanceTo(ctr);
-    const k = Math.min(1, (camera.far * 0.92) / Math.max(d, 1e-3));
-    for (const f of far) {
-      f.o.position.copy(f.pos).sub(camera.position).multiplyScalar(k).add(camera.position);
-      f.o.scale.copy(f.scale).multiplyScalar(k);
-    }
-    glare.material.uniforms.uS.value = k;
-  }
-
+  const corner = new THREE.Vector3();
   function update(dt, t, camera) {
-    pullIn(camera);
+    uFarSqueeze.value.set(camera.far * 0.9, camera.far * 0.975);
+    // (the headland's copy only while some of it is past where the squeeze starts)
+    corner.set(camera.position.x < (hlBox.min.x + hlBox.max.x) / 2 ? hlBox.max.x : hlBox.min.x, hlBox.max.y,
+      camera.position.z < (hlBox.min.z + hlBox.max.z) / 2 ? hlBox.max.z : hlBox.min.z);
+    headland.visible = camera.position.distanceTo(corner) > camera.far * 0.89;
     // lit at night (eased, so the swap in the cave doesn't pop)
     const target = shared.uNight.value > 0.5 ? 1 : 0;
     on += (target - on) * Math.min(1, dt * 3);
@@ -386,5 +432,5 @@ export async function buildCoast(plan, assets) {
     lamp.emissiveIntensity = on * (2.2 + 4 * flash);
   }
 
-  return { group, collide, update, plan, lampPos };
+  return { group, collide, update, plan, lampPos, headland };
 }

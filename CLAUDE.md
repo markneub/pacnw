@@ -359,8 +359,12 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   glows, two additive cone beams (140 m, open, view-angle soft, fading with distance) turn once every 12 s, and a glare
   disc at the lamp flashes as a beam sweeps past the viewer (pow(align, 60)). Colliders: the tower (circle), house and
   hull (rotated rects). **Beyond the far plane** (420 m on phones; the beach is ~500 m away: the tower was clipped and the
-  beams hung in the sky, the user) `pullIn` draws the lighthouse, house, beams and glare pulled in along the view ray to
-  0.92 × far and scaled by the same factor: the same size and place on screen. Views: wreck `x=205&z=1012&yaw=2.41&weather=sun`, headland from
+  beams hung in the sky, the user): `squeezeFar(mat)` (coast.js) remaps only the *depth* of the lighthouse, house, beams
+  and glare: view depths past 0.9 × far ease toward 0.975 × far (must stay in front of the sky, drawn at 0.99999 w ≈
+  0.98 far), so they're drawn in place, true size and fog. The headland under them too (an earlier `pullIn` drew the
+  tower without it: a lighthouse floating on the horizon by day, the user): `buildTerrainPatch` (terrain.js) copies the
+  terrain grid over the headland and stacks (above sea level) with the terrain's own material + polygon offset (the real
+  tiles win where drawn), squeezed, shaded with the tiles, shown while some of it is past 0.89 × far. Views: wreck `x=205&z=1012&yaw=2.41&weather=sun`, headland from
   the beach `x=430&z=1005&yaw=-1.95&pitch=0.12` (add `&night` for the beams), lighthouse `x=545&z=1080&yaw=-2.6&pitch=0.2`.
 - **Paper map** (`src/map.js`, the user: a translucent map icon, tap → "a cool, fast animation of a map unfolding",
   real paper, lay of the land, no writing but a title, where you are + which way you face, compass, scale, maybe
