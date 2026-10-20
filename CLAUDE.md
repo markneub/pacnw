@@ -380,42 +380,33 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   the icon (the same animations reversed, 0.65 s). The marker (an SVG arrow with a pulse, rotate(−yaw)) appears once
   it's open and follows the player each frame. The world keeps running behind it. `#overlay` is z-index 8 so the
   pause screen covers the map. Dev: `?map` keeps it open after starting.
-  **The loading screen is the map being drawn** (the user picked it from 5 ideas): `MapSheet` (map.js) unfolds blank at
-  once (`PaperMap.loading(sheet.view)`, dark backdrop `#map-view.loading::before`) and is inked as loading progresses:
-  each part has a window of the load progress (`barNow()` in main.js, the old bar's timeline; the bar itself is gone)
-  and draws incrementally once its data exists, catching up over ≥ `dur` s: neat line + ticks (0–0.05), title wiped in,
-  compass, scale bar; sea lines and contours level by level, low to high (0.08–0.3, `setTerrain`); the land as soft
-  dabs of the finished raster spreading out from the spawn (0.2–0.62), creeks from their sources, tree symbols in the
-  same spreading order (`setLand(canopyAt)`); the red trail from the trailhead (0.7–0.93, `setTrail`) and the pictures
-  as it nears them. While drawing, the layers are stacked canvases blended by the compositor (`mix-blend-mode`
-  multiply for the aged paper, screen for the crease highlights), so a frame only adds strokes; `compose()` makes the
-  finished `canvas` once at the end (redrawing it all each frame doubled the map step and slowed the load). For the
-  land early, `prepareVegetation` (the clear-zone filter + `bakeCanopy`) runs before the impostor bake, and the
-  cabin/cave/coast plans right after the trail (load share `map` 0.04, between trail and impostors). When done:
-  the arrow at the spawn and "Tap to start" (IM Fell, `#overlay.loading`) under the sheet; starting folds it into the
-  icon (`begin()` in main.js; `?autostart` too). **v2 (the user):** behind the sheet a pre-blurred picture of the
-  start view (`src/loading/start-portrait.jpg` 390×844 from the phone profile, `start-landscape.jpg` 960×540 from
-  desktop, both `?weather=sun` (the game starts in a sun break), Gaussian blur 6 / 4.5 px, under the backdrop's dim
-  gradient; on `body` too, so it's there from the first paint). **Regenerate them when the spawn or its surroundings
-  change** (render `?autostart&still=6&quality=low|high&weather=sun&dpr=2` at 390×844 / 1280×720, blur, save). The
-  open map in game blurs the live world the same way (`backdrop-filter: blur(6px)` on `#map-view`, off while loading).
-  No fold creases while it's drawn or waiting (`foldShadows`/`creaseLines` only in `compose(true)`, for the panels
-  when it folds away). Smoother colouring: each part advances at most a frame's worth (1/30 s ÷ dur) per frame, so after
-  a stall in the loading it carries on instead of jumping, and a dab is drawImage + a prebuilt soft brush
-  (destination-in). The sheet is 86% of the height on landscape screens (was 90%) to leave room for the prompt.
-  **Smoother loading (v3, the user: "a little jerky"; speed matters less):** `loadTick` yields about every 16 ms of
-  work (was 40) and each yield waits for a *painted frame* (`afterPaint`: rAF → setTimeout; 100 ms fallback for hidden
-  tabs; a plain task in node): a setTimeout(0) yield often let the work carry on without a paint. The impostor bake
-  reads back and yields after each of its 8 views (was each type), the warm-up compiles 2 objects per batch (was 8) and
-  draws in 60 batches (was 24), the contours are computed with ticks, the clear-zone filter ticks per placement type.
-  **`?perf` smoothness readout** on the start screen: per loading step, frames drawn, the longest freeze and how
-  many gaps were > 100 ms (a gap counts against the step running when it began). Ask the user for a screenshot of it
-  to find what stutters on their phone; SwiftShader's freezes (seconds, software GPU) say nothing about phones.
-  The user's phone (`?perf`): ready in **4.2 s**, with freezes of 530 (terrain), 360 (trail), 240 (map), 230 (shading)
-  ms, ~180 (impostors, warm-up): too little smooth time to colour in during the load. So (v4) only the frame, title,
-  compass and contours (load progress 0.08–0.55) draw during the load; the wash (0–1.8 s), creeks (1–2), woods
-  (1–2.6), trail (1.8–3.4) and pictures play after it (`later()` parts, timed from `finish()`), before "Tap to start"
-  and before the render loop starts, so nothing competes for those frames. Container load: no slower (ready 70 s vs 79–84 s for the old build the
+  **The loading screen is the map** (the user picked it from 5 ideas): `MapSheet` (map.js) is out flat from the start
+  (`PaperMap.loading(sheet.view)`: no unfold, no creases) over a pre-blurred picture of the start view
+  (`src/loading/start-portrait.jpg` 390×844 from the phone profile, `start-landscape.jpg` 960×540 from desktop, both
+  `?weather=sun` since the game starts in a sun break, Gaussian blur 6 / 4.5 px, under the backdrop's dim gradient;
+  also on `body`, so it shows from the first paint). **Regenerate them when the spawn or its surroundings change**
+  (render `?autostart&still=6&quality=low|high&weather=sun&dpr=2` at 390×844 / 1280×720, blur, save). The open map in
+  game blurs the live world the same way (`backdrop-filter: blur(6px)` on `#map-view`, off while loading).
+  **Everything is revealed by opacity animations** (Web Animations, which the browser runs on the compositor thread):
+  the frame/title/compass/scale bar at once; the contours when the terrain exists (`setTerrain`); when the canopy exists
+  (`setLand`, the 'map' load step) the land + line work (contours, woods, creeks) cut into 64 soft round patches (8 × 8
+  grid, R 150 px, solid core covering the cell) that fade in spreading out from the spawn over ~2.5 s; the trail as one
+  tiny div per dash fading in along the route from 1.1 s (~1.6 s); the pictures as the trail passes them. `finish()`
+  waits for all of them, then `compose(false)`. `will-change` comes off each element when its fade ends.
+  Why (the user: "a little jerky"): their phone loads in **~4.2 s** with main-thread freezes of 180–530 ms
+  (terrain 530, trail 360, map 240, shading 230), and the browser can't paint during a running task, so drawing on
+  the main thread (brush dabs per frame, frame-aligned yields, even playing it after the load) was never smooth;
+  compositor animations keep running through the freezes. Creases: none while loading or during the first fold away
+  (the panels get `compose(false)`); `onFirstFold` → `compose(true)` for every later opening. `?autostart` folds it
+  away at once. The old progress bar timeline is gone (`progress(name)` only names the step for ?perf).
+  **Loading yields:** `loadTick` yields about every 16 ms of work and waits for a painted frame (`afterPaint`: rAF →
+  setTimeout, 100 ms fallback for hidden tabs, a plain task in node); the warm-up compiles 2 objects per batch and draws
+  in 60 batches; contours and the clear-zone filter tick. **`?perf` smoothness readout** on the start screen: per load
+  step, frames, longest freeze, gaps > 100 ms (a gap counts against the step running when it began); ask the user for
+  a screenshot to find what stutters on their phone. In SwiftShader the reveals contend with WebGL for the (software)
+  GPU, so container freezes balloon (a 26 s 'trail' step once): meaningless for phones. Test trick for the reveal:
+  at ready, pause `.map-live-frame`'s animations (`getAnimations({ subtree: true })`) at set `currentTime`s and compose
+  its canvases/dashes with their computed opacity into one canvas. Container load: no slower (ready 70 s vs 79–84 s for the old build the
   same day). Test trick: compose `.map-live`'s canvases with their blend modes into one canvas and `toDataURL` it during
   the load; for the ready/fold screens stop the loop (`__pacnw.renderer.setAnimationLoop(null)`) and `page.screenshot()`. Test trick: a page with just `PaperMap` on a saved
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).
@@ -994,24 +985,16 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `shared.uWet` (from `weather.js`) drives wet darkening/gloss (`wetChunks`), trail puddles and lake rain
   rings.
 - **No HUD** (the user: drop the place/altitude line; the H key went with it).
-- Loading screen: the paper map being drawn (see Paper map), then "Tap/Click to start" under it; no instructions or
-  flavour text. A one-line controls hint toasts once on start. The progress (`barNow()`) is our own timeline that
-  never goes back.
-  **Real progress, no stalls** (the user: it stalled halfway, then the end flashed by; saved per-device timings were tried
-  and dropped at the user's request): each step has a fixed share (`LOAD_SHARE` in main.js) and the long loops report
-  how far along they are with `await loadTick(f)` (`src/loadprogress.js`), which every ~40 ms reports to the bar and
-  yields a `setTimeout(0)` task so the page paints: `prepareTerrain()` (the height grid, a row at a time, before
-  `buildTerrain`), `buildTrail` (async: grid rows, each A* leg), `bakeImpostors` (async: per tree type × albedo/normal, with
-  a 1-pixel readback so the GPU work is really done), `scatter`/`buildVegetation` (async: every row of each scatter pass,
-  weighted by `SHARE`, then each placement type), and `warmUp` (async: `renderer.compile(object, camera, scene)` in
-  batches of 8, then each program in `renderer.info.programs` linked in turn (waits on `isReady()` with
-  KHR_parallel_shader_compile, then `getUniforms()`), then 24 draws of cost-balanced batches (vertices × instances) to a
-  16×16 target with a pixel readback each; `post.warmUp` runs after visibility is restored, with the normal culled view:
-  with everything visible and unculled it drew the whole world at full resolution). `loadTickNow(f)` forces a yield
-  between sync steps. Each report glides the progress there in 0.2 s and then creeps 25% further toward the step's end over
-  4 s. Awaits keep the scatter's rng order: instance counts are identical. `?perf` logs `longest stall` (SwiftShader:
-  2.4 s, was 7+ s and ~30 s of silent warm-up; a real GPU is far faster). At the end `sheet.finish()` draws whatever's
-  left (each part ≤ its `dur`) before "Tap to start".
+- Loading screen: the paper map (see Paper map), then "Tap/Click to start" under it; no instructions or flavour text.
+  A one-line controls hint toasts once on start. The long loading loops call `await loadTick(f)` (`src/loadprogress.js`):
+  `prepareTerrain()` (a row at a time), `buildTrail` (grid rows, each A* leg), `bakeImpostors` (per tree type ×
+  albedo/normal, with a 1-pixel readback so the GPU work is really done), `scatter`/`buildVegetation` (rows, then each
+  placement type), `setTerrain`/`setLand` (the map), and `warmUp` (`renderer.compile(object, camera, scene)` in batches
+  of 2, then each program in `renderer.info.programs` linked in turn (waits on `isReady()` with
+  KHR_parallel_shader_compile, then `getUniforms()`), then 60 draws of cost-balanced batches (vertices × instances) to a
+  16×16 target with a pixel readback each; `post.warmUp` runs after visibility is restored, with the normal culled
+  view). `loadTickNow(f)` forces a yield between sync steps. Awaits keep the scatter's rng order: instance counts are
+  identical. `?perf` logs `longest stall`. `sheet.finish()` waits for the map's reveals before "Tap to start".
 
 - Everything is deterministic from `SEED`. Changing noise or scatter order moves every tree.
 - Budget history (spawn view, submitted tris / draws). Before tiers: desktop 3.24M/466, phone 1.75M/216

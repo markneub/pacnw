@@ -523,40 +523,47 @@ function vnoiseP(x, y, px, py) {
 // ---------------------------------------------------------------------------
 
 const PAPER_CSS = `rgb(${PAPER.map((c) => Math.round(c * 255)).join(',')})`;
-const clamp01 = (v) => Math.min(1, Math.max(0, v));
-function blank() {
+function blank(w = SIZE, h = w) {
   const c = document.createElement('canvas');
-  c.width = c.height = SIZE;
+  c.width = w;
+  c.height = h;
   return c;
 }
-/** The point at fraction s of a rectangle's perimeter, clockwise from its top-left corner. */
-function rectAt(x, y, w, h, s) {
-  let d = s * 2 * (w + h);
-  if (d <= w) return [x + d, y];
-  d -= w;
-  if (d <= h) return [x + w, y + d];
-  d -= h;
-  if (d <= w) return [x + w - d, y + h];
-  return [x, y + h - (d - w)];
+/** Fade an element in: an opacity animation, which the browser runs off the main thread. */
+function fadeIn(el, delay, duration) {
+  el.style.willChange = 'opacity';
+  const a = el.animate([{ opacity: 0 }, { opacity: 1 }], { delay, duration, fill: 'both', easing: 'ease-out' });
+  // (then off its own compositor layer again)
+  a.finished.then(() => {
+    el.style.willChange = 'auto';
+  }, () => {});
+  return a;
+}
+/** An absolutely placed canvas in the sheet's 1024 px frame. */
+function placed(c, x, y) {
+  c.style.position = 'absolute';
+  c.style.left = `${x}px`;
+  c.style.top = `${y}px`;
+  return c;
 }
 
 /**
- * The map, drawn as the game loads as if inked by hand: the neat line and the title first,
- * then the coast and the contours rising from the sea to the peaks; then a colour wash spreading out
- * from the trailhead, the creeks running down, the woods, and last the red trail from the
- * trailhead to the cabin, the little pictures appearing as it goes.
+ * The map as the loading screen. It's out from the start (blank paper), and fills in as the world
+ * is built: the frame, title, compass and scale bar first; the coast and the contours once the
+ * terrain exists (setTerrain); then, once the canopy exists (setLand), the colour, woods and creeks
+ * in soft patches spreading out from the origin (the spawn), and the red trail dash by dash from the
+ * trailhead, the little pictures as it reaches them.
  *
- * The frame, title and contours have windows of the loading progress (0..1) and are drawn bit by
- * bit as it passes through them, once their data exists (setTerrain, setTrail, setLand); one the
- * progress has run past catches up over at least `dur` s. The colour, woods, creeks, trail and
- * pictures play after the loading (finish()), on a fixed ~3.5 s timeline, when nothing else
- * competes for the frames. Layers: the paper; the wash (soft dabs of the finished land raster); the line
- * work (drawn incrementally into its own canvas); the title, compass, scale bar and pictures
- * (redrawn with their fade each time); the aged paper multiplied over it all. Once finish() has
- * resolved, `canvas` is the finished sheet.
+ * Everything is drawn into canvases when its data arrives, and *revealed by opacity animations*:
+ * the browser runs those on its compositor thread, so they stay smooth while the loading holds the
+ * main thread for hundreds of ms at a time (on the user's phone the whole load is ~4 s with freezes
+ * of up to ~0.5 s; animating the drawing itself on the main thread was jerky however it was paced).
+ * A patch is the finished land and line work of its region, cut out with a soft round brush;
+ * a trail dash is a tiny div. finish() resolves when every reveal has played, with the finished
+ * sheet in `canvas` (compose(); with the fold creases or not).
  */
 export class MapSheet {
-  /** origin: the world spot the wash and the woods spread out from (the spawn) */
+  /** origin: the world spot the colour spreads out from (the spawn) */
   static async create(origin) {
     await document.fonts.load('46px "IM Fell English SC"').catch(() => {});
     return new MapSheet(origin);
@@ -565,124 +572,143 @@ export class MapSheet {
   constructor(origin) {
     this.canvas = blank();
     this.ctx = this.canvas.getContext('2d');
-    this.wash = blank();
+    this.origin = toPx(origin.x, origin.z);
+    this.anims = [];
+    this.data = {};
+    // the layers: the contours alone (on bare paper until the colour arrives), the land, the line
+    // work over it (contours, woods, creeks), the frame/title/compass/scale bar, the aged paper
+    this.contours = blank();
+    this.land = blank();
     this.ink = blank();
-    this.over = blank(); // (the title, compass, scale bar and pictures, redrawn when they change)
+    this.frame = blank();
     this.age = blank();
     const ag = this.age.getContext('2d');
     ag.fillStyle = '#fff';
     ag.fillRect(0, 0, SIZE, SIZE);
     agePaper(ag);
-    // While it's drawn, the layers are shown stacked (the compositor multiplies the aged paper in),
-    // so each frame only adds what's new; compose() makes the finished sheet in `canvas`. No fold
-    // creases until it's folded away (the panels: compose(true)).
+    const f = this.frame.getContext('2d');
+    f.strokeStyle = INK;
+    f.lineWidth = 2;
+    f.strokeRect(MARGIN, MARGIN, INNER, INNER);
+    f.lineWidth = 0.8;
+    f.strokeRect(MARGIN - 6, MARGIN - 6, INNER + 12, INNER + 12);
+    for (let m = 0; m <= SPAN; m += 250) {
+      const q = MARGIN + m / MPP;
+      for (const [x0, y0, x1, y1] of [[q, MARGIN - 6, q, MARGIN], [q, MARGIN + INNER, q, MARGIN + INNER + 6], [MARGIN - 6, q, MARGIN, q], [MARGIN + INNER, q, MARGIN + INNER + 6, q]]) {
+        f.beginPath();
+        f.moveTo(x0, y0);
+        f.lineTo(x1, y1);
+        f.stroke();
+      }
+    }
+    titleCartouche(f, 'Cascadia Woods');
+    compassRose(f, SIZE - MARGIN - 82, SIZE - MARGIN - 92, 62);
+    scaleBar(f, MARGIN + 26, SIZE - MARGIN - 34);
+
+    // the view: the layers in the sheet's 1024 px frame, scaled to the sheet (--k, PaperMap.layout)
     this.view = document.createElement('div');
     this.view.className = 'map-live';
     this.view.style.background = PAPER_CSS;
-    for (const [c, blend] of [[this.wash], [this.ink], [this.over], [this.age, 'multiply']]) {
-      if (blend) c.style.mixBlendMode = blend;
-      this.view.appendChild(c);
+    this.frameEl = document.createElement('div');
+    this.frameEl.className = 'map-live-frame';
+    this.view.appendChild(this.frameEl);
+    this.patches = document.createElement('div');
+    this.dashes = document.createElement('div');
+    this.pictures = document.createElement('div');
+    for (const el of [placed(this.contours, 0, 0), this.patches, this.dashes, this.pictures, placed(this.frame, 0, 0), placed(this.age, 0, 0)]) {
+      this.frameEl.appendChild(el);
     }
-    this.origin = toPx(origin.x, origin.z);
-    this.parts = [];
-    this.last = 0;
-    this.finishing = false;
-    this.data = {};
-    const has = (k) => () => k in this.data;
-    const always = () => true;
-    const I = this.ink.getContext('2d');
+    this.age.style.mixBlendMode = 'multiply';
+    this.anims.push(fadeIn(this.frame, 0, 700));
+  }
 
-    // the neat line, a double rule drawn round clockwise with its 250 m ticks
-    const ticks = [];
-    for (let m = 0; m <= SPAN; m += 250) {
-      const p = MARGIN + m / MPP;
-      const d = p - MARGIN; // (along each edge, as the pen goes round)
-      ticks.push([d, p, MARGIN - 6, p, MARGIN], [INNER + d, MARGIN + INNER, p, MARGIN + INNER + 6, p]);
-      ticks.push([2 * INNER + (INNER - d), p, MARGIN + INNER, p, MARGIN + INNER + 6], [3 * INNER + (INNER - d), MARGIN - 6, p, MARGIN, p]);
-    }
-    this.part(0, 0.05, 0.8, always, (a, b) => {
-      I.save();
-      I.strokeStyle = INK;
-      I.lineCap = 'square';
-      for (const [o, w] of [[0, 2], [6, 0.8]]) {
-        const x = MARGIN - o;
-        const sz = INNER + 2 * o;
-        I.lineWidth = w;
-        I.beginPath();
-        I.moveTo(...rectAt(x, x, sz, sz, a));
-        for (let k = 1; k < 4; k++) if (k / 4 > a && k / 4 < b) I.lineTo(...rectAt(x, x, sz, sz, k / 4));
-        I.lineTo(...rectAt(x, x, sz, sz, b));
-        I.stroke();
-      }
-      I.lineWidth = 0.8;
-      I.lineCap = 'butt';
-      for (const [d, x0, y0, x1, y1] of ticks) {
-        const s = d / (4 * INNER);
-        if (s < a || s >= b) continue;
-        I.beginPath();
-        I.moveTo(x0, y0);
-        I.lineTo(x1, y1);
-        I.stroke();
-      }
-      I.restore();
-    });
-    // the title, written in left to right; the compass rose and the scale bar fade in
-    this.ctx.font = '46px "IM Fell English SC", Georgia, serif';
-    const tw = this.ctx.measureText('Cascadia Woods').width + 74;
-    this.part(0.015, 0.07, 0.7, always, null, (c, f) => {
-      c.beginPath();
-      c.rect(SIZE / 2 - tw / 2, 0, tw * f, SIZE);
-      c.clip();
-      titleCartouche(c, 'Cascadia Woods');
-    });
-    this.part(0.04, 0.09, 0.5, always, null, (c, f) => {
-      c.globalAlpha = f;
-      compassRose(c, SIZE - MARGIN - 82, SIZE - MARGIN - 92, 62);
-    });
-    this.part(0.05, 0.1, 0.5, always, null, (c, f) => {
-      c.globalAlpha = f;
-      scaleBar(c, MARGIN + 26, SIZE - MARGIN - 34);
-    });
-
-    // the coast and the sea's water lines, then the contours, level by level up the mountains
-    this.part(0.08, 0.55, 1.4, has('levels'), (a, b) => {
-      const { levels, total } = this.data;
-      const k0 = Math.floor(a * total);
-      const k1 = Math.floor(b * total);
-      let base = 0;
-      I.save();
-      I.beginPath();
-      I.rect(MARGIN, MARGIN, INNER, INNER);
-      I.clip();
-      I.lineCap = 'round';
-      for (const { s, segs } of levels) {
-        const n = segs.length / 4;
-        const from = Math.max(k0, base) - base;
-        const to = Math.min(k1, base + n) - base;
-        if (to > from) {
-          I.strokeStyle = s.color;
-          I.lineWidth = s.width;
-          I.beginPath();
-          for (let i = from; i < to; i++) {
-            I.moveTo(segs[4 * i], segs[4 * i + 1]);
-            I.lineTo(segs[4 * i + 2], segs[4 * i + 3]);
-          }
-          I.stroke();
+  /** The terrain is ready: the coast, the sea's water lines and the contours (tick(f) as it goes). */
+  async setTerrain(streams, tick) {
+    const sea = [SEA_LEVEL, -1, -2.5, -4.5, -7, -10.5, -15];
+    const land = [];
+    for (let h = 20; h < 520; h += 20) land.push(h);
+    const levels = [
+      ...await contourLevels(sea, (lv) => (lv === SEA_LEVEL
+        ? { color: 'rgba(48, 72, 86, 0.85)', width: 1.4 }
+        : { color: `rgba(70, 110, 130, ${0.42 - 0.018 * -lv})`, width: 0.8 }), (f) => tick?.(f * 0.25)),
+      ...await contourLevels(land, (h) => (h % 100 === 0
+        ? { color: 'rgba(120, 80, 45, 0.55)', width: 1.15 }
+        : { color: 'rgba(130, 92, 58, 0.32)', width: 0.6 }), (f) => tick?.(0.25 + f * 0.6)),
+    ];
+    for (const ctx of [this.contours.getContext('2d'), this.ink.getContext('2d')]) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(MARGIN, MARGIN, INNER, INNER);
+      ctx.clip();
+      ctx.lineCap = 'round';
+      for (const [i, { s, segs }] of levels.entries()) {
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.width;
+        ctx.beginPath();
+        for (let k = 0; k < segs.length; k += 4) {
+          ctx.moveTo(segs[k], segs[k + 1]);
+          ctx.lineTo(segs[k + 2], segs[k + 3]);
         }
-        base += n;
-        if (base >= k1) break;
+        ctx.stroke();
+        await tick?.(0.85 + (0.15 * i) / levels.length);
       }
-      I.restore();
-    });
+      ctx.restore();
+    }
+    this.anims.push(fadeIn(this.contours, 0, 1000));
+    this.data.creeks = (streams?.streams ?? []).map((st) => st.points.map((p) => toPx(p.x, p.z)));
+  }
 
-    // the wash: soft round dabs of the finished land, spreading out from the origin
-    const R = 58;
-    const dab = document.createElement('canvas');
-    dab.width = dab.height = 2 * R;
-    const D = dab.getContext('2d');
-    const W = this.wash.getContext('2d');
-    const brush = document.createElement('canvas'); // (a soft round dab, opaque out to 62%)
-    brush.width = brush.height = 2 * R;
+  /** The trail is ready (and where the pictures go: { cave, cabin, lighthouse, wreck }). */
+  setTrail(trail, marks) {
+    this.data.trail = trail.points.map((p) => toPx(p.x, p.y));
+    this.data.marks = marks;
+  }
+
+  /**
+   * The canopy is ready: the land raster, the woods and creeks over it (tick(f) as it goes), then
+   * the reveals: the patches, the trail's dashes, the pictures.
+   */
+  async setLand(canopyAt, tick) {
+    await drawLand(this.land.getContext('2d'), { canopyAt, tick: (f) => tick?.(f * 0.6) });
+    const I = this.ink.getContext('2d');
+    // the woods
+    const trees = treeList(canopyAt);
+    I.save();
+    I.lineWidth = 0.7;
+    for (let i = 0; i < trees.length; i++) {
+      drawTree(I, trees[i]);
+      if (i % 2000 === 1999) await tick?.(0.6 + (0.2 * i) / trees.length);
+    }
+    I.restore();
+    // the creeks, thicker downstream (in runs of 24 points)
+    I.save();
+    I.beginPath();
+    I.rect(MARGIN, MARGIN, INNER, INNER);
+    I.clip();
+    I.strokeStyle = 'rgba(60, 100, 140, 0.85)';
+    I.lineCap = 'round';
+    I.lineJoin = 'round';
+    for (const pts of this.data.creeks ?? []) {
+      for (let i = 0; i < pts.length - 1; i += 24) {
+        I.lineWidth = 0.9 + 1.4 * (i / pts.length);
+        I.beginPath();
+        I.moveTo(...pts[i]);
+        for (let k = i + 1; k <= Math.min(pts.length - 1, i + 24); k++) I.lineTo(...pts[k]);
+        I.stroke();
+      }
+    }
+    I.restore();
+
+    // the patches: the land and line work of each cell of an 8 × 8 grid, a little jittered, cut out
+    // with a soft round brush whose solid core covers the cell; they fade in spreading out from the
+    // origin (ragged), over ~2.5 s
+    const [ox, oy] = this.origin;
+    const far = Math.hypot(Math.max(ox, SIZE - ox), Math.max(oy, SIZE - oy));
+    const key = (x, y) => (0.85 * Math.hypot(x - ox, y - oy)) / far + 0.15 * hash(x * 0.37, y * 0.71);
+    const N = 8;
+    const C = INNER / N;
+    const R = 150; // (core 0.62 R = 93 px > the cell's half-diagonal 83 px + the jitter)
+    const brush = blank(2 * R);
     {
       const B = brush.getContext('2d');
       const g = B.createRadialGradient(R, R, 0, R, R, R);
@@ -692,208 +718,81 @@ export class MapSheet {
       B.fillStyle = g;
       B.fillRect(0, 0, 2 * R, 2 * R);
     }
-    this.later(0, 1.8, has('land'), (a, b) => {
-      const { land, dabs } = this.data;
-      const i1 = b >= 1 ? dabs.length : Math.floor(b * dabs.length);
-      for (let i = Math.floor(a * dabs.length); i < i1; i++) {
-        const { x, y, r } = dabs[i];
-        D.clearRect(0, 0, 2 * r, 2 * r);
-        D.globalCompositeOperation = 'source-over';
-        D.drawImage(land, x - r, y - r, 2 * r, 2 * r, 0, 0, 2 * r, 2 * r);
-        D.globalCompositeOperation = 'destination-in';
-        D.drawImage(brush, 0, 0, 2 * r, 2 * r);
-        W.drawImage(dab, 0, 0, 2 * r, 2 * r, x - r, y - r, 2 * r, 2 * r);
+    const cells = [];
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const x = MARGIN + C * (i + 0.5) + (hash(i, j + 3) - 0.5) * 12;
+        const y = MARGIN + C * (j + 0.5) + (hash(j, i + 5) - 0.5) * 12;
+        cells.push({ x, y, k: key(x, y) });
       }
-      if (b >= 1) W.drawImage(land, 0, 0); // (closing any last soft seams)
-    });
+    }
+    cells.sort((p, q) => p.k - q.k);
+    const kMax = cells[cells.length - 1].k;
+    for (const [n, { x, y, k }] of cells.entries()) {
+      const c = blank(2 * R);
+      const P = c.getContext('2d');
+      P.drawImage(this.land, x - R, y - R, 2 * R, 2 * R, 0, 0, 2 * R, 2 * R);
+      P.drawImage(this.ink, x - R, y - R, 2 * R, 2 * R, 0, 0, 2 * R, 2 * R);
+      P.globalCompositeOperation = 'destination-in';
+      P.drawImage(brush, 0, 0);
+      this.patches.appendChild(placed(c, x - R, y - R));
+      this.anims.push(fadeIn(c, (k / kMax) * 1600, 900));
+      if (n % 8 === 7) await tick?.(0.8 + (0.2 * n) / cells.length);
+    }
 
-    // the creeks, run down from their sources, thicker downstream
-    this.later(1.0, 2.0, has('creeks'), (a, b) => {
-      I.save();
-      I.beginPath();
-      I.rect(MARGIN, MARGIN, INNER, INNER);
-      I.clip();
-      I.strokeStyle = 'rgba(60, 100, 140, 0.85)';
-      I.lineCap = 'round';
-      I.lineJoin = 'round';
-      for (const pts of this.data.creeks) {
-        const n = pts.length - 1;
-        const i0 = Math.floor(a * n);
-        const i1 = Math.floor(b * n);
-        if (i1 <= i0) continue;
-        // in runs of 24 points, each run a little wider than the last
-        for (let i = i0; i < i1;) {
-          const run = Math.floor(i / 24);
-          const end = Math.min(i1, (run + 1) * 24);
-          I.lineWidth = 0.9 + 1.4 * ((run * 24) / pts.length);
-          I.beginPath();
-          I.moveTo(...pts[i]);
-          for (let k = i + 1; k <= end; k++) I.lineTo(...pts[k]);
-          I.stroke();
-          i = end;
+    // the trail, dash by dash from the trailhead (5 px dashes every 9 px), over ~1.6 s from 1.1 s
+    const pts = this.data.trail ?? [];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    let along = 0;
+    let next = 0;
+    const T0 = 1100;
+    const T = 1600;
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1];
+      const [x1, y1] = pts[i];
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      while (next + 2.5 <= along + len) {
+        const t = (next + 2.5 - along) / len;
+        const x = x0 + (x1 - x0) * t;
+        const y = y0 + (y1 - y0) * t;
+        if (x > MARGIN && x < MARGIN + INNER && y > MARGIN && y < MARGIN + INNER) {
+          const d = document.createElement('div');
+          d.className = 'map-dash';
+          d.style.left = `${x}px`;
+          d.style.top = `${y}px`;
+          d.style.transform = `translate(-50%, -50%) rotate(${Math.atan2(y1 - y0, x1 - x0)}rad)`;
+          this.dashes.appendChild(d);
+          this.anims.push(fadeIn(d, T0 + (next / total) * T, 140));
+        }
+        next += 9;
+      }
+      along += len;
+    }
+    // the pictures, as the trail passes nearest them
+    const marks = this.data.marks ?? {};
+    for (const kind of ['cave', 'cabin', 'lighthouse', 'wreck']) {
+      const m = marks[kind];
+      if (!m) continue;
+      const [mx, my] = toPx(m.x, m.z);
+      let best = Infinity;
+      let at = 0;
+      let s = 0;
+      for (let i = 0; i < pts.length; i++) {
+        if (i) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        const dd = Math.hypot(pts[i][0] - mx, pts[i][1] - my);
+        if (dd < best) {
+          best = dd;
+          at = s;
         }
       }
-      I.restore();
-    });
-
-    // the woods, symbol by symbol, after the wash has reached them
-    this.later(1.0, 2.6, has('trees'), (a, b) => {
-      const { trees } = this.data;
-      I.save();
-      I.lineWidth = 0.7;
-      const i1 = b >= 1 ? trees.length : Math.floor(b * trees.length);
-      for (let i = Math.floor(a * trees.length); i < i1; i++) drawTree(I, trees[i]);
-      I.restore();
-    });
-
-    // the trail, dashed in from the trailhead to the cabin
-    this.later(1.8, 3.4, has('trail'), (a, b) => {
-      const { trail, trailLen } = this.data;
-      const at = (s) => {
-        let lo = 0;
-        let hi = trail.length - 1;
-        while (hi - lo > 1) {
-          const m = (lo + hi) >> 1;
-          if (trailLen[m] <= s) lo = m;
-          else hi = m;
-        }
-        const t = (s - trailLen[lo]) / Math.max(1e-6, trailLen[hi] - trailLen[lo]);
-        return { i: lo, p: [lerp(trail[lo][0], trail[hi][0], t), lerp(trail[lo][1], trail[hi][1], t)] };
-      };
-      const L = trailLen[trailLen.length - 1];
-      const s0 = a * L;
-      const s1 = b * L;
-      const p0 = at(s0);
-      const p1 = at(s1);
-      I.save();
-      I.beginPath();
-      I.rect(MARGIN, MARGIN, INNER, INNER);
-      I.clip();
-      I.strokeStyle = 'rgba(170, 38, 28, 0.9)';
-      I.lineWidth = 2;
-      I.lineCap = 'round';
-      I.lineJoin = 'round';
-      I.setLineDash([5, 4]);
-      I.lineDashOffset = s0; // (the dashes carry on from the last stretch)
-      I.beginPath();
-      I.moveTo(...p0.p);
-      for (let i = p0.i + 1; i <= p1.i; i++) I.lineTo(...trail[i]);
-      I.lineTo(...p1.p);
-      I.stroke();
-      I.restore();
-    });
-    // the pictures: the cave by the trailhead, the wreck and the lighthouse along the coast, the
-    // cabin at the trail's end
-    for (const [kind, t0] of [['cave', 1.9], ['wreck', 2.3], ['lighthouse', 2.5], ['cabin', 3.2]]) {
-      this.later(t0, t0 + 0.3, () => !!this.data.marks?.[kind], null, (c, f) => {
-        c.globalAlpha = f;
-        glyphs(c, { [kind]: this.data.marks[kind] });
-      });
-    }
-    this.compose(false); // (the blank sheet, for the panels to unfold)
-  }
-
-  /** A part: drawn over the progress window p0..p1 when ready(); draw(a, b) adds the stretch a..b,
-   *  overlay(ctx, f) draws it whole at f each time the sheet is composed. */
-  part(p0, p1, dur, ready, draw, overlay = null) {
-    this.parts.push({ p0, p1, dur, ready, draw, overlay, done: 0 });
-  }
-
-  /** A part drawn after the loading, from t0 to t1 s into finish(): the colour, the woods, the
-   *  trail. (On a phone the whole load takes ~4 s with freezes of up to ~0.5 s in it, which made
-   *  the colouring jerky; once it's done nothing else runs, so these play at the full frame rate.) */
-  later(t0, t1, ready, draw, overlay = null) {
-    this.parts.push({ p0: t0, p1: t1, later: true, ready, draw, overlay, done: 0 });
-  }
-
-  /** The terrain is ready: the contours and creeks (tick(f) as it goes). */
-  async setTerrain(streams, tick) {
-    const sea = [SEA_LEVEL, -1, -2.5, -4.5, -7, -10.5, -15];
-    const land = [];
-    for (let h = 20; h < 520; h += 20) land.push(h);
-    const levels = [
-      ...await contourLevels(sea, (lv) => (lv === SEA_LEVEL
-        ? { color: 'rgba(48, 72, 86, 0.85)', width: 1.4 }
-        : { color: `rgba(70, 110, 130, ${0.42 - 0.018 * -lv})`, width: 0.8 }), (f) => tick?.(f * 0.3)),
-      ...await contourLevels(land, (h) => (h % 100 === 0
-        ? { color: 'rgba(120, 80, 45, 0.55)', width: 1.15 }
-        : { color: 'rgba(130, 92, 58, 0.32)', width: 0.6 }), (f) => tick?.(0.3 + f * 0.7)),
-    ];
-    this.data.levels = levels;
-    this.data.total = levels.reduce((n, l) => n + l.segs.length / 4, 0);
-    this.data.creeks = (streams?.streams ?? []).map((st) => st.points.map((p) => toPx(p.x, p.z)));
-  }
-
-  /** The trail is ready (and where the pictures go: { cave, cabin, lighthouse, wreck }). */
-  setTrail(trail, marks) {
-    const pts = trail.points.map((p) => toPx(p.x, p.y));
-    const len = [0];
-    for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-    this.data.marks = marks;
-    this.data.trailLen = len;
-    this.data.trail = pts;
-  }
-
-  /** The canopy is ready: the land raster (with tick(f) as it goes), the dabs and the woods. */
-  async setLand(canopyAt, tick) {
-    const land = blank();
-    await drawLand(land.getContext('2d'), { canopyAt, tick });
-    // the order things spread in: out from the origin, a little ragged
-    const [ox, oy] = this.origin;
-    const far = Math.hypot(Math.max(ox, SIZE - ox), Math.max(oy, SIZE - oy));
-    const key = (x, y) => (0.85 * Math.hypot(x - ox, y - oy)) / far + 0.15 * hash(x * 0.37, y * 0.71);
-    const dabs = [];
-    const G = 38;
-    for (let y = MARGIN; y <= MARGIN + INNER + G / 2; y += G) {
-      for (let x = MARGIN; x <= MARGIN + INNER + G / 2; x += G) {
-        const jx = x + (hash(x, y + 1) - 0.5) * 12;
-        const jy = y + (hash(y, x + 2) - 0.5) * 12;
-        dabs.push({ x: jx, y: jy, r: 50 + 8 * hash(jx, jy), k: key(jx, jy) });
-      }
-    }
-    dabs.sort((p, q) => p.k - q.k);
-    const trees = treeList(canopyAt);
-    for (const t of trees) t.k = key(t.x, t.y);
-    trees.sort((p, q) => p.k - q.k);
-    Object.assign(this.data, { dabs, trees, land });
-  }
-
-  /** Advance to loading progress p (0..1); returns whether everything's drawn. */
-  step(now, p) {
-    // (at most a frame's worth each time: after a stall in the loading the drawing carries on
-    // smoothly instead of jumping ahead)
-    const dt = this.last ? Math.min(1 / 30, (now - this.last) / 1000) : 0;
-    this.last = now;
-    // the after-loading timeline runs on its own clock, a frame's worth at most per frame (it
-    // slows down rather than skipping when a frame comes late)
-    if (this.finishing) this.showClock = (this.showClock ?? -dt) + dt;
-    let overlays = false;
-    for (const t of this.parts) {
-      if (t.done >= 1 || !t.ready()) continue;
-      let to;
-      if (t.later) {
-        if (!this.finishing) continue;
-        to = clamp01((this.showClock - t.p0) / (t.p1 - t.p0));
-      } else {
-        const target = this.finishing ? 1 : clamp01((p - t.p0) / (t.p1 - t.p0));
-        to = Math.min(target, t.done + dt / t.dur);
-      }
-      if (to <= t.done) continue;
-      t.draw?.(t.done, to);
-      t.done = to;
-      overlays ||= !!t.overlay;
-    }
-    if (overlays) this.overlays(this.over.getContext('2d'), true);
-    return this.parts.every((t) => t.done >= 1);
-  }
-
-  overlays(c, clear) {
-    if (clear) c.clearRect(0, 0, SIZE, SIZE);
-    for (const t of this.parts) {
-      if (!t.overlay || t.done <= 0) continue;
-      c.save();
-      t.overlay(c, t.done);
-      c.restore();
+      const W = 40;
+      const c = blank(W);
+      const g = c.getContext('2d');
+      g.translate(W / 2 - mx, W / 2 - my);
+      glyphs(g, { [kind]: m });
+      this.pictures.appendChild(placed(c, mx - W / 2, my - W / 2));
+      this.anims.push(fadeIn(c, T0 + (at / Math.max(1, total)) * T, 400));
     }
   }
 
@@ -904,9 +803,25 @@ export class MapSheet {
     c.globalAlpha = 1;
     c.fillStyle = PAPER_CSS;
     c.fillRect(0, 0, SIZE, SIZE);
-    c.drawImage(this.wash, 0, 0);
+    c.drawImage(this.land, 0, 0);
     c.drawImage(this.ink, 0, 0);
-    this.overlays(c, false);
+    // the trail
+    const pts = this.data.trail ?? [];
+    c.save();
+    c.beginPath();
+    c.rect(MARGIN, MARGIN, INNER, INNER);
+    c.clip();
+    c.strokeStyle = 'rgba(170, 38, 28, 0.9)';
+    c.lineWidth = 2;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.setLineDash([5, 4]);
+    c.beginPath();
+    pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+    c.stroke();
+    c.restore();
+    glyphs(c, this.data.marks ?? {});
+    c.drawImage(this.frame, 0, 0);
     c.globalCompositeOperation = 'multiply';
     c.drawImage(this.age, 0, 0);
     c.globalCompositeOperation = 'source-over';
@@ -915,27 +830,10 @@ export class MapSheet {
     creaseLines(c);
   }
 
-  /** Keep drawing on animation frames, following progress() (0..1). */
-  run(progress) {
-    const frame = (now) => {
-      const done = this.step(now, progress());
-      if (done && this.finishing) {
-        this.compose(true);
-        this.resolve?.();
-        return;
-      }
-      requestAnimationFrame(frame);
-    };
-    requestAnimationFrame(frame);
-  }
-
-  /** Draw whatever's left: the line work quickly, then the colour, woods and trail (~3.5 s);
-   *  resolves when the sheet is finished. */
-  finish() {
-    this.finishing = true;
-    return new Promise((r) => {
-      this.resolve = r;
-    });
+  /** Resolves when everything has been revealed, with the finished sheet (no creases) in `canvas`. */
+  async finish() {
+    await Promise.all(this.anims.map((a) => a.finished.catch(() => {})));
+    this.compose(false);
   }
 }
 
@@ -1039,22 +937,21 @@ export class PaperMap {
   }
 
   /**
-   * The loading screen: the blank sheet unfolds over a dark backdrop, then the sheet being drawn
-   * (MapSheet's view) lies on it, until loaded().
+   * The loading screen: the sheet being filled in (MapSheet's view), out flat from the start, no
+   * creases, over a blurred picture of the start view, until it's folded away.
    */
   loading(view) {
-    this.backdrop.classList.add('loading');
-    this.shown = this.open().then(() => {
-      this.marker.classList.remove('show');
-      this.view = view;
-      this.sheet.insertBefore(view, this.marker);
-      this.sheet.classList.add('live');
-    });
+    this.backdrop.classList.add('loading', 'open');
+    this.icon.classList.add('active');
+    this.isOpen = true;
+    this.layout();
+    this.view = view;
+    this.sheet.insertBefore(view, this.marker);
+    this.sheet.classList.add('live');
   }
 
   /** The sheet is finished: the arrow where you stand. */
-  async loaded(x, z, yaw) {
-    await this.shown;
+  loaded(x, z, yaw) {
     this.update(x, z, yaw);
     this.marker.classList.add('show');
   }
@@ -1074,14 +971,21 @@ export class PaperMap {
   }
 
   /** The animations, playing forward (unfold) or backward (fold away into the icon). */
-  animate(forward) {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const S = Math.min(vw * 0.94, vh * 0.86, 900);
+  /** The sheet's size on screen (S px square, centred); --k scales the 1024 px canvas frame to it. */
+  layout() {
+    const S = Math.min(window.innerWidth * 0.94, window.innerHeight * 0.86, 900);
     this.sheet.style.width = `${S}px`;
     this.sheet.style.height = `${S}px`;
     this.sheet.style.marginLeft = `${-S / 2}px`;
     this.sheet.style.marginTop = `${-S / 2}px`;
+    this.sheet.style.setProperty('--k', S / SIZE);
+    return S;
+  }
+
+  animate(forward) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const S = this.layout();
     // the folded packet (the top-left panel) sits centred on screen until it opens
     const ox = (3 * S) / 8;
     const oy = S / 4;
@@ -1149,8 +1053,9 @@ export class PaperMap {
   async close() {
     if (!this.isOpen || this.busy) return;
     this.busy = true;
-    if (this.view) {
-      // the end of the loading screen: into the panels (with the fold creases) to fold away
+    const first = !!this.view;
+    if (first) {
+      // the end of the loading screen: into the panels (no creases yet) to fold away
       this.refresh();
       this.view.remove();
       this.view = null;
@@ -1163,6 +1068,11 @@ export class PaperMap {
     this.backdrop.classList.remove('open');
     this.icon.classList.remove('active');
     for (const a of this.backdrop.getAnimations({ subtree: true })) a.cancel();
+    // folded away for the first time: from now on it has the creases of its folds
+    if (first) {
+      this.onFirstFold?.();
+      this.refresh();
+    }
     this.isOpen = false;
     this.busy = false;
   }

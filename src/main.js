@@ -123,46 +123,15 @@ function step(label) {
 }
 
 /**
- * Loading progress. Each loading step has a fixed share, and the long loops inside the steps
- * report how far along they are (loadprogress.js loadTick), yielding for a painted frame about every
- * 16 ms of work. Each report glides the progress to the new spot over 0.2 s and then lets it creep a little
- * further toward the step's end, so even a block that can't report keeps it moving. It never goes
- * back. The loading screen is the paper map being drawn (map.js MapSheet), which follows it.
+ * Loading steps. The long loops inside them call loadprogress.js loadTick, which yields for a
+ * painted frame about every 16 ms of work. The loading screen is the paper map (map.js MapSheet),
+ * revealed by animations the browser runs off the main thread.
  */
-const LOAD_SHARE = { terrain: 0.08, trail: 0.1, map: 0.04, impostors: 0.15, vegetation: 0.31, shading: 0.06, textures: 0.01, warmup: 0.22 };
-const loadSpan = {}; // [start, end] of each step's share (the last 3% is the finish)
-{
-  let acc = 0;
-  for (const [k, w] of Object.entries(LOAD_SHARE)) loadSpan[k] = [acc, (acc += w)];
-}
-const bar = { t0: 0, ms: 1, pts: [[0, 0]] }; // the running timeline: [offset, progress] points
-let span = [0, 0];
-// where the progress is now
-function barNow() {
-  const u = Math.min(1, (performance.now() - bar.t0) / bar.ms);
-  const { pts } = bar;
-  for (let i = 1; i < pts.length; i++) {
-    if (u <= pts[i][0]) return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * ((u - pts[i - 1][0]) / Math.max(1e-6, pts[i][0] - pts[i - 1][0]));
-  }
-  return pts[pts.length - 1][1];
-}
-function animateBar(ms, pts) {
-  Object.assign(bar, { t0: performance.now(), ms, pts });
-}
-/** Move the bar to f (0..1) of the current step: glide there, then creep on a little. */
-function barTo(f) {
-  const from = barNow();
-  const to = Math.max(from, span[0] + (span[1] - span[0]) * f);
-  const creep = to + 0.25 * (span[1] - to);
-  animateBar(4200, [[0, from], [200 / 4200, to], [1, creep]]);
-}
-onLoadProgress(barTo);
-/** Start the named loading step. */
+onLoadProgress(() => {});
+/** Start the named loading step (for ?perf's smoothness readout). */
 function progress(name) {
   loadYielded();
   if (smooth) smooth.step = name;
-  span = loadSpan[name].map((v) => v * 0.97);
-  barTo(0);
 }
 
 async function init() {
@@ -183,7 +152,7 @@ async function init() {
   const sheet = await MapSheet.create(SPAWN);
   const paperMap = new PaperMap(sheet.canvas);
   paperMap.loading(sheet.view);
-  sheet.run(barNow);
+  paperMap.onFirstFold = () => sheet.compose(true); // (no creases until then)
   progress('terrain');
   await nextFrame();
   const world = await worldReady;
@@ -338,9 +307,8 @@ async function init() {
   const line = `${timings.join(' · ')} · longest stall ${longestStall().toFixed(0)} ms · ready ${(performance.now() / 1000).toFixed(1)} s after navigation`;
   if (loadTimes) console.info('load:', line);
 
-  // the map's last strokes (the colour, woods and trail), then the arrow where you stand and the start prompt
-  animateBar(1, [[0, 1], [1, 1]]);
-  if (smooth) smooth.step = 'colouring';
+  // the map's last reveals, then the arrow where you stand and the start prompt
+  if (smooth) smooth.step = 'reveals';
   await sheet.finish();
   if (loadTimes) {
     // and on the start screen, for phones (no console there): one step per line
@@ -348,7 +316,7 @@ async function init() {
     const rows = [...smooth.rows].map(([k, r]) => `${k.padEnd(10)} ${String(r.frames).padStart(4)} fr · worst ${r.worst.toFixed(0).padStart(4)} ms · ${r.long} over 100`);
     loadTimes.textContent = `build ${__BUILD_SHA__}\n${line.split(' · ').join('\n')}\nsmoothness (frames, longest freeze):\n${rows.join('\n')}`;
   }
-  await paperMap.loaded(player.pos.x, player.pos.z, player.yaw);
+  paperMap.loaded(player.pos.x, player.pos.z, player.yaw);
   status.textContent = touch ? 'Tap to start' : 'Click to start';
   overlay.classList.add('ready');
   // starting folds the map away into its corner icon (?map: it stays open); from then on the icon

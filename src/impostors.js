@@ -172,13 +172,12 @@ export async function bakeImpostors(renderer, protoParts, { frameW = 128, aspect
         rt.scissorTest = true;
         renderer.setRenderTarget(rt);
         renderer.render(scene, cam);
-        // finish each view on the GPU (a 1-pixel read waits for it) so progress is real and the
-        // loading screen gets a frame between them
-        renderer.readRenderTargetPixels(rt, k * fw, row * fh, 1, 1, px);
-        renderer.setRenderTarget(prevTarget);
-        await loadTick((row * 2 + t + (k + 1) / VIEWS) / (names.length * 2 + 1));
       }
+      // finish this one on the GPU (a 1-pixel read waits for it) so progress is real
+      renderer.readRenderTargetPixels(rt, 0, row * fh, 1, 1, px);
       scene.traverse((o) => { if (o.material) o.material.dispose(); });
+      renderer.setRenderTarget(prevTarget);
+      await loadTick((row * 2 + t + 1) / (names.length * 2 + 1));
     }
   }
 
