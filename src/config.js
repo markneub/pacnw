@@ -14,7 +14,7 @@ export const SPAWN = { x: 20, z: 640, yaw: 0.15, pitch: 0.03 };
 // trailhead (straight ahead from the spawn point), the tunnel running north (`dir`: x, z),
 // `length` m to the light at its end (about 10 s of running). The mouth sits exactly on a row of
 // the 5 m terrain grid, so the ground is level right up to it while the hill rises from the
-// next row (terrain.js hillock; the crag round the mouth covers that step).
+// next row (terrain.js hillock; the cave's ground patch makes the bank over that step).
 export const CAVE = {
   x: 15, z: 590,
   dir: [0, -1],

@@ -663,25 +663,30 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   **Geometry** (all JS, deterministic, `SEED + 4111/77/919`): a tube along the axis (rings every 0.33 m, 48 verts: an
   arch + a floor that curls up at the walls), wiggling ±0.85 m sideways (`wiggle`), floor falling 8.5% (`floorAt`),
   width/height from sums of sines (narrower at the mouth and the end), displaced by 3-octave simplex + ledges; 14
-  chunks for culling inside, one merged mesh (tube + crag) from outside (`rockAll`, renderOrder 50: drawn after the
-  hill that hides it; inside the chunks are renderOrder −1, filling depth first). The **crag** is rings around the
-  opening (its first ring is the tube's), a rounded lip, then rock pushed back into the hill until the ground covers it.
-  The crag is small (rings to 3.4 m, each pushed ≤ 4 m in, then down, until the ground covers it) and the tube's
+  chunks for culling inside, one merged mesh from outside (`rockAll`, renderOrder 50: drawn after the hill that hides
+  it; inside the chunks are renderOrder −1, filling depth first). **The entrance follows the hill** (the user: a rock
+  "tube coming out of the ground" made no sense): no crag. A fine **ground patch** (`buildPatch`, 0.5 m cells over whole
+  5 m grid cells s −5…10, v ±10, so its edge lies on the terrain's own lines; drawn with `terrainMaterial`, coloured by
+  `groundColor`/`groundLayers`, `shadeGround`ed) rises from the level approach into a ~4 m bank the tunnel opens out of
+  (steep only round the opening, leaning back to the sides, blended to the raw ground over its last 1.5 m). The terrain
+  discards under it (`shared.uCavePatch`, inset 5 cm: T-junction cracks); its `aHollow` is −1 … −2 = "I'm the patch"
+  and how much bare rock (`RK_HOLLOW` in rockyslope.js): rock only in a rim round the opening, the rest moss and duff
+  (all-rock read as a boulder dome). The tube's
   first 6 m get bigger, blockier lumps, so the mouth is ragged, not a pipe's end. No stones at the mouth and no
   boulders inside (both tried; the user: unnatural, out of place): only small rubble along the floor and stalactites.
-  A floor apron under the threshold. Terrain and grass are hidden only inside the tube's own arch (+0.6 m)
-  over the first 14 m (`CAVE_GLSL` `inCaveMouth` in materials.js, mirroring cave.js's shape; a box showed holes from
-  up on the lower hill). Rock is double-sided (back faces count as outdoors: the tube's outside over the mouth, and
-  any fold in the crag rings); rain/snow stop and motes
-  hide while the camera is inside (`uCaveIn`). The scatter keeps off the crag and the approach (`planCave().blocked`).
+  A floor apron under the threshold. Terrain, patch and grass are hidden only inside the tube's own arch over the
+  first 14 m and from 0.5 m in front of the mouth (`CAVE_GLSL` `inCaveMouth` in materials.js, mirroring cave.js's
+  shape; margin −0.5 m at the doorway (smaller than the tube: else sky showed at the corners) → +0.3 m by 0.8 m in,
+  and only above the floor + 3 cm). Rock is double-sided (back faces count as outdoors, lit like the bank); rain/snow stop and motes
+  hide while the camera is inside (`uCaveIn`). The scatter keeps off the bank and the approach (`planCave().blocked`).
   **Light** (no three.js lights): `caveMaterial` (standard + patch, triplanar `public/textures/cave` = Poly Haven
   dark_rock_02 walls, forest_ground_04 floor; `fetch_textures.py cave`): outdoor light fades over the first ~4 m (rock
-  above the roof, in front of the mouth or on the crag (`aOut`) counts as outdoors), 12 torches (a pair 3 m in, then every 12 m
+  above the roof or in front of the mouth (`aOut`) counts as outdoors), 12 torches (a pair 3 m in, then every 12 m
   alternating sides; each bracket on the wall at ~1.5 m with the stick leaning out so the flame is 0.3 m clear: the walls
   curve in above ~1.1 m and the first placement buried the flames in rock, which looked like "the near torches don't
   light"), `TORCH_I` 6.5 / (d² + 1.2), windowed at 18 m, flicker from sines, the light jittering a few cm. The 4
   torches nearest the camera get **cube-map shadows** (`WebGLCubeRenderTarget` 256/192 px, RGBA-packed distance, 5-tap
-  PCF; casters = tube and rubble (not the crag: the far end has none), re-rendered each frame for the nearest 2 (phones 1), every 3rd/4th for the
+  PCF; casters = tube and rubble, re-rendered each frame for the nearest 2 (phones 1), every 3rd/4th for the
   rest, so shadows sway with the flames. Soot above each torch, damp seeps that gloss in the torchlight, moss outside.
   Flames: camera-facing quads (fbm teardrop, additive) + a soft glow + sparks. The flame's foot sits 6 cm down over the
   head (pulled 5 cm toward the camera), rounded (lowest mid-flame) and soft, and the head's top is glowing embers
@@ -708,12 +713,14 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   the tunnel with only the far end in view, the near trees, grass and chunk visibility follow the far view's camera.
   Things that made the jump visible and had to go: the night grade, light shafts and glare in post.js and the
   sun-break exposure dip (`post.outdoors` / `weather.outdoors`: 0 in the cave, back as you step out of the mouth); the
-  crag's inner rings pushed into the tunnel (rock the far end lacked; now only rings ≥ 2 m out recede into the hill);
-  the crag in the shadow casters. `tools`-style check: render just before the turn and just after, mean pixel
+  crag (since removed) intruding into the tunnel and casting shadows. **Brightness jump on the approach** (the user:
+  "at a certain point it suddenly gets much brighter"): the entrance torches' uniforms were only updated within range,
+  so the ground lit up at once when you crossed it; now they're always set (and `post.outdoors` eases from 6 m in to
+  2 m out). `tools`-style check: render just before the turn and just after, mean pixel
   difference ≈ 2–3/255, overall brightness within the torches' frame-to-frame flicker. When you go in by day the far
   end shows the night forest (dim), by night the day (bright): no "prick of white light" any more.
   **Walking** (`cave.state.inside`, set crossing the doorway on foot): floor via `setWalkModifier`, kept between the
-  walls (`collide`), trees overhead don't collide; outside, an ellipse over the crag is a collider. Deep inside with
+  walls (`collide`), trees overhead don't collide; outside, an ellipse over the bank is a collider. Deep inside with
   the mouth out of the frustum, everything outside is hidden (`cullOutdoors`; shown again for the far view). HUD
   "Cave". Audio (weather.js `Ambience`): outdoors fades inside (depth from the nearer end), a reverb (synthesised
   impulse), room tone, drips, torch crackle near torches; crickets at night (no birds).

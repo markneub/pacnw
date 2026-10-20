@@ -585,6 +585,9 @@ function buildTile(tx, tz) {
   return geo;
 }
 
+/** The terrain's material (cave.js draws its finer ground patch with it). */
+export let terrainMaterial = null;
+
 export function buildTerrain() {
 
   const mat = new THREE.MeshStandardMaterial({
@@ -599,6 +602,7 @@ export function buildTerrain() {
     Object.assign(shader.uniforms, cutUniforms);
     patchSunlight(shader);
     patchCaveMouth(shader);
+    shader.uniforms.uCavePatch = shared.uCavePatch;
     shader.uniforms.uWet = shared.uWet;
     shader.uniforms.uPuddle = shared.uPuddle;
     shader.uniforms.uGrassMap = shared.uGrassMap;
@@ -617,6 +621,7 @@ export function buildTerrain() {
         uniform sampler2D uCutMask;
         uniform vec4 uCutRect;
         ${CAVE_GLSL}
+        uniform vec4 uCavePatch;
         uniform sampler2D uGrassMap;
         uniform vec2 uGrassTint;
         uniform vec4 uGrassGrid;
@@ -634,6 +639,8 @@ export function buildTerrain() {
             && texture2D(uCutMask, cutUv).r > 0.5) discard;
         // inside the cave's first metres (cave.js) the ground would show through the tunnel
         if (inCaveMouth(vGroundPos)) discard;
+        // under the finer ground patch round the cave's mouth (cave.js; its own vertices carry aHollow -1)
+        if (vHollow > -0.5 && all(greaterThan(vGroundPos.xz, uCavePatch.xy + 0.05)) && all(lessThan(vGroundPos.xz, uCavePatch.zw - 0.05))) discard; // (overlapping its edge: no cracks)
         float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
         diffuseColor.rgb *= 0.78 + gn * 0.44;
         {
@@ -665,10 +672,12 @@ export function buildTerrain() {
         ${wet.roughness}
         roughnessFactor = mix(roughnessFactor, 0.05, puddle);`);
     patchGroundDetail(shader);
+    shader.fragmentShader = `#define RK_HOLLOW\n${shader.fragmentShader}`;
     patchRocky(shader);
     patchPuddles(shader);
   };
   mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
+  terrainMaterial = mat;
 
   surface = { color: new Float32Array(GRID_N * GRID_N * 3), layers: new Float32Array(GRID_N * GRID_N * 4) };
   const group = new THREE.Group();

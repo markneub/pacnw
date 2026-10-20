@@ -238,9 +238,11 @@ async function init() {
   if (ocean) scene.add(ocean.mesh);
   // the mountain cabin at the end of the trail (its own model, textures and shaders)
   const cabin = await buildCabin(cabinPlan, cabinReady);
-  // the cave north of the trailhead (its tunnel, crag, set stones and torches)
+  // the cave north of the trailhead (its tunnel, ground bank and torches)
   const cave = await buildCave(cavePlan, caveReady, { lowPower });
   scene.add(cave.group);
+  terrain.add(cave.patch); // (its finer ground, with the terrain)
+  shadeGround(cave.patch, veg.canopyAt);
   scene.add(cabin.group);
   if (params.get('door') === 'open') cabin.setOpen(true);
   const player = new Player(camera, renderer.domElement, (pos, r) => {
@@ -375,7 +377,7 @@ async function init() {
     // the day/night grade and the light shafts (post.js) only outside: in the cave, and on the view
     // out of its far end, there are none, so nothing changes when you're moved; they come in as you
     // step out of the mouth
-    post.outdoors = st.inside ? 1 - THREE.MathUtils.smoothstep(st.s, -2, 1.5) : 1;
+    post.outdoors = st.inside ? 1 - THREE.MathUtils.smoothstep(st.s, -2, 6) : 1; // (gently: done by 8 m in, where the far end's turn lands)
     weather.outdoors = post.outdoors;
   };
 

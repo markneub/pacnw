@@ -38,6 +38,8 @@ export const shared = {
   uCaveO: { value: new THREE.Vector4(0, -1e4, 0, 0) },
   uCaveDir: { value: new THREE.Vector2(0, -1) },
   uCaveIn: { value: 0 },
+  uCavePatch: { value: new THREE.Vector4(0, 0, 0, 0) }, // min x, min z, max x, max z of the ground patch at its mouth
+
   // the two torches outside the cave's mouth (xyz, intensity): they light the ground and plants round it
   uCaveTorch: { value: [new THREE.Vector4(), new THREE.Vector4()] },
 };
@@ -52,16 +54,20 @@ export const CAVE_GLSL = /* glsl */ `
   bool inCaveMouth(vec3 p) {
     vec2 co = p.xz - uCaveO.xz;
     float s = dot(co, uCaveDir);
-    if (s <= 0.0 || s > 14.0) return false;
+    if (s <= -0.5 || s > 14.0) return false; // (from just in front of the mouth: the bank's foot)
+    // in front of the mouth the hole is a little smaller than the tunnel (its ragged edge is the
+    // opening you see: a bigger one showed the sky round it), inside a little bigger
+    float m = mix(-0.5, 0.3, smoothstep(0.0, 0.8, s));
+    s = max(s, 0.0);
     float v = dot(co, vec2(-uCaveDir.y, uCaveDir.x));
     float wig = (0.55 * sin(0.047 * s + 1.0) + 0.3 * sin(0.13 * s + 2.0) - (0.55 * sin(1.0) + 0.3 * sin(2.0))) * smoothstep(3.0, 14.0, s);
     float a = 1.75 + 0.22 * sin(0.21 * s + 0.3) + 0.15 * sin(0.53 * s + 1.7) - 0.3 * (1.0 - smoothstep(0.0, 5.0, s));
     float H = 3.1 + 0.35 * sin(0.17 * s + 2.2) + 0.2 * sin(0.41 * s) - 0.5 * (1.0 - smoothstep(0.0, 4.0, s));
     float fl = uCaveO.y - 0.085 * max(0.0, s - 3.0 * (1.0 - exp(-s / 3.0)));
     float b = 0.62 * H;
-    float x = (v - wig) / (a + 0.6);
-    float y = (p.y - fl - (H - b)) / (b + 0.6);
-    return p.y > fl - 0.6 && x * x + y * y < 1.0;
+    float x = (v - wig) / (a + m);
+    float y = (p.y - fl - (H - b)) / (b + m);
+    return p.y > fl + 0.03 && x * x + y * y < 1.0; // (not below the floor: that showed sky at the doorway's corners)
   }
 `;
 export function patchCaveMouth(shader) {

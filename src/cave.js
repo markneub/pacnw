@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createNoise3D } from 'simplex-noise';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CAVE, SEED } from './config.js';
-import { rawGroundAt, mulberry32, setWalkModifier } from './terrain.js';
+import { rawGroundAt, mulberry32, setWalkModifier, groundColor, groundLayers, terrainMaterial } from './terrain.js';
 import { shared, patchSunlight, sunKey } from './materials.js';
 import { loadTextureSet } from './textures.js';
 
@@ -15,14 +15,14 @@ import { loadTextureSet } from './textures.js';
  * you're moved to the matching spot by the mouth, where nothing on screen differs.
  *
  * - The tunnel is one tube along a straight axis (wandering a little sideways), its floor falling
- *   8.5% so it's soon well under the hill (the terrain over it never dips into it); the crag
+ *   8.5% so it's soon well under the hill (the terrain over it never dips into it); the bank
  *   around the mouth shares the tube's first ring and recedes into the hillside.
  * - Lit by its own torches (a standard material patched like the cabin's: no real three.js lights,
  *   which would cost every material in the scene). The four torches nearest the camera cast
  *   shadows from distance cube maps re-rendered as their flames flicker and sway; the rest light
  *   without. Outdoor light reaches only the first metres at either end.
  * - In the tunnel the player walks on its floor, kept between its walls; trees above don't
- *   collide. Outside, the crag is a collider.
+ *   collide. Outside, the bank is a collider.
  */
 
 const L = CAVE.length;
@@ -90,7 +90,7 @@ export const toLocal = (x, z) => {
 };
 export const toWorld = (s, v) => [CAVE.x + DX * s - DZ * v, CAVE.z + DZ * s + DX * v];
 
-/** Where the cave is: call once the terrain is ready. blocked() keeps the scatter off the crag and the approach. */
+/** Where the cave is: call once the terrain is ready. blocked() keeps the scatter off the bank and the approach. */
 export function planCave() {
   // the floor at the mouth: level with the highest ground across the doorway (lower, and a view out
   // along the floor slipped under the lip of the ground in front)
@@ -101,8 +101,8 @@ export function planCave() {
   shared.uCaveDir.value.set(DX, DZ);
   const blocked = (x, z, margin) => {
     const [s, v] = toLocal(x, z);
-    const es = (s - 2) / (5 + margin);
-    const ev = v / (6 + margin);
+    const es = (s - 3) / (7.5 + margin);
+    const ev = v / (9.5 + margin);
     if (es * es + ev * ev < 1) return true;
     return s > -6 - margin && s < 0 && Math.abs(v) < 2.5 + margin; // the way in
   };
@@ -209,7 +209,7 @@ function buildTube() {
   for (let k = near.length - 1; k >= 0; k--) rings.push(L - near[k]);
   const R = rings.length;
   const pos = new Float32Array(R * M * 3);
-  const loc = new Float32Array(R * M * 3); // local (s, x, y), for the crag and the torches
+  const loc = new Float32Array(R * M * 3); // local (s, x, y), for the torches
   const p = [0, 0, 0];
   const w = new THREE.Vector3();
   for (let i = 0; i < R; i++) {
@@ -284,84 +284,84 @@ function buildTube() {
 }
 
 /**
- * The crag around the mouth: rings around the opening (its first ring is the tube's), a rounded lip
- * that leans out, then rock receding into the hillside until the hill covers it.
+ * The ground round the mouth, finer than the 5 m terrain grid (which can't hold a steep bank): a
+ * patch over whole grid cells (its edges on grid lines, so it meets the terrain exactly; the
+ * terrain hides under it: shared.uCavePatch), rising from the level approach into a ~4 m bank the
+ * tunnel opens out of, blending back into the hill. Drawn with the terrain's own material.
  */
-function buildCrag(tube) {
-  const RHO = [0, 0.3, 0.75, 1.3, 2.0, 2.7, 3.4];
-  const K = RHO.length;
-  const pos = [];
-  const H0 = height(0);
-  const cy = 0.38 * H0;
-  const w = new THREE.Vector3();
-  for (let k = 0; k < K; k++) {
-    const rho = RHO[k];
-    for (let j = 0; j < M; j++) {
-      const k0 = j * 3;
-      const lx = tube.loc[k0 + 1];
-      const ly = tube.loc[k0 + 2];
-      if (k === 0) {
-        pos.push(tube.pos[k0], tube.pos[k0 + 1], tube.pos[k0 + 2]);
-        continue;
-      }
-      let ox = j > NA ? 0 : lx;
-      let oy = j > NA ? -1.5 : ly - cy;
-      const ol = Math.hypot(ox, oy) || 1;
-      ox /= ol;
-      oy /= ol;
-      let x = lx + ox * rho;
-      let y = ly + oy * rho;
-      let s = -(0.3 * smooth(0, 0.75, rho) - 0.9 * Math.pow(Math.max(0, rho - 1.0), 1.2));
-      // craggy: blocky lumps (folded noise: sharp creases), and ledges along the bedding
-      const [nx0, nz0] = toWorld(s, x);
-      const n = fbm3(nx0 * 0.7 + 40, (Y0 + y) * 0.7, nz0 * 0.7);
-      const crease = 1 - 2 * Math.abs(noise3(nx0 * 0.45 - 7, (Y0 + y) * 0.45, nz0 * 0.45));
-      const amp = (0.22 + 0.07 * rho) * smooth(0, 0.6, rho);
-      const ledge = 0.25 * smooth(0.3, 0.7, ((((y + 0.6 * n) / 0.9) % 1) + 1) % 1) * smooth(0.5, 1.5, rho);
-      s -= (n * 0.7 + crease * 0.5) * amp + ledge;
-      // (its inner rings stay out of the tunnel: seen from inside they'd be rock the far end lacks)
-      if (rho < 1.5) s = Math.min(s, -0.03);
-      x += ox * n * amp * 0.6;
-      y += oy * n * amp * 0.6;
-      // recede into the hill: far out, push each vertex in until the ground covers it
-      // (back up to 4 m, then down: at the nose's sides the hill is low, and pushing in alone drew
-      // long wedges along it)
-      for (let it = 0; it < 56 && rho >= 2; it++) { // (nearer the rim, pushed in, they cut through the tunnel's roof)
-        localToWorld(s, x, y, w);
-        if (w.y < rawGroundAt(w.x, w.z) - (rho > 2 ? 0.3 : 0.05)) break;
-        if (it < 16) s += 0.25;
-        else y -= 0.25;
-      }
-      localToWorld(s, x, y, w);
-      pos.push(w.x, w.y, w.z);
+const PATCH = { s0: -5, s1: 10, v0: -10, v1: 10, step: 0.5 };
+function patchHeight(x, z) {
+  const raw = rawGroundAt(x, z);
+  const [s, v] = toLocal(x, z);
+  const n = noise3(s * 0.55, 3.0, v * 0.55) * 0.4 + noise3(s * 1.6, 9.0, v * 1.6) * 0.15;
+  // steep (a rock face) only right round the opening; to the sides it leans back into a grassy slope
+  const side = Math.max(0, Math.abs(v) - 3);
+  const rise = smooth(-0.45 + 0.1 * n - 0.4 * side, 0.8 + 0.3 * n + 0.7 * side, s);
+  const lat = 1 - smooth(3.5 + n, 9.5, Math.abs(v));
+  const bank = Y0 + (4.2 + n) * rise * lat;
+  const edge = Math.min(s - PATCH.s0, PATCH.s1 - s, v - PATCH.v0, PATCH.v1 - v);
+  return raw + (Math.max(raw, bank) - raw) * smooth(0, 1.5, edge);
+}
+function buildPatch() {
+  const ns = Math.round((PATCH.s1 - PATCH.s0) / PATCH.step) + 1;
+  const nv = Math.round((PATCH.v1 - PATCH.v0) / PATCH.step) + 1;
+  const pos = new Float32Array(ns * nv * 3);
+  const nrm = new Float32Array(ns * nv * 3);
+  const col = new Float32Array(ns * nv * 3);
+  const lay = new Float32Array(ns * nv * 4);
+  const hollow = new Float32Array(ns * nv);
+  const c = new THREE.Color();
+  const lw = [0, 0, 0, 0];
+  const n = new THREE.Vector3();
+  const e = 0.25;
+  for (let i = 0; i < ns; i++) {
+    for (let j = 0; j < nv; j++) {
+      const [x, z] = toWorld(PATCH.s0 + i * PATCH.step, PATCH.v0 + j * PATCH.step);
+      const y = patchHeight(x, z);
+      const k = i * nv + j;
+      pos.set([x, y, z], k * 3);
+      n.set(patchHeight(x - e, z) - patchHeight(x + e, z), 2 * e, patchHeight(x, z - e) - patchHeight(x, z + e)).normalize();
+      nrm.set([n.x, n.y, n.z], k * 3);
+      // bare rock only in a rim round the opening; the rest of the bank is the hill's own moss and duff
+      const [ls, lv] = toLocal(x, z);
+      const rim = (1 - smooth(2.6, 4.2, Math.hypot(lv, (y - Y0 - 1.0) * 1.15))) * (1 - smooth(1.5, 3, ls));
+      const slope = (1 - n.y) * (0.35 + 0.65 * rim);
+      hollow[k] = -2 + rim;
+      groundColor(x, y, z, slope, c);
+      col.set([c.r, c.g, c.b], k * 3);
+      lay.set(groundLayers(x, y, z, slope, lw), k * 4);
     }
   }
   const idx = [];
-  for (let k = 0; k < K - 1; k++) {
-    for (let j = 0; j < M; j++) {
-      const a = k * M + j;
-      const b = (k + 1) * M + j;
-      const c = (k + 1) * M + ((j + 1) % M);
-      const d = k * M + ((j + 1) % M);
-      idx.push(a, b, d, b, c, d);
+  for (let i = 0; i < ns - 1; i++) {
+    for (let j = 0; j < nv - 1; j++) {
+      const a = i * nv + j;
+      idx.push(a, a + 1, a + nv, a + 1, a + nv + 1, a + nv);
     }
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('aLayers', new THREE.BufferAttribute(lay, 4));
+  g.setAttribute('aHollow', new THREE.BufferAttribute(hollow, 1)); // (≤ −1: the terrain shader's "I'm the patch", and how much rock)
+  g.setAttribute('aShade', new THREE.BufferAttribute(new Float32Array(ns * nv).fill(1), 1));
   g.setIndex(idx);
+  // face up (the terrain is single-sided)
   g.computeVertexNormals();
-  // outward (toward the approach, -dir): flip the winding if it came out the other way
-  const nA = g.getAttribute('normal');
-  let dot = 0;
-  for (let j = 0; j < NA; j++) dot += -(nA.getX(2 * M + j) * DX + nA.getZ(2 * M + j) * DZ);
-  if (dot < 0) {
-    for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
+  const up = g.getAttribute('normal').getY(0) > 0;
+  if (!up) {
+    for (let t = 0; t < idx.length; t += 3) [idx[t + 1], idx[t + 2]] = [idx[t + 2], idx[t + 1]];
     g.setIndex(idx);
-    g.computeVertexNormals();
   }
-  g.setAttribute('aOut', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count).fill(1), 1)); // outdoors
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   g.computeBoundingSphere();
-  return g;
+  const mesh = new THREE.Mesh(g, terrainMaterial);
+  mesh.name = 'cave ground';
+  const xs = [toWorld(PATCH.s0, PATCH.v0)[0], toWorld(PATCH.s1, PATCH.v1)[0]];
+  const zs = [toWorld(PATCH.s0, PATCH.v0)[1], toWorld(PATCH.s1, PATCH.v1)[1]];
+  shared.uCavePatch.value.set(Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs));
+  return mesh;
 }
 
 /**
@@ -738,7 +738,7 @@ function caveGLSL(nTorch) {
   uniform vec3 uOutB;
   varying vec3 vCvW;
   varying vec3 vCvN;
-  varying float vCvOut; // 1: outdoor rock (the crag)
+  varying float vCvOut; // 1: outdoor rock
   vec3 cvN; // the shading normal, world space
   float cvS; // how far in (m along the axis)
   float cvFloorY; // the tunnel's floor there
@@ -789,7 +789,7 @@ function caveGLSL(nTorch) {
 }
 
 /**
- * kind: 'rock' (tube, crag: the rock photo, the floor photo on the floor), 'stone' (lighter,
+ * kind: 'rock' (tube: the rock photo, the floor photo on the floor), 'stone' (lighter,
  * lighter, lichen, moss outside), 'plain' (vertex colours: the torches).
  */
 function caveMaterial(kind, nTorch) {
@@ -798,7 +798,7 @@ function caveMaterial(kind, nTorch) {
     roughness: kind === 'plain' ? 0.8 : 0.92,
     metalness: 0,
     vertexColors: kind === 'plain',
-    // (double-sided: where the crag's rings fold at the doorway's corners, a crack shows rock, not sky)
+    // (double-sided: where the bank meets the doorway's corners, a crack shows rock, not sky)
     side: kind === 'rock' ? THREE.DoubleSide : THREE.FrontSide,
   });
   mat.onBeforeCompile = (shader) => {
@@ -820,7 +820,7 @@ function caveMaterial(kind, nTorch) {
         cvS = dot(vCvW.xz - uCaveO.xz, uCaveDir);
         cvSm = min(cvS, uCaveO.w - cvS);
         cvFloorY = cvFloor(cvS);
-        // outdoors: in front of the mouth, the crag (aOut), and the tunnel's outside (back faces,
+        // outdoors: in front of the mouth, the bank (aOut), and the tunnel's outside (back faces,
         // only seen from outdoors over the mouth); inside, a model of the light that comes in at both ends
         cvOut = max(vCvOut, max(step(cvS, 0.0), gl_FrontFacing ? 0.0 : 1.0));
         bool cvM = cvS > uCvMirror.w;
@@ -865,6 +865,8 @@ function caveMaterial(kind, nTorch) {
           }
           diffuseColor.rgb *= 1.0 - 0.7 * soot * (0.75 + 0.5 * cvNoise(cvP * 6.0));
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.07, 0.1, 0.035) * (0.7 + 0.6 * cvNoise(cvP * 4.0)), moss * 0.85);
+          // the tunnel's outside (seen round the edge of the hole in the bank): the bank's grey rock
+          if (!gl_FrontFacing) diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.333))) * vec3(1.7, 1.7, 1.6) + vec3(0.03);
         }` : ''}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = cvRough;')
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -990,8 +992,8 @@ export async function buildCave(plan, texReady, { lowPower }) {
     group.add(m);
     casters.push(g);
   }
-  const crag = new THREE.Mesh(buildCrag(tube), rock);
-  group.add(crag); // (not a shadow caster: the far end has no crag, and its shadows must match the mouth's)
+  // the ground round the mouth (main.js adds it to the terrain and shades it)
+  const patch = buildPatch();
   // a strip of floor under the threshold, a little below the ground: it fills any sliver between
   // the tunnel's floor and the terrain in front
   {
@@ -1009,11 +1011,11 @@ export async function buildCave(plan, texReady, { lowPower }) {
   const rubble = new THREE.Mesh(buildRubble(), rock);
   group.add(rubble);
   casters.push(rubble.geometry);
-  // from outside, the tunnel and the crag as one draw (inside: the tunnel in culled chunks, drawn first)
-  const rockAll = new THREE.Mesh(mergeGeometries([...tube.chunks, crag.geometry]), rock);
+  // from outside, the tunnel as one draw (inside: the tunnel in culled chunks, drawn first)
+  const rockAll = new THREE.Mesh(mergeGeometries(tube.chunks), rock);
   rockAll.renderOrder = 50; // (last among the opaques: the hill in front hides most of it)
   group.add(rockAll);
-  const insideOnly = [...tubeMeshes, crag];
+  const insideOnly = tubeMeshes;
   group.add(new THREE.Mesh(torchGeometry(torches), plain));
   const [flames, glows] = buildFlames(torches);
   group.add(flames, glows, buildSparks(torches));
@@ -1079,7 +1081,7 @@ export async function buildCave(plan, texReady, { lowPower }) {
     return s > -1 ? floorAt(Math.max(0, s)) : g;
   });
 
-  /** Push the player (pos.x/z, radius r) out of the crag, or keep them in the tunnel. */
+  /** Push the player (pos.x/z, radius r) out of the bank, or keep them in the tunnel. */
   function collide(pos, r) {
     const [s, v] = toLocal(pos.x, pos.z);
     if (state.inside) {
@@ -1091,15 +1093,15 @@ export async function buildCave(plan, texReady, { lowPower }) {
     }
     let ns = s;
     let nv = v;
-    // the crag: an ellipse over its footprint, except the way in
+    // the bank: an ellipse over it, except the way in
     const door = 0.79 * halfW(0) - r;
     if (!(Math.abs(nv) < door && ns < 1.5)) {
-      const es = (ns - 2.5) / 3.2;
-      const ev = nv / 4.5;
+      const es = (ns - 3) / 3.5; // (the bank round the mouth)
+      const ev = nv / 7;
       const e = Math.hypot(es, ev);
       if (e < 1 && e > 1e-6) {
-        ns = 2.5 + (es / e) * 3.2;
-        nv = (ev / e) * 4.5;
+        ns = 3 + (es / e) * 3.5;
+        nv = (ev / e) * 7;
       }
     }
     if (ns !== s || nv !== v) [pos.x, pos.z] = toWorld(ns, nv);
@@ -1139,7 +1141,12 @@ export async function buildCave(plan, texReady, { lowPower }) {
     for (let i = 0; i < 2; i++) shared.uCaveTorch.value[i].set(torches[i].light.x, torches[i].light.y, torches[i].light.z, torches[i].intensity * torches[i].flick);
     for (const m of insideOnly) m.visible = state.inside;
     rockAll.visible = !state.inside;
-    if (!near) return;
+    if (!near) {
+      // (unshadowed, but lit: the tunnel seen through the mouth from further off)
+      for (let i = 0; i < NT; i++) U.uTorch.value[i].set(torches[i].light.x, torches[i].light.y, torches[i].light.z, torches[i].intensity * torches[i].flick);
+      for (const u of U.uSh.value) u.w = 0;
+      return;
+    }
     // the nearest torches get the shadow slots (a torch keeps its slot while it stays near)
     order.sort((a, b) => torches[a].dist - torches[b].dist);
     const want = order.slice(0, SH_SLOTS).filter((i) => torches[i].dist < SH_FAR + 6);
@@ -1204,6 +1211,7 @@ export async function buildCave(plan, texReady, { lowPower }) {
     state,
     torches,
     end: tube.endCentre,
+    patch,
     /** The far opening (main.js renders the view out of the mouth onto it) and the turn that maps the far end onto the mouth. */
     portal: { cap, uniforms: portalU, ring: tube.endRing, toMouth: END_TO_MOUTH },
     /** Where you're moved to the mouth: this far in (the counterpart of the spot L - TURN_AT in from the mouth). */

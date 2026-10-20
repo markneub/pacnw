@@ -59,7 +59,7 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | --- | --- |
 | `blender/build_assets.py` | Procedurally models trees, ferns, logs and furniture in Blender → `public/models/forest.glb` |
 | `blender/build_cabin.py` | Models the mountain cabin (shell, door, furnishings) → `public/models/cabin.glb` + `src/cabin_layout.json` |
-| `src/cave.js` | The cave north of the trailhead: its tunnel and crag, torches (flames, flickering light, cube-map shadows), a far end that opens onto its own mouth at the other time of day; walking in and out |
+| `src/cave.js` | The cave north of the trailhead: its tunnel and the bank it opens out of, torches (flames, flickering light, cube-map shadows), a far end that opens onto its own mouth at the other time of day; walking in and out |
 | `src/cabin.js` | Places the cabin at the trail's end; its door, colliders, walkable floor, chimney smoke and interior lighting |
 | `blender/build_rocks.py` | Turns photogrammetry scans into game boulders with two detail levels → `public/models/rocks.glb` |
 | `src/terrain.js` | Height function (valley, lake basin, a staircase of snowy benches between ridged peaks, mountain rim, the beach and dunes in the south), vertex-coloured terrain with moss, rock and snow |

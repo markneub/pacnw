@@ -89,6 +89,9 @@ export function patchRocky(shader, { tread = false } = {}) {
         float s = 1.0 - rn.y;
         // not on snow, sand or mud (their layers), nor on a trail's tread
         float allow = (1.0 - smoothstep(0.03, 0.25, vRkLayers.z)) * (1.0 - vRkLayers.w)${tread ? ' * (1.0 - smoothstep(0.05, 0.4, vTread))' : ''};
+        #ifdef RK_HOLLOW
+          allow *= clamp(2.0 + vHollow, 0.0, 1.0); // the cave's ground patch: aHollow −1 (rock as usual) … −2 (none)
+        #endif
         if (s > 0.04 && allow > 0.01) {
           vec2 q = vRkPos.xz;
           float m = rkField(q, vRkPos.y, s);
