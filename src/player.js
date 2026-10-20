@@ -61,10 +61,11 @@ export class Player {
 
   /**
    * Something worth looking at: { pos (world, its point of interest), reach (m, horizontal: it starts to pull
-   * within this), cone ([cos, cos]: the facing over which the pull fades in), active?() }.
+   * within this), cone ([cos, cos]: the facing over which the pull fades in), low (where it
+   * should end up on screen: 0 the middle, 1 the bottom edge; 0.4 = the top of the bottom third), active?() }.
    */
   addGaze(target) {
-    this.gaze.push({ cone: [0.7, 0.9], active: null, ...target, released: false });
+    this.gaze.push({ cone: [0.7, 0.9], low: 0.4, active: null, ...target, released: false });
   }
 
   /** The strongest gaze pull now: sets this.gazeS (0..1) and this.gazePitch. */
@@ -86,7 +87,9 @@ export class Player {
       if (s > 0.2 && this.pitchInput > 0.015) t.released = true; // (they're looking where they like; not mouse jitter)
       if (t.released || s <= this.gazeS) continue;
       this.gazeS = s;
-      this.gazePitch = Math.max(-1.1, Math.atan2(t.pos.y - eye, Math.max(d, 0.35)));
+      const toward = Math.atan2(t.pos.y - eye, Math.max(d, 0.35));
+      const below = Math.atan(t.low * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)); // (not dead centre)
+      this.gazePitch = Math.max(-1.1, toward + below);
     }
     this.pitchInput = 0;
   }

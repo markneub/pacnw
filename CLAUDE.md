@@ -427,7 +427,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   with a tight dark shadow (1 px outline + 1 px drop + 3 px haze). Style in style.css; checked on forest and pale snow. Smaller: 18 px words, 25 px keys.
   **Gaze attractors** (player.js `addGaze({ pos, reach, cone, active })`, the user: the note was hard to activate,
   low on a table; "certain pieces of scenery attract your gaze"): within `reach` m (horizontal) and facing it (cos
-  0.7–0.9 fades the pull in; distance fades it over the last 0.8 m), the view's tilt eases to look at `pos` (rate 2/s ×
+  0.7–0.9 fades the pull in; distance fades it over the last 0.8 m), the view's tilt eases until `pos` sits `low` of the way from the middle to the bottom edge (0.4: the
+  top of the bottom third; the user: dead centre was too much) (rate 2/s ×
   strength; on touch it replaces `levelPitch`'s slope target). Tilting the view yourself (> 0.015 rad in a frame, not
   mouse jitter) lets go of that target until you leave its reach. Only pitch, never yaw. Used by the cabin note
   (reach 2.4 m, inside the cabin, not while held), **touch only** (the user: with a mouse you just look down); reading reach 1.9 → 2.1 m. Tested headless: level → note in ~1 s from
