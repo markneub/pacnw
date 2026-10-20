@@ -346,7 +346,7 @@ export async function buildCabin(plan, assets) {
   const touch = document.body.classList.contains('touch');
   const hintKey = document.createElement('span');
   hintKey.className = touch ? 'hint-key tap' : 'hint-key';
-  hintKey.textContent = touch ? 'Tap' : 'E';
+  hintKey.textContent = touch ? 'TAP' : 'E';
   const hintLabel = document.createElement('span');
   hintLabel.className = 'hint-label';
   hint.append(hintKey, hintLabel);
@@ -504,8 +504,8 @@ export async function buildCabin(plan, assets) {
     canToggle = near && (facing > 0.45 || dd < 0.9) && !(open && inSwing(pl.x, pl.z, 0.45)) && !canRead && !note.held;
     let text = null;
     // (none while the note is held: you've just picked it up, so you know how to put it down)
-    if (canRead) text = 'Read note';
-    else if (canToggle) text = open ? 'Close door' : 'Open door';
+    if (canRead) text = 'Read Note';
+    else if (canToggle) text = open ? 'Close Door' : 'Open Door';
     if (text && hintLabel.textContent !== text) hintLabel.textContent = text;
     hint.classList.toggle('show', !!text);
   }

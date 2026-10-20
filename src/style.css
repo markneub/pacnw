@@ -40,7 +40,7 @@ canvas {
   transform: translate(-50%, 0);
 }
 
-/* the input: a key (E), or on touch screens a "Tap" pill */
+/* the input: a key (E), or on touch screens TAP */
 .hint-key {
   display: grid;
   place-items: center;
@@ -58,8 +58,9 @@ canvas {
 }
 
 .hint-key.tap {
-  padding: 2px 11px 0;
-  border-radius: 999px;
+  padding: 2px 9px 0;
+  font-size: 16px;
+  letter-spacing: 0.06em;
 }
 
 #overlay {
