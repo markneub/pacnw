@@ -735,7 +735,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   "tube coming out of the ground" made no sense): no crag. A fine **ground patch** (`buildPatch`, 0.5 m cells over whole
   5 m grid cells s −5…10, v ±10, so its edge lies on the terrain's own lines; drawn with `terrainMaterial`, coloured by
   `groundColor`/`groundLayers`, `shadeGround`ed) rises from the level approach into a ~4 m bank the tunnel opens out of
-  (blended to the raw ground over its last 1.5 m). **Shape from the user's photos** ("too round": a dome with a round hole):
+  (blended to the raw ground over its last 1.5 m). Across the doorway (|v| < 1.6–2.8, s −4.5 … 0.4…1) it eases
+  down to exactly the floor (Y0 − 0.02): it stood ~20 cm higher, a step down onto the apron ("a tear", the user). **Shape from the user's photos** ("too round": a dome with a round hole):
   a ~5–6 m face of fractured rock (`faceAt(v)`: 1.3 m columns standing out 0–0.9 m by a per-column draw, flush beside
   the doorway, a buttress at v ≈ −3.7 out 1.1 m more; a ledge set back 0.5–0.85 m at ~half height), near vertical in
   the middle and leaning back into mossy slopes toward the sides (height × 0.15 and the rise widening to ~7 m by

@@ -322,7 +322,11 @@ function patchHeight(x, z) {
   const prof = lf * smooth(sf, sf + rw, s) + (1 - lf) * smooth(sf + back, sf + back + rw, s);
   const bank = Y0 + H * prof + (0.3 + 0.08 * n) * Math.max(0, s - sf - back - rw) + 0.3 * n * smooth(sf, sf + 2, s);
   const edge = Math.min(s - PATCH.s0, PATCH.s1 - s, v - PATCH.v0, PATCH.v1 - v);
-  return raw + (Math.max(raw, bank) - raw) * smooth(0, 1.5, edge);
+  const h = raw + (Math.max(raw, bank) - raw) * smooth(0, 1.5, edge);
+  // the doorway: the ground eases down to exactly the tunnel's floor at the threshold (it stood ~20 cm above it,
+  // a step down onto the strip under the threshold: "a tear on the ground", the user)
+  const door = smooth(-4.5, -1.5, s) * (1 - smooth(1.6, 2.8, Math.abs(v))) * (1 - smooth(0.4, 1.0, s));
+  return h + (Y0 - 0.02 - h) * door;
 }
 function buildPatch() {
   const ns = Math.round((PATCH.s1 - PATCH.s0) / PATCH.step) + 1;
