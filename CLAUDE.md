@@ -665,10 +665,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   hill that hides it; inside the chunks are renderOrder −1, filling depth first). The **crag** is rings around the
   opening (its first ring is the tube's), a rounded lip, then rock pushed back into the hill until the ground covers it.
   The crag is small (rings to 3.4 m, each pushed ≤ 4 m in, then down, until the ground covers it) and the tube's
-  first 6 m get bigger, blockier lumps, so the mouth is ragged, not a pipe's end. **Rough-hewn rocks** at the mouth
-  (`buildPortal`: boxy superellipsoids on a coarse grid, flat-shaded chisel facets): a block with a smaller one on
-  top, a tall leaning one, one fallen in front, one small. Rubble along the floor, a few boulders (colliders),
-  stalactites. A floor apron under the threshold. Terrain and grass are hidden only inside the tube's own arch (+0.6 m)
+  first 6 m get bigger, blockier lumps, so the mouth is ragged, not a pipe's end. No stones at the mouth and no
+  boulders inside (both tried; the user: unnatural, out of place): only small rubble along the floor and stalactites.
+  A floor apron under the threshold. Terrain and grass are hidden only inside the tube's own arch (+0.6 m)
   over the first 14 m (`CAVE_GLSL` `inCaveMouth` in materials.js, mirroring cave.js's shape; a box showed holes from
   up on the lower hill). Rock is double-sided (back faces count as outdoors: the tube's outside over the mouth, and
   any fold in the crag rings); rain/snow stop and motes

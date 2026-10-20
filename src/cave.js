@@ -21,7 +21,7 @@ import { loadTextureSet } from './textures.js';
  *   shadows from distance cube maps re-rendered as their flames flicker and sway; the rest light
  *   without. Outdoor light reaches only the first metres; the end glows white.
  * - In the tunnel the player walks on its floor, kept between its walls; trees above don't
- *   collide. Outside, the crag and the stones are colliders.
+ *   collide. Outside, the crag is a collider.
  */
 
 const L = CAVE.length;
@@ -358,56 +358,17 @@ function placeStone(geo, s, v, y, { yaw = 0, pitch = 0, roll = 0 } = {}) {
   return geo.applyMatrix4(m);
 }
 
-/**
- * A few rough-hewn blocks someone set at the mouth: boxy, with flat chisel facets (a coarse grid,
- * displaced, flat-shaded), one leaning, one stacked on another, one fallen in front.
- */
-function buildPortal(colliders) {
-  const parts = [];
-  const edge = 0.79 * halfW(0); // half the opening's width at the floor
-  const groundAtLocal = (s, v) => Math.min(rawGroundAt(...toWorld(s, v)), Y0 + 0.3);
-  const hewn = (hx, hy, hz, seed) => {
-    const g = stoneGeometry(hx, hy, hz, seed, { round: 5, rough: 0.16, seg: 2 }).toNonIndexed();
-    g.computeVertexNormals(); // (flat: each facet a chisel cut)
-    return g;
-  };
-  const put = (hx, hy, hz, seed, s, v, base, rot) => {
-    parts.push(placeStone(hewn(hx, hy, hz, seed), s, v, base + hy * 0.9, rot));
-  };
-  // left: a squat block with a smaller one set on top
-  {
-    const v = -(edge + 0.55);
-    const base = groundAtLocal(-0.3, v) - 0.15;
-    put(0.52, 0.55, 0.45, 3.1, -0.3, v, base, { yaw: 0.12, roll: 0.03 });
-    put(0.32, 0.22, 0.3, 7.3, -0.38, v - 0.04, base + 0.95, { yaw: -0.25, roll: -0.06, pitch: 0.05 });
-    colliders.push({ s: -0.3, v, r: 0.55 });
-    put(0.3, 0.2, 0.26, 4.4, -1.1, v - 0.45, groundAtLocal(-1.1, v - 0.45) - 0.1, { yaw: 0.8, pitch: 0.1 });
-    colliders.push({ s: -1.1, v: v - 0.45, r: 0.3 });
-  }
-  // right: a tall one leaning in toward the opening, and one fallen out in front
-  {
-    const v = edge + 0.45;
-    const base = groundAtLocal(-0.3, v) - 0.2;
-    put(0.4, 0.82, 0.4, 9.7, -0.3, v, base, { yaw: -0.08, roll: 0.07 });
-    colliders.push({ s: -0.3, v, r: 0.48 });
-    put(0.55, 0.24, 0.34, 2.2, -1.25, v + 0.6, groundAtLocal(-1.25, v + 0.6) - 0.12, { yaw: 0.65, roll: 0.12, pitch: -0.05 });
-    colliders.push({ s: -1.25, v: v + 0.6, r: 0.5 });
-  }
-  return mergeGeometries(parts);
-}
-
-/** Loose rock along the tunnel's floor, a few boulders against the walls, and stalactites. */
-function buildRubble(tube, colliders) {
+/** Loose rock along the tunnel's floor, and stalactites. */
+function buildRubble() {
   const parts = [];
   const r = mulberry32(SEED + 919);
   for (let s = 2.5; s < L - 4; s += 0.5 + r() * 1.4) {
     const side = r() < 0.5 ? -1 : 1;
-    const big = r() < 0.12;
-    const size = big ? 0.45 + r() * 0.4 : 0.1 + r() * 0.22;
-    const v = side * (floorHalf(s) + 0.25 - (big ? size * 0.6 : r() * 0.6)) + wiggle(s);
-    const g = stoneGeometry(size * (1 + r() * 0.5), size * (0.55 + r() * 0.3), size, r() * 90, { round: 2.4 + r(), rough: 0.18, seg: big ? 5 : 3 });
+    // (small stones only: the boulders against the walls looked out of place, the user)
+    const size = 0.1 + r() * 0.22;
+    const v = side * (floorHalf(s) + 0.25 - r() * 0.6) + wiggle(s);
+    const g = stoneGeometry(size * (1 + r() * 0.5), size * (0.55 + r() * 0.3), size, r() * 90, { round: 2.4 + r(), rough: 0.18, seg: 3 });
     parts.push(placeStone(g, s, v, floorAt(s) + size * 0.25, { yaw: r() * 6, pitch: (r() - 0.5) * 0.4, roll: (r() - 0.5) * 0.4 }));
-    if (big) colliders.push({ s, v, r: size * 0.9 });
   }
   // stalactites: short, knobbly cones down from the roof
   const cone = (len, rad, seed) => {
@@ -723,7 +684,7 @@ function caveGLSL(nTorch) {
 }
 
 /**
- * kind: 'rock' (tube, crag: the rock photo, the floor photo on the floor), 'stone' (the set stones:
+ * kind: 'rock' (tube, crag: the rock photo, the floor photo on the floor), 'stone' (lighter,
  * lighter, lichen, moss outside), 'plain' (vertex colours: the torches).
  */
 function caveMaterial(kind, nTorch) {
@@ -897,15 +858,12 @@ export async function buildCave(plan, texReady, { lowPower }) {
   }
   const group = new THREE.Group();
   group.name = 'cave';
-  const colliders = []; // outside: { s, v, r }
-  const inner = []; // inside: { s, v, r }
 
   const tube = buildTube();
   const torches = torchPlan(tube);
   const NT = torches.length;
   U.uTorch.value = torches.map(() => new THREE.Vector4());
   const rock = caveMaterial('rock', NT);
-  const stoneMat = caveMaterial('stone', NT);
   const plain = caveMaterial('plain', NT);
   const casters = [];
   const tubeMeshes = [];
@@ -919,9 +877,6 @@ export async function buildCave(plan, texReady, { lowPower }) {
   const crag = new THREE.Mesh(buildCrag(tube), rock);
   group.add(crag);
   casters.push(crag.geometry);
-  const portal = new THREE.Mesh(buildPortal(colliders), stoneMat);
-  group.add(portal);
-  casters.push(portal.geometry);
   // a strip of floor under the threshold, a little below the ground: it fills any sliver between
   // the tunnel's floor and the terrain in front
   {
@@ -936,7 +891,7 @@ export async function buildCave(plan, texReady, { lowPower }) {
     g.setAttribute('aOut', new THREE.BufferAttribute(new Float32Array(6).fill(1), 1));
     group.add(new THREE.Mesh(g, rock));
   }
-  const rubble = new THREE.Mesh(buildRubble(tube, inner), rock);
+  const rubble = new THREE.Mesh(buildRubble(), rock);
   group.add(rubble);
   casters.push(rubble.geometry);
   // from outside, the tunnel and the crag as one draw (inside: the tunnel in culled chunks, drawn first)
@@ -979,27 +934,14 @@ export async function buildCave(plan, texReady, { lowPower }) {
     return s > -1 ? floorAt(Math.max(0, s)) : g;
   });
 
-  /** Push the player (pos.x/z, radius r) out of the stones and the crag, or keep them in the tunnel. */
+  /** Push the player (pos.x/z, radius r) out of the crag, or keep them in the tunnel. */
   function collide(pos, r) {
     const [s, v] = toLocal(pos.x, pos.z);
     if (state.inside) {
       const cs = Math.min(Math.max(s, -1.5), L - 0.8);
       const half = Math.max(0.3, floorHalf(Math.max(0, cs)) - r + 0.2);
       const w = wiggle(Math.max(0, cs));
-      let nv = Math.min(Math.max(v, w - half), w + half);
-      let ns = cs;
-      for (const c of inner) {
-        const ds = ns - c.s;
-        const dv = nv - c.v;
-        const m = c.r + r;
-        const d2 = ds * ds + dv * dv;
-        if (d2 < m * m && d2 > 1e-8) {
-          const d = Math.sqrt(d2);
-          ns = c.s + (ds / d) * m;
-          nv = c.v + (dv / d) * m;
-        }
-      }
-      [pos.x, pos.z] = toWorld(ns, nv);
+      [pos.x, pos.z] = toWorld(cs, Math.min(Math.max(v, w - half), w + half));
       return;
     }
     let ns = s;
@@ -1013,17 +955,6 @@ export async function buildCave(plan, texReady, { lowPower }) {
       if (e < 1 && e > 1e-6) {
         ns = 2.5 + (es / e) * 3.2;
         nv = (ev / e) * 4.5;
-      }
-    }
-    for (const c of colliders) {
-      const ds = ns - c.s;
-      const dv = nv - c.v;
-      const m = c.r + r;
-      const d2 = ds * ds + dv * dv;
-      if (d2 < m * m && d2 > 1e-8) {
-        const d = Math.sqrt(d2);
-        ns = c.s + (ds / d) * m;
-        nv = c.v + (dv / d) * m;
       }
     }
     if (ns !== s || nv !== v) [pos.x, pos.z] = toWorld(ns, nv);
