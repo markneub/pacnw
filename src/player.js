@@ -36,6 +36,8 @@ export class Player {
     // themselves when you're close and facing them (addGaze). Looking up or down yourself lets go of one until you
     // walk away from it.
     this.gaze = [];
+    this.gazeS = 0; // the strongest pull now (0..1) and the tilt it wants
+    this.gazePitch = 0;
     // a crouch (0..1): eye level only, eased; set from outside (main.js: in the cave)
     this.crouchTarget = 0;
     this.crouch = 0;
@@ -134,7 +136,7 @@ export class Player {
       let grade = 0;
       for (let d = 2; d <= 10; d += 2) grade += (groundAt(this.pos.x + fx * d, this.pos.z + fz * d) - h0) / d;
       let target = THREE.MathUtils.clamp(Math.atan(grade / 5) * 0.8, -0.55, 0.55);
-      target += (this.gazePitch - target) * this.gazeS; // (something worth looking at wins)
+      if (this.gazeS > 0) target += (this.gazePitch - target) * this.gazeS; // (something worth looking at wins)
       this.slopePitch += (target - this.slopePitch) * (1 - Math.exp(-dt * 3));
       this.pitch += (this.slopePitch - this.pitch) * (1 - Math.exp(-dt * 1.2));
     } else if (this.gazeS > 0) {
