@@ -7,11 +7,12 @@ import { shared, patchSunlight, sunKey } from './materials.js';
 import { loadTextureSet } from './textures.js';
 
 /**
- * The cave north of the trailhead (config.js CAVE): a natural tunnel in the south nose of a
- * hillock, its mouth framed by stones someone set there (two uprights and a lintel, dry-stone
- * walling either side), torches on the walls, and a prick of light at the far end, ~130 m in.
- * Walk into the light and you come out of the same mouth, facing out, and day has turned to
- * night (or back): main.js does the swap while the screen is white.
+ * The cave north of the trailhead (config.js CAVE): a natural tunnel in the south nose of a low
+ * hillock, torches on its walls, and at the far end, ~130 m in, an opening onto the forest. Walk out
+ * of it and you're walking out of the same mouth, and day has turned to night (or back): there is
+ * no transition. The far end is the mouth turned round (its last S m mirror the first), its opening
+ * shows the view out of the mouth at the other time of day (main.js renders it), and near the end
+ * you're moved to the matching spot by the mouth, where nothing on screen differs.
  *
  * - The tunnel is one tube along a straight axis (wandering a little sideways), its floor falling
  *   8.5% so it's soon well under the hill (the terrain over it never dips into it); the crag
@@ -19,7 +20,7 @@ import { loadTextureSet } from './textures.js';
  * - Lit by its own torches (a standard material patched like the cabin's: no real three.js lights,
  *   which would cost every material in the scene). The four torches nearest the camera cast
  *   shadows from distance cube maps re-rendered as their flames flicker and sway; the rest light
- *   without. Outdoor light reaches only the first metres; the end glows white.
+ *   without. Outdoor light reaches only the first metres at either end.
  * - In the tunnel the player walks on its floor, kept between its walls; trees above don't
  *   collide. Outside, the crag is a collider.
  */
@@ -43,12 +44,42 @@ const smooth = (a, b, x) => {
 // The tunnel's shape, in its own frame: s along the axis (0 at the mouth), v across (positive to
 // the right looking in), y up from the floor. GLSL copies below must match.
 // ---------------------------------------------------------------------------
+//
+// The far end is the mouth again: its last S m are the first S m turned round (rotated 180° about
+// the vertical through the tunnel's middle, and lower by D), walls, stones, torches and all, and
+// through its opening you see what's outside the mouth (main.js renders the view from the matching
+// spot there). So walking into it, you're moved to that spot without anything on screen changing.
 let Y0 = 0; // floor height at the mouth (planCave)
-export const floorAt = (s) => Y0 - GRADE * Math.max(0, s - 3 * (1 - Math.exp(-Math.max(s, 0) / 3)));
-const wiggle = (s) => (0.55 * Math.sin(0.047 * s + 1.0) + 0.3 * Math.sin(0.13 * s + 2.0) - (0.55 * Math.sin(1.0) + 0.3 * Math.sin(2.0)))
-  * smooth(3, 14, s) * (1 - smooth(L - 16, L - 5, s));
-const halfW = (s) => 1.75 + 0.22 * Math.sin(0.21 * s + 0.3) + 0.15 * Math.sin(0.53 * s + 1.7) - 0.3 * (1 - smooth(0, 5, s)) - 0.55 * smooth(L - 12, L, s);
-const height = (s) => 3.1 + 0.35 * Math.sin(0.17 * s + 2.2) + 0.2 * Math.sin(0.41 * s) - 0.5 * (1 - smooth(0, 4, s)) - 0.9 * smooth(L - 12, L, s);
+const S = 20; // the mirrored stretch at each end
+const SEAM = L - S - 3; // beyond it, the shaders texture the rock as at its counterpart by the mouth
+const g0 = (s) => GRADE * Math.max(0, s - 3 * (1 - Math.exp(-Math.max(s, 0) / 3)));
+const D = -GRADE * (L - 2 * S); // how much lower the far end is
+export const floorAt = (s) => (s <= S ? Y0 - g0(s) : s >= L - S ? Y0 - g0(L - s) + D : Y0 - g0(S) - GRADE * (s - S));
+const wiggle0 = (s) => (0.55 * Math.sin(0.047 * s + 1.0) + 0.3 * Math.sin(0.13 * s + 2.0) - (0.55 * Math.sin(1.0) + 0.3 * Math.sin(2.0)))
+  * smooth(3, 14, s) * (1 - smooth(L / 2 - 20, L / 2, s));
+const wiggle = (s) => (s <= L / 2 ? wiggle0(s) : -wiggle0(L - s)); // (turned round: the other side)
+const halfW = (s) => {
+  const m = Math.min(s, L - s);
+  return 1.75 + 0.22 * Math.sin(0.21 * m + 0.3) + 0.15 * Math.sin(0.53 * m + 1.7) - 0.3 * (1 - smooth(0, 5, m));
+};
+const height = (s) => {
+  const m = Math.min(s, L - s);
+  return 3.1 + 0.35 * Math.sin(0.17 * m + 2.2) + 0.2 * Math.sin(0.41 * m) - 0.5 * (1 - smooth(0, 4, m));
+};
+/** The turn: maps a point near the far end to its counterpart near the mouth (it's its own inverse, apart from D). */
+const MID = toWorldEarly(L / 2, 0);
+function toMouth(p, out = p) {
+  return out.set(2 * MID[0] - p.x, p.y - D, 2 * MID[1] - p.z);
+}
+function toEnd(p, out = p) {
+  return out.set(2 * MID[0] - p.x, p.y + D, 2 * MID[1] - p.z);
+}
+function toWorldEarly(s, v) {
+  return [CAVE.x + DX * s - DZ * v, CAVE.z + DZ * s + DX * v];
+}
+/** The same turns as matrices (for geometry and cameras). */
+export const END_TO_MOUTH = new THREE.Matrix4().set(-1, 0, 0, 2 * MID[0], 0, 1, 0, -D, 0, 0, -1, 2 * MID[1], 0, 0, 0, 1);
+const MOUTH_TO_END = new THREE.Matrix4().set(-1, 0, 0, 2 * MID[0], 0, 1, 0, D, 0, 0, -1, 2 * MID[1], 0, 0, 0, 1);
 /** Half the walkable floor's width at s (the arch meets the floor at 0.79 of its half width; rubble along the edges). */
 const floorHalf = (s) => 0.79 * halfW(s) - 0.3;
 
@@ -136,6 +167,30 @@ function ringPoint(s, j, out) {
   return out;
 }
 
+/** Vertex j's counterpart on a ring turned round (the arch runs the other way, so does the floor). */
+const mirrorJ = (j) => (j <= NA ? NA - j : M + NA - j);
+/**
+ * Ring vertex j at s, anywhere: near the far end, the mouth's ring turned round (blending into it
+ * over the 6 m before, so the walls run on without a seam).
+ */
+function tunnelPoint(s, j, out) {
+  if (s < L - S - 6) return ringPoint(s, j, out);
+  ringPoint(L - s, mirrorJ(j), out);
+  const mx = -out[1];
+  const my = out[2];
+  out[0] = s;
+  if (s < L - S) {
+    const k = smooth(L - S - 6, L - S, s);
+    const own = ringPoint(s, j, [0, 0, 0]);
+    out[1] = own[1] + (mx - own[1]) * k;
+    out[2] = own[2] + (my - own[2]) * k;
+  } else {
+    out[1] = mx;
+    out[2] = my;
+  }
+  return out;
+}
+
 /** World position of a local (s, x, y) point (the axis wiggles across). */
 function localToWorld(s, x, y, out) {
   const [wx, wz] = toWorld(s, x + wiggle(s));
@@ -143,11 +198,15 @@ function localToWorld(s, x, y, out) {
   return out;
 }
 
-/** The tunnel tube, in chunks of ~10 m (each culled on its own), plus the light at the end. */
+/** The tunnel tube, in chunks of ~10 m (each culled on its own), plus its far opening. */
 function buildTube() {
-  const rings = [];
-  for (let s = 0; s < L + 0.6; s += DS) rings.push(s);
-  rings.push(L + 0.6);
+  // rings every DS m from the mouth; the far end's mirror those exactly
+  const near = [];
+  for (let s = 0; s <= S + 1e-6; s += DS) near.push(s);
+  const rings = [...near];
+  const n = Math.round((L - 2 * near[near.length - 1]) / DS);
+  for (let k = 1; k < n; k++) rings.push(near[near.length - 1] + ((L - 2 * near[near.length - 1]) * k) / n);
+  for (let k = near.length - 1; k >= 0; k--) rings.push(L - near[k]);
   const R = rings.length;
   const pos = new Float32Array(R * M * 3);
   const loc = new Float32Array(R * M * 3); // local (s, x, y), for the crag and the torches
@@ -155,7 +214,7 @@ function buildTube() {
   const w = new THREE.Vector3();
   for (let i = 0; i < R; i++) {
     for (let j = 0; j < M; j++) {
-      ringPoint(rings[i], j, p);
+      tunnelPoint(rings[i], j, p);
       loc.set(p, (i * M + j) * 3);
       localToWorld(p[0], p[1], p[2], w);
       pos.set([w.x, w.y, w.z], (i * M + j) * 3);
@@ -208,10 +267,10 @@ function buildTube() {
     g.computeBoundingSphere();
     chunks.push(g);
   }
-  // the light at the end: the last ring, filled
+  // the far opening: the last ring, filled (main.js draws the view out of the mouth on it)
   const end = [];
   const ce = new THREE.Vector3();
-  localToWorld(L + 0.6, 0, height(L) * 0.4, ce);
+  localToWorld(L, 0, height(L) * 0.4, ce);
   const last = (R - 1) * M;
   for (let j = 0; j < M; j++) {
     const k0 = (last + j) * 3;
@@ -220,7 +279,8 @@ function buildTube() {
   }
   const endGeo = new THREE.BufferGeometry();
   endGeo.setAttribute('position', new THREE.Float32BufferAttribute(end, 3));
-  return { chunks, endGeo, endCentre: ce, loc, pos, rings };
+  const endRing = Array.from({ length: M }, (_, j) => new THREE.Vector3(pos[(last + j) * 3], pos[(last + j) * 3 + 1], pos[(last + j) * 3 + 2]));
+  return { chunks, endGeo, endCentre: ce, endRing, loc, pos, rings };
 }
 
 /**
@@ -259,12 +319,14 @@ function buildCrag(tube) {
       const amp = (0.22 + 0.07 * rho) * smooth(0, 0.6, rho);
       const ledge = 0.25 * smooth(0.3, 0.7, ((((y + 0.6 * n) / 0.9) % 1) + 1) % 1) * smooth(0.5, 1.5, rho);
       s -= (n * 0.7 + crease * 0.5) * amp + ledge;
+      // (its inner rings stay out of the tunnel: seen from inside they'd be rock the far end lacks)
+      if (rho < 1.5) s = Math.min(s, -0.03);
       x += ox * n * amp * 0.6;
       y += oy * n * amp * 0.6;
       // recede into the hill: far out, push each vertex in until the ground covers it
       // (back up to 4 m, then down: at the nose's sides the hill is low, and pushing in alone drew
       // long wedges along it)
-      for (let it = 0; it < 56 && rho > 0.75; it++) {
+      for (let it = 0; it < 56 && rho >= 2; it++) { // (nearer the rim, pushed in, they cut through the tunnel's roof)
         localToWorld(s, x, y, w);
         if (w.y < rawGroundAt(w.x, w.z) - (rho > 2 ? 0.3 : 0.05)) break;
         if (it < 16) s += 0.25;
@@ -361,14 +423,15 @@ function placeStone(geo, s, v, y, { yaw = 0, pitch = 0, roll = 0 } = {}) {
 /** Loose rock along the tunnel's floor, and stalactites. */
 function buildRubble() {
   const parts = [];
+  const near = []; // (by the mouth: the far end gets the same, turned round)
   const r = mulberry32(SEED + 919);
-  for (let s = 2.5; s < L - 4; s += 0.5 + r() * 1.4) {
+  for (let s = 2.5; s < L - S; s += 0.5 + r() * 1.4) {
     const side = r() < 0.5 ? -1 : 1;
     // (small stones only: the boulders against the walls looked out of place, the user)
     const size = 0.1 + r() * 0.22;
     const v = side * (floorHalf(s) + 0.25 - r() * 0.6) + wiggle(s);
     const g = stoneGeometry(size * (1 + r() * 0.5), size * (0.55 + r() * 0.3), size, r() * 90, { round: 2.4 + r(), rough: 0.18, seg: 3 });
-    parts.push(placeStone(g, s, v, floorAt(s) + size * 0.25, { yaw: r() * 6, pitch: (r() - 0.5) * 0.4, roll: (r() - 0.5) * 0.4 }));
+    (s < S ? near : parts).push(placeStone(g, s, v, floorAt(s) + size * 0.25, { yaw: r() * 6, pitch: (r() - 0.5) * 0.4, roll: (r() - 0.5) * 0.4 }));
   }
   // stalactites: short, knobbly cones down from the roof
   const cone = (len, rad, seed) => {
@@ -382,14 +445,15 @@ function buildRubble() {
     g.computeVertexNormals();
     return g;
   };
-  for (let s = 6; s < L - 8; s += 1.5 + r() * 4) {
+  for (let s = 6; s < L - S; s += 1.5 + r() * 4) {
     const v = (r() - 0.5) * halfW(s) * 0.9 + wiggle(s);
     const len = 0.15 + r() * 0.55;
     const g = cone(len, 0.04 + len * 0.12, r() * 30);
     // (the cones are open at the top: their base sits up inside the rock)
     const top = floorAt(s) + height(s) * (0.92 - 0.25 * Math.pow(Math.abs(v - wiggle(s)) / halfW(s), 2)) + 0.12;
-    parts.push(placeStone(g, s, v, top, { yaw: r() * 6 }));
+    (s < S ? near : parts).push(placeStone(g, s, v, top, { yaw: r() * 6 }));
   }
+  for (const g of near) parts.push(g, g.clone().applyMatrix4(MOUTH_TO_END));
   const g = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)));
   g.setAttribute('aOut', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count), 1));
   return g;
@@ -426,7 +490,7 @@ function torchPlan(tube) {
   // inside, every 12 m, alternating sides: the bracket on the wall at ~1.5 m, the stick leaning
   // out so its flame burns ~0.3 m clear of the wall (which curves in above ~1.1 m)
   let side = 1;
-  for (let s = 5; s < L - 10; s += 12) {
+  for (let s = 15; s <= L - 27; s += 12) {
     const lo = wallAt(tube, s, side, 1.5);
     const hi = wallAt(tube, s, side, 2.15);
     const w = wiggle(s);
@@ -452,6 +516,17 @@ function torchPlan(tube) {
     t.phase = t.s * 1.7 + t.v * 3.1;
     t.light = t.flame.clone();
     t.intensity = TORCH_I;
+  }
+  // and the far end's, turned round from the mouth's (the same flicker: they're the same torches)
+  for (const t of torches.filter((tc) => tc.s <= S)) {
+    const m = { ...t, mirror: true, s: L - t.s };
+    m.base = toEnd(t.base.clone());
+    m.head = toEnd(t.head.clone());
+    m.flame = toEnd(t.flame.clone());
+    m.light = m.flame.clone();
+    m.axis = new THREE.Vector3(-t.axis.x, t.axis.y, -t.axis.z);
+    m.out = [-t.out[0], -t.out[1]];
+    torches.push(m);
   }
   return torches;
 }
@@ -619,7 +694,9 @@ const U = {
   uShMap1: { value: null },
   uShMap2: { value: null },
   uShMap3: { value: null },
-  uEnd: { value: new THREE.Vector4() },
+  uCvMirror: { value: new THREE.Vector4() }, // 2 * middle x, D, 2 * middle z, SEAM (the far end's turn)
+  uOutA: { value: new THREE.Color() }, // daylight (or moonlight) in at the mouth, this time of day
+  uOutB: { value: new THREE.Color() }, // in at the far end: the other time of day (main.js)
 };
 
 function caveGLSL(nTorch) {
@@ -640,13 +717,23 @@ function caveGLSL(nTorch) {
   uniform samplerCube uShMap1;
   uniform samplerCube uShMap2;
   uniform samplerCube uShMap3;
-  uniform vec4 uEnd;
+  uniform vec4 uCvMirror;
+  uniform vec3 uOutA;
+  uniform vec3 uOutB;
   varying vec3 vCvW;
   varying vec3 vCvN;
   varying float vCvOut; // 1: outdoor rock (the crag)
   vec3 cvN; // the shading normal, world space
   float cvS; // how far in (m along the axis)
-  float cvFloorY; // the tunnel's floor there (roughly)
+  float cvFloorY; // the tunnel's floor there
+  float cvSm; // how far from the nearer end
+  vec3 cvP; // where to texture: near the far end, its counterpart by the mouth
+  float cvG0(float s) { return ${GRADE} * max(0.0, s - 3.0 * (1.0 - exp(-max(s, 0.0) / 3.0))); }
+  float cvFloor(float s) {
+    float L = uCaveO.w;
+    return s <= ${S.toFixed(1)} ? uCaveO.y - cvG0(s) : s >= L - ${S.toFixed(1)} ? uCaveO.y - cvG0(L - s) + uCvMirror.y
+      : uCaveO.y - cvG0(${S.toFixed(1)}) - ${GRADE} * (s - ${S.toFixed(1)});
+  }
   float cvOut; // 1 outdoors
   float cvRough = 0.9;
   float cvHash(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -713,37 +800,42 @@ function caveMaterial(kind, nTorch) {
       .replace('#include <color_fragment>', `#include <color_fragment>
         cvN = normalize(vCvN) * (gl_FrontFacing ? 1.0 : -1.0); // (rock is double-sided)
         cvS = dot(vCvW.xz - uCaveO.xz, uCaveDir);
-        cvFloorY = uCaveO.y - ${GRADE} * max(cvS - 3.0, 0.0);
-        // outdoors: in front of the mouth, or up on the crag over the tunnel's roof
-        cvOut = max(max(1.0 - smoothstep(0.5, 3.0, cvS), step(cvFloorY + 3.8, vCvW.y)), vCvOut);
-        if (!gl_FrontFacing) cvOut = 1.0; // (the tunnel's outside: only seen from outdoors, over the mouth)
+        cvSm = min(cvS, uCaveO.w - cvS);
+        cvFloorY = cvFloor(cvS);
+        // outdoors: in front of the mouth, the crag (aOut), and the tunnel's outside (back faces,
+        // only seen from outdoors over the mouth); inside, a model of the light that comes in at both ends
+        cvOut = max(vCvOut, max(step(cvS, 0.0), gl_FrontFacing ? 0.0 : 1.0));
+        bool cvM = cvS > uCvMirror.w;
+        cvP = cvM ? vec3(uCvMirror.x - vCvW.x, vCvW.y - uCvMirror.y, uCvMirror.z - vCvW.z) : vCvW;
+        vec3 cvNt = cvM ? vec3(-cvN.x, cvN.y, -cvN.z) : cvN;
         ${textured ? `{
           // triplanar rock photo (modulating the base colour), the floor photo on the floor inside
-          vec3 bw = pow(abs(cvN), vec3(4.0));
+          vec3 bw = pow(abs(cvNt), vec3(4.0));
           bw /= bw.x + bw.y + bw.z;
-          vec2 px = vCvW.zy * uCvTile.x, py = vCvW.xz * uCvTile.x, pz = vCvW.xy * uCvTile.x;
+          vec2 px = cvP.zy * uCvTile.x, py = cvP.xz * uCvTile.x, pz = cvP.xy * uCvTile.x;
           vec3 tw = (texture2D(uCvWall, px).rgb * bw.x + texture2D(uCvWall, py).rgb * bw.y + texture2D(uCvWall, pz).rgb * bw.z) / uCvWallAvg;
           vec3 tnx = texture2D(uCvWallN, px).xyz * 2.0 - 1.0;
           vec3 tny = texture2D(uCvWallN, py).xyz * 2.0 - 1.0;
           vec3 tnz = texture2D(uCvWallN, pz).xyz * 2.0 - 1.0;
           vec3 pert = vec3(0.0, tnx.y, tnx.x) * bw.x + vec3(tny.x, 0.0, tny.y) * bw.y + vec3(tnz.x, tnz.y, 0.0) * bw.z;
-          float fl = ${kind === 'rock' ? '1.0' : '0.0'} * smoothstep(0.55, 0.85, cvN.y) * smoothstep(-0.5, 1.0, cvS) * step(vCvW.y, cvFloorY + 0.6);
-          vec2 pf = vCvW.xz * uCvTile.y;
+          float fl = ${kind === 'rock' ? '1.0' : '0.0'} * smoothstep(0.55, 0.85, cvN.y) * smoothstep(-0.5, 1.0, cvSm) * step(vCvW.y, cvFloorY + 0.6);
+          vec2 pf = cvP.xz * uCvTile.y;
           vec3 tf = texture2D(uCvFloor, pf).rgb / uCvFloorAvg;
           vec3 tfn = texture2D(uCvFloorN, pf).xyz * 2.0 - 1.0;
-          float tone = 0.8 + 0.4 * cvNoise(vCvW * 0.35); // big patches of lighter and darker rock
+          float tone = 0.8 + 0.4 * cvNoise(cvP * 0.35); // big patches of lighter and darker rock
           diffuseColor.rgb *= mix(clamp(tw, 0.0, 3.0), clamp(tf, 0.0, 3.0) * vec3(1.15, 1.0, 0.9), fl) * tone;
           pert = mix(pert, vec3(tfn.x, 0.0, tfn.y), fl);
+          if (cvM) pert.xz = -pert.xz; // (back from the counterpart's frame)
           cvN = normalize(cvN + pert * 0.9);
           // damp: seeping water darkens and glosses streaks down the walls (it glints in the torchlight)
-          float seep = smoothstep(0.55, 0.8, cvNoise(vec3(vCvW.x * 1.6, vCvW.y * 0.25, vCvW.z * 1.6))) * smoothstep(1.0, 4.0, cvS) * (1.0 - fl);
+          float seep = smoothstep(0.55, 0.8, cvNoise(vec3(cvP.x * 1.6, cvP.y * 0.25, cvP.z * 1.6))) * smoothstep(1.0, 4.0, cvSm) * (1.0 - fl);
           diffuseColor.rgb *= 1.0 - 0.35 * seep;
           cvRough = mix(0.9, 0.3, seep);
           ${kind === 'stone' ? `
           // outside: lichen, and moss on the tops
-          float lich = smoothstep(0.55, 0.75, cvNoise(vCvW * 2.3));
+          float lich = smoothstep(0.55, 0.75, cvNoise(cvP * 2.3));
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.45, 0.36), lich * 0.5);` : ''}
-          float moss = smoothstep(0.45, 0.85, cvN.y + 0.25 * cvNoise(vCvW * 1.7)) * cvOut;
+          float moss = smoothstep(0.45, 0.85, cvN.y + 0.25 * cvNoise(cvP * 1.7)) * max(cvOut, 1.0 - smoothstep(0.5, 3.0, cvSm));
           // soot: years of smoke have blackened the rock above each torch
           float soot = 0.0;
           for (int i = 0; i < ${nTorch}; i++) {
@@ -753,22 +845,25 @@ function caveMaterial(kind, nTorch) {
               soot = max(soot, exp(-r2 / (0.06 + 0.22 * d.y)) * smoothstep(-0.1, 0.35, d.y) * (1.0 - smoothstep(1.2, 2.0, d.y)));
             }
           }
-          diffuseColor.rgb *= 1.0 - 0.7 * soot * (0.75 + 0.5 * cvNoise(vCvW * 6.0));
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.07, 0.1, 0.035) * (0.7 + 0.6 * cvNoise(vCvW * 4.0)), moss * 0.85);
+          diffuseColor.rgb *= 1.0 - 0.7 * soot * (0.75 + 0.5 * cvNoise(cvP * 6.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.07, 0.1, 0.035) * (0.7 + 0.6 * cvNoise(cvP * 4.0)), moss * 0.85);
         }` : ''}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = cvRough;')
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         normal = normalize((viewMatrix * vec4(cvN, 0.0)).xyz);`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         {
-          // outdoor light only reaches the first few metres in
-          float inside = max(cvS, 0.0);
-          float outD = max(1.0 - smoothstep(-0.3, 4.0, cvS), cvOut);
-          float outI = max(exp(-inside / 2.5), cvOut);
-          reflectedLight.directDiffuse *= outD;
-          reflectedLight.directSpecular *= outD;
-          reflectedLight.indirectDiffuse *= outI;
-          reflectedLight.indirectSpecular *= outI;
+          // inside: only the light that comes in at either end reaches the walls, over the first few
+          // metres (the same model at both ends, so the far end, lit as the mouth is at the other
+          // time of day, matches the mouth when you come out of it)
+          float interior = 1.0 - cvOut;
+          vec3 toMouth = vec3(-uCaveDir.x, 0.0, -uCaveDir.y);
+          vec3 amb = uOutA * exp(-max(cvS, 0.0) / 2.5) * (0.55 + 0.45 * max(dot(cvN, toMouth), 0.0))
+            + uOutB * exp(-max(uCaveO.w - cvS, 0.0) / 2.5) * (0.55 + 0.45 * max(dot(cvN, -toMouth), 0.0));
+          reflectedLight.directDiffuse *= 1.0 - interior;
+          reflectedLight.directSpecular *= 1.0 - interior;
+          reflectedLight.indirectDiffuse = mix(reflectedLight.indirectDiffuse, diffuseColor.rgb * amb, interior);
+          reflectedLight.indirectSpecular *= 1.0 - interior;
           vec3 V = normalize(cameraPosition - vCvW);
           vec3 dif = vec3(0.0);
           vec3 spec = vec3(0.0);
@@ -779,16 +874,8 @@ function caveMaterial(kind, nTorch) {
           if (uSh[1].w > 0.0) cvLight(uSh[1].xyz, uSh[1].w, cvShadow(uShMap1, uSh[1].xyz), V, dif, spec);
           if (uSh[2].w > 0.0) cvLight(uSh[2].xyz, uSh[2].w, cvShadow(uShMap2, uSh[2].xyz), V, dif, spec);
           if (uSh[3].w > 0.0) cvLight(uSh[3].xyz, uSh[3].w, cvShadow(uShMap3, uSh[3].xyz), V, dif, spec);
-          // the light at the end: cold and white, flooding the last stretch
-          {
-            vec3 Le = uEnd.xyz - vCvW;
-            float d2 = dot(Le, Le);
-            float e = uEnd.w / (1.0 + d2 * 0.08) * smoothstep(40.0, 10.0, sqrt(d2));
-            float ndl = max(dot(cvN, normalize(Le)), 0.0) * 0.75 + 0.25;
-            dif += vec3(0.85, 0.92, 1.0) * e * ndl;
-          }
           // a faint fill, so the darkest stretches between torches are dim, not black
-          dif += vec3(0.02, 0.019, 0.022) * smoothstep(0.0, 6.0, cvS);
+          dif += vec3(0.02, 0.019, 0.022) * smoothstep(0.0, 6.0, cvSm) * interior;
           reflectedLight.directDiffuse += diffuseColor.rgb * dif;
           reflectedLight.directSpecular += spec;
         }`)
@@ -875,8 +962,7 @@ export async function buildCave(plan, texReady, { lowPower }) {
     casters.push(g);
   }
   const crag = new THREE.Mesh(buildCrag(tube), rock);
-  group.add(crag);
-  casters.push(crag.geometry);
+  group.add(crag); // (not a shadow caster: the far end has no crag, and its shadows must match the mouth's)
   // a strip of floor under the threshold, a little below the ground: it fills any sliver between
   // the tunnel's floor and the terrain in front
   {
@@ -902,13 +988,43 @@ export async function buildCave(plan, texReady, { lowPower }) {
   group.add(new THREE.Mesh(torchGeometry(torches), plain));
   const [flames, glows] = buildFlames(torches);
   group.add(flames, glows, buildSparks(torches));
-  // the light at the end: white, brighter than anything (it blooms in post.js's glow)
-  const endMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 4, 4), side: THREE.DoubleSide, fog: false });
-  const end = new THREE.Mesh(tube.endGeo, endMat);
-  group.add(end);
-  U.uEnd.value.set(tube.endCentre.x, tube.endCentre.y, tube.endCentre.z, 0);
-  const endHalo = buildHalo(tube.endCentre);
-  group.add(endHalo);
+  U.uCvMirror.value.set(2 * MID[0], D, 2 * MID[1], SEAM);
+  // the far opening: shows the view out of the mouth (main.js renders it into tPortal, the part of
+  // the screen the opening covers: uRect, in drawing-buffer pixels; uUvMax, how much of the target that is)
+  const portalU = {
+    tPortal: { value: null }, uRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uUvMax: { value: new THREE.Vector2(1, 1) },
+    uVP: { value: new THREE.Matrix4() }, uBuf: { value: new THREE.Vector2(1, 1) },
+    uOn: { value: 0 }, uFallback: { value: new THREE.Color(0.5, 0.5, 0.5) },
+  };
+  // (projected with the view it was rendered for, uVP, so a view a few frames old still sits on the
+  // opening: main.js refreshes a small, far one only every few frames)
+  const cap = new THREE.Mesh(tube.endGeo, new THREE.ShaderMaterial({
+    uniforms: portalU,
+    side: THREE.DoubleSide,
+    vertexShader: /* glsl */ `
+      varying vec3 vW;
+      void main() {
+        vW = (modelMatrix * vec4(position, 1.0)).xyz;
+        gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D tPortal;
+      uniform vec4 uRect;
+      uniform vec2 uUvMax;
+      uniform mat4 uVP;
+      uniform vec2 uBuf;
+      uniform float uOn;
+      uniform vec3 uFallback;
+      varying vec3 vW;
+      void main() {
+        vec4 c = uVP * vec4(vW, 1.0);
+        vec2 px = (c.xy / c.w * 0.5 + 0.5) * uBuf;
+        vec2 uv = clamp((px - uRect.xy) / uRect.zw, 0.0, 1.0) * uUvMax;
+        gl_FragColor = uOn > 0.5 ? vec4(texture2D(tPortal, uv).rgb, 1.0) : vec4(uFallback, 1.0);
+      }`,
+  }));
+  cap.frustumCulled = false;
+  group.add(cap);
 
   // shadow cubes for the nearest torches
   const shadowScene = new THREE.Scene();
@@ -981,15 +1097,14 @@ export async function buildCave(plan, texReady, { lowPower }) {
     const near = cs > -40 && cs < L + 5 && camera.position.distanceTo(tube.endCentre) < L + 60;
     group.visible = near || camera.position.distanceTo(torches[0].base) < 220;
     shared.uCaveIn.value = state.inside && cs > 1.5 ? 1 : 0;
-    // the end glows brighter as you come near (it lights the last stretch)
-    U.uEnd.value.w = 1.6;
     for (let i = 0; i < NT; i++) {
       const tc = torches[i];
       const ph = tc.phase;
       const flick = 0.8 + 0.09 * Math.sin(t * 11.3 + ph) + 0.06 * Math.sin(t * 23.1 + ph * 2.3) + 0.05 * Math.sin(t * 5.7 + ph * 0.7) * Math.sin(t * 17.9 + ph);
       tc.flick = flick;
       flames.material.uniforms.uFlick.value[i] = flick;
-      tc.light.copy(tc.flame).add(tmp.set(Math.sin(t * 9.1 + ph) * 0.025, Math.sin(t * 13.3 + ph) * 0.02 + 0.03, Math.cos(t * 7.7 + ph) * 0.025));
+      const sx = tc.mirror ? -1 : 1;
+      tc.light.copy(tc.flame).add(tmp.set(sx * Math.sin(t * 9.1 + ph) * 0.025, Math.sin(t * 13.3 + ph) * 0.02 + 0.03, sx * Math.cos(t * 7.7 + ph) * 0.025));
       tc.dist = tc.light.distanceTo(camera.position);
     }
     for (let i = 0; i < 2; i++) shared.uCaveTorch.value[i].set(torches[i].light.x, torches[i].light.y, torches[i].light.z, torches[i].intensity * torches[i].flick);
@@ -1060,8 +1175,30 @@ export async function buildCave(plan, texReady, { lowPower }) {
     state,
     torches,
     end: tube.endCentre,
+    /** The far opening (main.js renders the view out of the mouth onto it) and the turn that maps the far end onto the mouth. */
+    portal: { cap, uniforms: portalU, ring: tube.endRing, toMouth: END_TO_MOUTH },
+    /** Where you're moved to the mouth: this far in (the counterpart of the spot L - TURN_AT in from the mouth). */
+    turnAt: L - 8,
+    /**
+     * Could the far opening be in view? Always from inside; from outside only when the line to it
+     * passes through the mouth (else the hill hides it, and its view out isn't rendered).
+     */
+    canSeeFarEnd: (camera) => {
+      if (state.inside) return true;
+      const [sc, vc] = toLocal(camera.position.x, camera.position.z);
+      if (sc >= 0) return false;
+      const k = -sc / (L - sc); // where the line crosses the mouth
+      const v0 = vc * (1 - k);
+      const y0 = camera.position.y + (tube.endCentre.y - camera.position.y) * k - Y0;
+      return Math.abs(v0) < 0.79 * halfW(0) + 0.3 && y0 > -0.3 && y0 < height(0) + 0.3;
+    },
+    /** The light coming in at the mouth (a) and at the far end (b), for the walls (colours, linear). */
+    setDaylight: (a, b) => {
+      U.uOutA.value.copy(a);
+      if (b) U.uOutB.value.copy(b);
+    },
     mouth: new THREE.Vector3(CAVE.x, Y0 + 1.5, CAVE.z),
-    /** Where the player comes back: 12 m in, facing out (the white clears as they reach the mouth). */
+    /** A spot 12 m in, facing out. */
     exitPoint: () => {
       const s = 12;
       const [x, z] = toWorld(s, wiggle(s));
@@ -1128,41 +1265,4 @@ function buildSparks(torches) {
   pts.frustumCulled = false;
   pts.renderOrder = 21;
   return pts;
-}
-
-/** A soft, wide glow round the light at the end (camera-facing, additive). */
-function buildHalo(centre) {
-  const g = new THREE.PlaneGeometry(2, 2);
-  const mat = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    depthTest: true,
-    blending: THREE.AdditiveBlending,
-    uniforms: { uC: { value: centre.clone() } },
-    vertexShader: /* glsl */ `
-      uniform vec3 uC;
-      varying vec2 vUv;
-      void main() {
-        vec3 toCam = cameraPosition - uC;
-        float d = length(toCam);
-        vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), toCam));
-        vec3 upv = normalize(cross(toCam, right));
-        // a fixed size on screen far off (a prick of light), a broad glow up close
-        float r = 2.2 + d * 0.012;
-        vec3 p = uC + toCam / d * 1.0 + (right * position.x + upv * position.y) * r;
-        vUv = position.xy;
-        gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
-      }`,
-    fragmentShader: /* glsl */ `
-      varying vec2 vUv;
-      void main() {
-        float r = length(vUv);
-        float g = exp(-r * r * 6.0) * 0.5 + exp(-r * r * 30.0) * 0.6;
-        gl_FragColor = vec4(vec3(0.9, 0.95, 1.0) * g * (1.0 - smoothstep(0.7, 1.0, r)), 1.0);
-      }`,
-  });
-  const m = new THREE.Mesh(g, mat);
-  m.frustumCulled = false;
-  m.renderOrder = 22;
-  return m;
 }

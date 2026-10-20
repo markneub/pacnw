@@ -355,38 +355,28 @@ async function init() {
     if (e.code === 'KeyR') cycleWeather();
   });
 
-  // Walking into the light at the end of the cave: the screen goes white, and as it clears you're
-  // coming out of the same mouth, facing out, and day has turned to night (or night to day)
-  const white = document.getElementById('whiteout');
-  let whiteHold = 0;
-  let whiteShown = -1;
-  const caveLight = (dt) => {
+  // The cave's far end is its mouth turned round (cave.js): its opening shows the view out of the
+  // mouth at the other time of day, and walking out of it you're moved to the matching spot by the
+  // mouth (where nothing on screen differs) and the time of day swaps. No transition.
+  const toMouth = cave.portal.toMouth;
+  const crossCave = () => {
     const st = cave.state;
-    let w = st.inside ? Math.pow(THREE.MathUtils.smoothstep(st.s, cave.length - 18, cave.length - 2.6), 1.6) : 0;
-    if (st.inside && st.s > cave.length - 2.6) {
-      const e = cave.exitPoint();
-      player.yaw += Math.PI; // the way you were looking, turned round: you walk on out
-      player.pos.set(e.x, cave.floorAt(e.s), e.z);
+    if (st.inside && st.s > cave.turnAt) {
+      player.pos.applyMatrix4(toMouth);
+      player.yaw += Math.PI;
       player.vel.x = -player.vel.x;
       player.vel.z = -player.vel.z;
       player.syncCamera();
       weather.setNight(!weather.night);
-      veg.updateNear(camera, true);
-      veg.updateVisibility(camera.position);
-      whiteHold = 1.6;
-      w = 1;
+      cave.track(player);
     }
-    if (whiteHold > 0) {
-      whiteHold -= dt;
-      w = Math.max(w, Math.min(1, whiteHold / 1.35)); // (clears as you reach the mouth)
-    }
-    weather.cave.depth = st.inside ? THREE.MathUtils.smoothstep(st.s, 0, 14) : 0;
+    weather.cave.depth = st.inside ? THREE.MathUtils.smoothstep(Math.min(st.s, cave.length - st.s), 0, 14) : 0;
     weather.cave.torch = cave.nearestTorch();
-    weather.cave.white = w;
-    if (Math.abs(w - whiteShown) > 0.002) {
-      whiteShown = w;
-      white.style.opacity = w.toFixed(3);
-    }
+    // the day/night grade and the light shafts (post.js) only outside: in the cave, and on the view
+    // out of its far end, there are none, so nothing changes when you're moved; they come in as you
+    // step out of the mouth
+    post.outdoors = st.inside ? 1 - THREE.MathUtils.smoothstep(st.s, -2, 1.5) : 1;
+    weather.outdoors = post.outdoors;
   };
 
   // Deep in the tunnel nothing outside can be seen unless you look back at the mouth: then the
@@ -395,21 +385,130 @@ async function init() {
   const frustum = new THREE.Frustum();
   const viewProj = new THREE.Matrix4();
   let hiddenOutdoors = null;
-  const cullOutdoors = () => {
-    let hide = false;
-    if (cave.state.inside && cave.state.s > 6) {
-      camera.updateMatrixWorld();
-      viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-      frustum.setFromProjectionMatrix(viewProj);
-      hide = !frustum.intersectsSphere(mouth);
-    }
+  const outdoorsHidden = () => {
+    if (!(cave.state.inside && cave.state.s > 6)) return false;
+    camera.updateMatrixWorld();
+    viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(viewProj);
+    return !frustum.intersectsSphere(mouth);
+  };
+  const cullOutdoors = (hide) => {
     if (hide) {
       hiddenOutdoors ??= scene.children.filter((o) => o !== cave.group && !o.isLight && o.visible);
       for (const o of hiddenOutdoors) o.visible = false; // (every frame: the weather re-shows its particles)
-    } else if (!hide && hiddenOutdoors) {
+    } else if (hiddenOutdoors) {
       for (const o of hiddenOutdoors) o.visible = true;
       hiddenOutdoors = null;
     }
+  };
+
+  // The view out of the far end: the scene from the spot by the mouth that matches the camera's
+  // (the turn applied to it), at the other time of day, just the part of the screen the opening
+  // covers (setViewOffset), at reduced resolution. Drawn on the opening (cave.js portal).
+  const portalCam = new THREE.PerspectiveCamera();
+  const portalRT = new THREE.WebGLRenderTarget(4, 4);
+  portalRT.isXRRenderTarget = true; // (tone mapped and sRGB-encoded like the scene target: post.js)
+  portalRT.texture.colorSpace = THREE.SRGBColorSpace;
+  portalRT.texture.internalFormat = 'RGBA8';
+  portalRT.scissorTest = true;
+  cave.portal.uniforms.tPortal.value = portalRT.texture;
+  const PORTAL_RES = lowPower ? 0.75 : 1;
+  const bufSize = new THREE.Vector2();
+  const pv = new THREE.Vector3();
+  const portalRect = { x: 0, y: 0, w: 0, h: 0 };
+  /** Where the far opening is on screen (drawing-buffer pixels, origin bottom left); false if not in view. */
+  const preparePortal = () => {
+    if (!cave.group.visible || !cave.canSeeFarEnd(camera)) return false;
+    renderer.getDrawingBufferSize(bufSize);
+    camera.updateMatrixWorld();
+    let x0 = 1;
+    let y0 = 1;
+    let x1 = -1;
+    let y1 = -1;
+    let behind = 0;
+    for (const p of cave.portal.ring) {
+      pv.copy(p).applyMatrix4(camera.matrixWorldInverse);
+      if (pv.z > -camera.near) {
+        behind++;
+        continue;
+      }
+      pv.applyMatrix4(camera.projectionMatrix);
+      x0 = Math.min(x0, pv.x);
+      x1 = Math.max(x1, pv.x);
+      y0 = Math.min(y0, pv.y);
+      y1 = Math.max(y1, pv.y);
+    }
+    if (behind === cave.portal.ring.length) return false;
+    if (behind) [x0, y0, x1, y1] = [-1, -1, 1, 1];
+    x0 = Math.max(-1, x0);
+    y0 = Math.max(-1, y0);
+    x1 = Math.min(1, x1);
+    y1 = Math.min(1, y1);
+    if (x1 <= x0 || y1 <= y0) return false;
+    const W = bufSize.x;
+    const H = bufSize.y;
+    portalRect.x = Math.max(0, Math.floor((x0 * 0.5 + 0.5) * W) - 2);
+    portalRect.y = Math.max(0, Math.floor((y0 * 0.5 + 0.5) * H) - 2);
+    portalRect.w = Math.min(W, Math.ceil((x1 * 0.5 + 0.5) * W) + 2) - portalRect.x;
+    portalRect.h = Math.min(H, Math.ceil((y1 * 0.5 + 0.5) * H) + 2) - portalRect.y;
+    portalCam.fov = camera.fov;
+    portalCam.aspect = camera.aspect;
+    portalCam.near = camera.near;
+    portalCam.far = camera.far;
+    portalCam.setViewOffset(W, H, portalRect.x, H - portalRect.y - portalRect.h, portalRect.w, portalRect.h);
+    portalCam.matrixWorld.multiplyMatrices(toMouth, camera.matrixWorld);
+    portalCam.matrixWorld.decompose(portalCam.position, portalCam.quaternion, portalCam.scale);
+    portalCam.updateMatrixWorld(true);
+    return true;
+  };
+  // the light coming in at either end, for the cave's walls (cave.js uOutA/B)
+  const sunPart = new THREE.Color();
+  const daylight = (out) => out.copy(weather.hemi.color).multiplyScalar(weather.hemi.intensity * 0.45)
+    .add(sunPart.copy(weather.sun.color).multiplyScalar(weather.sun.intensity * 0.12));
+  const lightHere = new THREE.Color();
+  const lightThere = new THREE.Color();
+  let portalAge = 1e9;
+  let portalShown = false;
+  const renderPortal = (on, t) => {
+    const pu = cave.portal.uniforms;
+    cave.setDaylight(daylight(lightHere), portalShown ? null : lightHere);
+    portalAge++;
+    if (!on) {
+      pu.uOn.value = 0;
+      portalShown = false;
+      return;
+    }
+    // a small opening (far off) is re-rendered only every few frames; it stays on the opening (uVP)
+    const small = portalRect.w * portalRect.h < 3000;
+    if (portalShown && small && portalAge < 6) return;
+    portalAge = 0;
+    portalShown = true;
+    const W = bufSize.x;
+    const H = bufSize.y;
+    const rw = Math.max(16, Math.round(W * PORTAL_RES));
+    const rh = Math.max(16, Math.round(H * PORTAL_RES));
+    if (portalRT.width !== rw || portalRT.height !== rh) portalRT.setSize(rw, rh);
+    const vw = Math.max(1, Math.round(portalRect.w * PORTAL_RES));
+    const vh = Math.max(1, Math.round(portalRect.h * PORTAL_RES));
+    portalRT.viewport.set(0, 0, vw, vh);
+    portalRT.scissor.set(0, 0, vw, vh);
+    portalCam.updateProjectionMatrix();
+    if (hiddenOutdoors) for (const o of hiddenOutdoors) o.visible = true;
+    cave.portal.cap.visible = false;
+    weather.atOtherTime(t, portalCam, () => {
+      daylight(lightThere);
+      renderer.setRenderTarget(portalRT);
+      renderer.render(scene, portalCam);
+      renderer.setRenderTarget(null);
+    });
+    cave.portal.cap.visible = true;
+    if (hiddenOutdoors) for (const o of hiddenOutdoors) o.visible = false;
+    pu.uRect.value.set(portalRect.x, portalRect.y, portalRect.w, portalRect.h);
+    pu.uUvMax.value.set(vw / rw, vh / rh);
+    pu.uVP.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    pu.uBuf.value.copy(bufSize);
+    pu.uOn.value = 1;
+    cave.setDaylight(lightHere, lightThere);
   };
 
   const clock = new THREE.Clock();
@@ -443,17 +542,21 @@ async function init() {
     player.update(dt);
     cabin.update(dt, t, camera, player, scene);
     cave.track(player);
-    caveLight(dt);
+    crossCave();
     cave.update(dt, t, camera, renderer);
     weather.update(dt, t, camera);
     updateGroundDetail(camera, camera.position.z > 650); // (snow's detail slot shows sand at the coast)
 
-    veg.updateNear(camera);
-    grass?.update(camera);
+    // deep in the cave with only the far end in view, the world's detail follows the view out of it
+    const hideOutdoors = outdoorsHidden();
+    const portalOn = preparePortal();
+    const detailCam = hideOutdoors && portalOn ? portalCam : camera;
+    veg.updateNear(detailCam);
+    grass?.update(detailCam);
     ocean?.update(camera);
     visTimer -= dt;
     if (visTimer <= 0) {
-      veg.updateVisibility(camera.position);
+      veg.updateVisibility(detailCam.position);
       visTimer = 0.25;
     }
 
@@ -477,7 +580,8 @@ async function init() {
       hud.textContent = text;
     }
 
-    cullOutdoors();
+    cullOutdoors(hideOutdoors);
+    renderPortal(portalOn, t);
     post.render(scene, camera);
     pacer.submit();
     perf?.end();

@@ -331,8 +331,9 @@ export class Weather {
     this.sunCycle = true; // ?weather= or ?off=sun pin it
     this.night = false; // a clear, moonlit night (setNight)
     this.envs = null; // { day, night } environment maps (main.js)
-    // set by main.js from the cave: how far in (0 outside .. 1 deep), the nearest torch (m), the white light at the end (0..1)
-    this.cave = { depth: 0, torch: 100, white: 0 };
+    // set by main.js from the cave: how far in (0 outside .. 1 deep), the nearest torch (m)
+    this.cave = { depth: 0, torch: 100 };
+    this.outdoors = 1; // 0 in the cave (main.js): the exposure doesn't follow the weather in there
   }
 
   /** Day or night, at once (the cave swaps them while the screen is white). */
@@ -357,7 +358,48 @@ export class Weather {
     return this.override ?? 'auto';
   }
 
-  update(dt, time, camera) {
+  /** Everything update() and setNight() set (to render a view at the other time of day, then put it all back). */
+  stateRefs() {
+    const fog = this.scene.fog ?? this.fogOff;
+    const refs = [
+      [this, 'rainAmount'], [this, 'snowAmount'], [this, 'sunAmount'], [this, 'started'], [this, 'started2'],
+      [this, 'wetStarted'], [this, 'puddleStarted'], [this, 'night'],
+      [this.scene, 'environment'], [this.scene, 'environmentIntensity'], [this.renderer, 'toneMappingExposure'],
+      [fog, 'color'], [fog, 'near'], [fog, 'far'], [fog, 'mist'],
+      [this.hemi, 'color'], [this.hemi, 'groundColor'], [this.hemi, 'intensity'],
+      [this.sun, 'color'], [this.sun, 'intensity'], [this.sun, 'position'],
+    ];
+    for (const k of ['uSun', 'uWet', 'uRain', 'uPuddle', 'uWind', 'uNight', 'uKeyDir', 'uKeyColor', 'uKeyOff']) refs.push([shared[k], 'value']);
+    for (const k of ['uHorizon', 'uZenith', 'uSun', 'uNight', 'uTime']) refs.push([this.sky.uniforms[k], 'value']);
+    for (const o of [this.rain, this.snow, this.motes]) {
+      refs.push([o, 'visible']);
+      for (const k of ['uTime', 'uCam', 'uIntensity']) refs.push([o.material.uniforms[k], 'value']);
+    }
+    return refs;
+  }
+
+  capture() {
+    return this.stateRefs().map(([o, k]) => (o[k]?.clone && !o[k].isTexture ? o[k].clone() : o[k]));
+  }
+
+  restore(saved) {
+    this.stateRefs().forEach(([o, k], i) => {
+      const v = saved[i];
+      if (o[k]?.copy && v?.clone && !v.isTexture) o[k].copy(v);
+      else o[k] = v;
+    });
+  }
+
+  /** Run fn with the weather, sky and light as they'd be at the other time of day here (camera), then put them back. */
+  atOtherTime(time, camera, fn) {
+    const saved = this.capture();
+    this.setNight(!this.night);
+    this.update(0, time, camera, true);
+    fn();
+    this.restore(saved);
+  }
+
+  update(dt, time, camera, silent = false) {
     const y = camera.position.y;
     const line = snowlineAt(camera.position.x, camera.position.z);
     const snowT = smooth(y, line - 30, line + 10);
@@ -414,7 +456,7 @@ export class Weather {
     this.hemi.intensity = THREE.MathUtils.lerp(LOW.hemiIntensity, HIGH.hemiIntensity, snowT) * (1 - 0.4 * sun); // in sun, direct light dominates
     this.sun.intensity = THREE.MathUtils.lerp(LOW.sunIntensity, HIGH.sunIntensity, snowT) * (1 - sun) + 2.3 * sun;
     // a touch less exposure in sun, or sunlit foliage tone-maps to beige
-    this.renderer.toneMappingExposure = this.baseExposure * (1 - 0.08 * sun);
+    this.renderer.toneMappingExposure = this.baseExposure * (1 - 0.08 * sun * this.outdoors);
     this.sun.color.setRGB(1, 0.96, 0.88).lerp(SUN_COLOR, sun);
     // overcast light comes from high up (soft, no low glints on wet ground);
     // the sun swings down to its low WNW position as a break arrives
@@ -451,7 +493,7 @@ export class Weather {
 
     shared.uWind.value = 0.7 + this.snowAmount * 0.8 + Math.sin(time * 0.13) * 0.3;
 
-    if (this.audio) this.audio.update(this.rainAmount, this.snowAmount, time, sun, this.night, this.cave, snowT);
+    if (this.audio && !silent) this.audio.update(this.rainAmount, this.snowAmount, time, sun, this.night, this.cave, snowT);
   }
 
   enableAudio() {
@@ -565,14 +607,6 @@ class Ambience {
     this.noiseBuf = buf;
     this.nextDrip = 1;
     this.nextCrackle = 0;
-    // the light at the end: an airy swell that rises as the screen whitens
-    this.swellBp = ctx.createBiquadFilter();
-    this.swellBp.type = 'bandpass';
-    this.swellBp.Q.value = 0.8;
-    this.swellGain = ctx.createGain();
-    this.swellGain.gain.value = 0;
-    src(1).connect(this.swellBp).connect(this.swellGain).connect(this.caveVerb);
-    this.swellGain.connect(ctx.destination);
     // crickets on a clear night: a few, each chirping steadily at its own pitch and pace
     this.crickets = [0, 1, 2].map(() => ({
       f: 3600 + Math.random() * 1400, period: 0.42 + Math.random() * 0.3, next: 0,
@@ -642,15 +676,13 @@ class Ambience {
     if (this.ctx.state !== 'running') this.ctx.resume();
   }
 
-  update(rain, snow, t, sun = 0, night = false, cave = { depth: 0, torch: 100, white: 0 }, high = 0) {
+  update(rain, snow, t, sun = 0, night = false, cave = { depth: 0, torch: 100 }, high = 0) {
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const deep = cave.depth;
     this.outdoor.gain.setTargetAtTime(1 - 0.92 * deep, now, 0.4);
     this.roomGain.gain.setTargetAtTime(0.05 * deep, now, 0.5);
     this.crackleBus.gain.setTargetAtTime(Math.min(1, 1.6 / Math.max(cave.torch, 0.5)) * (deep > 0 || cave.torch < 8 ? 1 : 0), now, 0.2);
-    this.swellGain.gain.setTargetAtTime(cave.white * cave.white * 0.5, now, 0.1);
-    this.swellBp.frequency.setTargetAtTime(300 + 2500 * cave.white, now, 0.2);
     if (ctx.state === 'running') {
       if (deep > 0.3 && now >= this.nextDrip) {
         this.drip(now + 0.02);

@@ -649,7 +649,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `x=62.79&z=-925.8&yaw=-0.09&pitch=-0.35`, back with the smoke `x=52.2&z=-926.5&yaw=-1.43&pitch=0.1`. Dev: `?door=open`.
 - **The cave** (`src/cave.js`, `CAVE` in config.js; the user: a cave in a hillock near the start, natural rock with
   stones arranged at its entrance as if by a person, realistic torches with flickering shadows giving just enough light,
-  a prick of light ~10 s of running in; walking into it brings you out of the same entrance, at night; again: day).
+  a prick of light ~10 s of running in; walking into it brings you out of the same entrance, at night; again: day.
+  Then: no white flash, "no special transition when leaving, you just walk out into the forest with day and night
+  swapped". An earlier version whitened the screen over the last 18 m and moved you under the white).
   Mouth at (15, 590), 50 m north of spawn (straight ahead), tunnel due **north**, 130 m. The mouth sits exactly on a
   row of the 5 m terrain grid: the ground is level up to it and `hillock()` (terrain.js, in `baseHeight`, 0 for u ≤ 0,
   ~5 m at the next row, 8 m by u ≈ 9, a narrow nose widening behind, falling off by u = 70) steps up from the next row.
@@ -679,21 +681,41 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   curve in above ~1.1 m and the first placement buried the flames in rock, which looked like "the near torches don't
   light"), `TORCH_I` 6.5 / (d² + 1.2), windowed at 18 m, flicker from sines, the light jittering a few cm. The 4
   torches nearest the camera get **cube-map shadows** (`WebGLCubeRenderTarget` 256/192 px, RGBA-packed distance, 5-tap
-  PCF; casters = tube, crag, stones, rubble), re-rendered each frame for the nearest 2 (phones 1), every 3rd/4th for the
+  PCF; casters = tube and rubble (not the crag: the far end has none), re-rendered each frame for the nearest 2 (phones 1), every 3rd/4th for the
   rest, so shadows sway with the flames. Soot above each torch, damp seeps that gloss in the torchlight, moss outside.
   Flames: camera-facing quads (fbm teardrop, additive) + a soft glow + sparks. The outside torches also light the
   ground and plants round the mouth through `patchSunlight` (`shared.uCaveTorch`; the cave's own materials pass
   `{ torches: false }`). No fog over the part of a view inside the cave (`caveFogK`: the fog hid the light at the end).
-  **The light at the end**: the last ring filled, white ×4, plus a halo and a white light on the last ~30 m of walls.
+  **The far end is the mouth again** (a portal, seamless): the last `S` = 20 m are the first 20 m turned round
+  (`END_TO_MOUTH`: rotation by π about the vertical through the tunnel's middle, and `D` = −7.65 m lower): rings
+  (`tunnelPoint`: the mouth's ring at L − s with `mirrorJ` vertex order, blended in over the 6 m before), the floor
+  (`floorAt` rises again over the last 20 m), the wiggle (antisymmetric about L/2), width/height (of min(s, L − s)),
+  rubble and stalactites (copies), torches (copies with the same flicker phase and mirrored jitter). Torches run 3 (pair),
+  15, 27 … 99, then the far end's 115, 127 (pair). Beyond `SEAM` (L − 23) the shaders texture the rock at the
+  counterpart's position (`cvP`, normals turned), so the photo and noise match too. Inside, walls get no scene light:
+  a model of the light coming in at each end (`uOutA` this time of day at the mouth, `uOutB` the other at the far end:
+  hemisphere × 0.45 + key light × 0.12, falling off over 2.5 m), so the far end lit "at the other time" equals the
+  mouth after the swap. The far opening (the last ring, filled) shows a render of the scene from `END_TO_MOUTH` ×
+  the camera, under `weather.atOtherTime()` (capture/restore of everything `update()`/`setNight()` set), cropped to the
+  opening's screen rect (`setViewOffset`), into an sRGB target (scale 1 desktop / 0.75 phone); it's projected by world
+  position with the view-proj it was rendered for (`uVP`), so a small (far) one is refreshed only every 6th frame.
+  From outside it's rendered only when the line to the far end passes through the mouth (`canSeeFarEnd`). At s >
+  L − 8 (`turnAt`) the player is moved by the same turn (yaw + π, velocity reversed) and `setNight(!night)`; deep in
+  the tunnel with only the far end in view, the near trees, grass and chunk visibility follow the far view's camera.
+  Things that made the jump visible and had to go: the night grade, light shafts and glare in post.js and the
+  sun-break exposure dip (`post.outdoors` / `weather.outdoors`: 0 in the cave, back as you step out of the mouth); the
+  crag's inner rings pushed into the tunnel (rock the far end lacked; now only rings ≥ 2 m out recede into the hill);
+  the crag in the shadow casters. `tools`-style check: render just before the turn and just after, mean pixel
+  difference ≈ 2–3/255, overall brightness within the torches' frame-to-frame flicker. When you go in by day the far
+  end shows the night forest (dim), by night the day (bright): no "prick of white light" any more.
   **Walking** (`cave.state.inside`, set crossing the doorway on foot): floor via `setWalkModifier`, kept between the
-  walls (`collide`), trees overhead don't collide; outside, an ellipse over the crag and the stones are colliders.
-  `caveLight` (main.js) whitens the screen (`#whiteout`) over the last 18 m; at L − 2.6 the player is moved 12 m in
-  from the mouth, turned round (yaw + π, velocity reversed), `weather.setNight(!night)`, and the white clears over
-  ~1.6 s as you reach the mouth. Deep inside with the mouth out of the frustum, everything outside is hidden
-  (`cullOutdoors`). HUD "Cave". Audio (weather.js `Ambience`): outdoors fades inside, a reverb (synthesised impulse),
-  room tone, drips, torch crackle near torches, an airy swell into the light; crickets at night (no birds).
-  Budget (container `still`): phone spawn 189 → 197 draws, +0.06M tris; desktop 309 → 317; inside 19 draws / 0.05M
-  (+ the shadow passes). Views: `x=15&z=599&yaw=0` (add `&night`), inside `?cave=40` (start 40 m in, facing in;
+  walls (`collide`), trees overhead don't collide; outside, an ellipse over the crag is a collider. Deep inside with
+  the mouth out of the frustum, everything outside is hidden (`cullOutdoors`; shown again for the far view). HUD
+  "Cave". Audio (weather.js `Ambience`): outdoors fades inside (depth from the nearer end), a reverb (synthesised
+  impulse), room tone, drips, torch crackle near torches; crickets at night (no birds).
+  Budget (container `still`, all passes counted): phone spawn 188 → 196 draws; in the cave 30 m in 37 draws / 0.17M
+  (the scene 18, + shadows + the far view, amortised), 115 m in 26 / 0.13M; at the mouth looking in 201 / 1.17M
+  (vs 186 / 1.08M for the scene); desktop 317 at spawn, 73 / 0.4M 30 m in. Views: `x=15&z=599&yaw=0` (add `&night`), inside `?cave=40` (start 40 m in, facing in;
   `&yaw=3.14` looks back). Not yet benched on a phone (`?perf` in the cave: the shadow cubes are the new cost).
   Scripted renders: `window.__pacnw.tick()` runs one frame of the loop (also after `?still` stopped it).
 - **Night** (via the cave, or `?night`; `weather.setNight`): a clear night under a full moon low in the SSW over the sea

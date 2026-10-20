@@ -50,6 +50,7 @@ export class Post {
     this.renderer = renderer;
     this.enabled = true;
     this.effects = true; // false: just the scene and the composite (bench row '- rays/glow')
+    this.outdoors = 1; // 0 in the cave (main.js): no light shafts, glare or day/night grade there
     this.volStrength = 6.0; // light in the mist (before the saturation curve in the composite)
     this.size = new THREE.Vector2();
     const rt = (w, h) => new THREE.WebGLRenderTarget(w, h, { depthBuffer: false });
@@ -282,6 +283,7 @@ export class Post {
       uniform float uTime;
       uniform vec3 uSunColor;
       uniform float uNight;
+      uniform float uOutdoors; // 0 in the cave (its torchlight isn't graded; nor is the view out of it)
       varying vec2 vUv;
       float hash(vec2 p) {
         vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -296,16 +298,16 @@ export class Post {
           + (1.0 - exp(-texture2D(tVol, vUv).rgb * uVol)) * uSunColor * 0.7;
         s = 1.0 - (1.0 - s) * (1.0 - clamp(add, 0.0, 1.0)); // screen blend: light, never clipped
         float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
-        if (uNight > 0.5) {
+        if (uNight * uOutdoors > 0.0) {
           // night vision: colour drains out of the dim parts (the eye's rods), what's left leans
           // blue, and the darkest shadows keep a little deep blue instead of going black
           float sat = mix(0.35, 0.8, smoothstep(0.05, 0.5, l));
-          s = mix(vec3(l), s, sat) * vec3(0.9, 0.97, 1.12);
-          s += vec3(0.004, 0.007, 0.016) * (1.0 - smoothstep(0.0, 0.15, l));
+          vec3 g = mix(vec3(l), s, sat) * vec3(0.9, 0.97, 1.12) + vec3(0.004, 0.007, 0.016) * (1.0 - smoothstep(0.0, 0.15, l));
+          s = mix(s, g, uOutdoors);
           l = dot(s, vec3(0.2126, 0.7152, 0.0722));
         }
         // grade: highlights a little warmer in a sun break, shadows a touch cool (moist air)
-        s *= mix(vec3(1.0), vec3(1.03, 1.0, 0.95), smoothstep(0.5, 0.95, l) * uSun * (1.0 - uNight));
+        s *= mix(vec3(1.0), vec3(1.03, 1.0, 0.95), smoothstep(0.5, 0.95, l) * uSun * (1.0 - uNight) * uOutdoors);
         s += vec3(-0.004, 0.0, 0.010) * (1.0 - smoothstep(0.0, 0.3, l));
         // soft vignette
         vec2 v = vUv - 0.5;
@@ -316,7 +318,7 @@ export class Post {
       }`, {
       tScene: { value: null }, tRays: { value: null }, tGlow: { value: null }, tVol: { value: null }, uVol: { value: 0 },
       uRays: { value: 0 }, uSun: { value: 0 }, uTime: { value: 0 },
-      uSunColor: { value: SUN_COLOR.clone() }, uNight: shared.uNight,
+      uSunColor: { value: SUN_COLOR.clone() }, uNight: shared.uNight, uOutdoors: { value: 1 },
     });
   }
 
@@ -358,7 +360,7 @@ export class Post {
     const facing = THREE.MathUtils.smoothstep(this.dir.dot(key), 0.1, 0.75);
     this.sunScreen.copy(key).multiplyScalar(500).add(camera.position).project(camera);
     this.sunUv.set(this.sunScreen.x * 0.5 + 0.5, this.sunScreen.y * 0.5 + 0.5);
-    const rays = forceRays ? 1 : this.effects ? shared.uSun.value * facing : 0;
+    const rays = forceRays ? 1 : this.effects ? shared.uSun.value * facing * this.outdoors : 0;
 
     const blit = (p, target) => {
       r.setRenderTarget(target);
@@ -376,7 +378,7 @@ export class Post {
       blit(this.radial, this.qA);
     }
     // light in the mist: only in a sun break, from any direction (strongest toward the sun)
-    const sun = forceRays ? 1 : this.effects && this.volume.uniforms.uGround.value ? shared.uSun.value : 0;
+    const sun = forceRays ? 1 : this.effects && this.volume.uniforms.uGround.value ? shared.uSun.value * this.outdoors : 0;
     if (sun > 0.01) {
       const v = this.volume.uniforms;
       v.tDepth.value = this.sceneRT.depthTexture;
@@ -437,6 +439,7 @@ export class Post {
     u.uVol.value = sun > 0.01 ? this.volStrength : 0;
     u.uRays.value = rays > 0.01 ? rays : 0;
     u.uSun.value = shared.uSun.value;
+    u.uOutdoors.value = this.outdoors;
     // moonbeams are silver, and dimmer than sunbeams
     if (shared.uNight.value > 0.5) u.uSunColor.value.copy(MOON_COLOR).multiplyScalar(0.55);
     else u.uSunColor.value.copy(SUN_COLOR);
