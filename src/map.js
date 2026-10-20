@@ -413,6 +413,31 @@ function titleCartouche(ctx, text) {
   ctx.restore();
 }
 
+/** The shadow beside each crease of the folds (multiplied in). */
+function foldShadows(ctx) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  for (let k = 1; k < COLS; k++) {
+    const x = (k * SIZE) / COLS;
+    const g = ctx.createLinearGradient(x - 10, 0, x + 10, 0);
+    g.addColorStop(0, 'rgba(120, 90, 60, 0)');
+    g.addColorStop(0.5, 'rgba(120, 90, 60, 0.22)');
+    g.addColorStop(1, 'rgba(120, 90, 60, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 10, 0, 20, SIZE);
+  }
+  for (let k = 1; k < ROWS; k++) {
+    const y = (k * SIZE) / ROWS;
+    const g = ctx.createLinearGradient(0, y - 10, 0, y + 10);
+    g.addColorStop(0, 'rgba(120, 90, 60, 0)');
+    g.addColorStop(0.5, 'rgba(120, 90, 60, 0.22)');
+    g.addColorStop(1, 'rgba(120, 90, 60, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, y - 10, SIZE, 20);
+  }
+  ctx.restore();
+}
+
 /** A worn, lighter line along each crease (screened over the sheet). */
 function creaseLines(ctx) {
   ctx.save();
@@ -433,8 +458,8 @@ function creaseLines(ctx) {
 }
 
 /**
- * Age the paper: fibres, foxing, darker edges, the shadows of its folds. All multiplied in, so on
- * a white canvas this makes the layer that's multiplied over the sheet.
+ * Age the paper: fibres, foxing, darker edges. All multiplied in, so on a white canvas this makes
+ * the layer that's multiplied over the sheet.
  */
 function agePaper(ctx) {
   ctx.save();
@@ -457,25 +482,6 @@ function agePaper(ctx) {
   v.addColorStop(1, 'rgba(150, 110, 60, 0.35)');
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, SIZE, SIZE);
-  // the folds: a shadow beside each crease
-  for (let k = 1; k < COLS; k++) {
-    const x = (k * SIZE) / COLS;
-    const g = ctx.createLinearGradient(x - 10, 0, x + 10, 0);
-    g.addColorStop(0, 'rgba(120, 90, 60, 0)');
-    g.addColorStop(0.5, 'rgba(120, 90, 60, 0.22)');
-    g.addColorStop(1, 'rgba(120, 90, 60, 0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(x - 10, 0, 20, SIZE);
-  }
-  for (let k = 1; k < ROWS; k++) {
-    const y = (k * SIZE) / ROWS;
-    const g = ctx.createLinearGradient(0, y - 10, 0, y + 10);
-    g.addColorStop(0, 'rgba(120, 90, 60, 0)');
-    g.addColorStop(0.5, 'rgba(120, 90, 60, 0.22)');
-    g.addColorStop(1, 'rgba(120, 90, 60, 0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, y - 10, SIZE, 20);
-  }
   ctx.restore();
   // paper fibre noise over everything (a tile, multiplied in)
   const T = 256;
@@ -566,14 +572,13 @@ export class MapSheet {
     ag.fillStyle = '#fff';
     ag.fillRect(0, 0, SIZE, SIZE);
     agePaper(ag);
-    const crease = blank();
-    creaseLines(crease.getContext('2d'));
     // While it's drawn, the layers are shown stacked (the compositor multiplies the aged paper in),
-    // so each frame only adds what's new; compose() makes the finished sheet in `canvas`.
+    // so each frame only adds what's new; compose() makes the finished sheet in `canvas`. No fold
+    // creases until it's folded away (the panels: compose(true)).
     this.view = document.createElement('div');
     this.view.className = 'map-live';
     this.view.style.background = PAPER_CSS;
-    for (const [c, blend] of [[this.wash], [this.ink], [this.over], [this.age, 'multiply'], [crease, 'screen']]) {
+    for (const [c, blend] of [[this.wash], [this.ink], [this.over], [this.age, 'multiply']]) {
       if (blend) c.style.mixBlendMode = blend;
       this.view.appendChild(c);
     }
@@ -675,6 +680,17 @@ export class MapSheet {
     dab.width = dab.height = 2 * R;
     const D = dab.getContext('2d');
     const W = this.wash.getContext('2d');
+    const brush = document.createElement('canvas'); // (a soft round dab, opaque out to 62%)
+    brush.width = brush.height = 2 * R;
+    {
+      const B = brush.getContext('2d');
+      const g = B.createRadialGradient(R, R, 0, R, R, R);
+      g.addColorStop(0, '#000');
+      g.addColorStop(0.62, '#000');
+      g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      B.fillStyle = g;
+      B.fillRect(0, 0, 2 * R, 2 * R);
+    }
     this.part(0.2, 0.62, 1.6, has('land'), (a, b) => {
       const { land, dabs } = this.data;
       const i1 = b >= 1 ? dabs.length : Math.floor(b * dabs.length);
@@ -684,12 +700,7 @@ export class MapSheet {
         D.globalCompositeOperation = 'source-over';
         D.drawImage(land, x - r, y - r, 2 * r, 2 * r, 0, 0, 2 * r, 2 * r);
         D.globalCompositeOperation = 'destination-in';
-        const g = D.createRadialGradient(r, r, 0, r, r, r);
-        g.addColorStop(0, '#000');
-        g.addColorStop(0.62, '#000');
-        g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        D.fillStyle = g;
-        D.fillRect(0, 0, 2 * r, 2 * r);
+        D.drawImage(brush, 0, 0, 2 * r, 2 * r);
         W.drawImage(dab, 0, 0, 2 * r, 2 * r, x - r, y - r, 2 * r, 2 * r);
       }
       if (b >= 1) W.drawImage(land, 0, 0); // (closing any last soft seams)
@@ -778,7 +789,7 @@ export class MapSheet {
         glyphs(c, { [kind]: this.data.marks[kind] });
       });
     }
-    this.compose(); // (the blank sheet, for the panels to unfold)
+    this.compose(false); // (the blank sheet, for the panels to unfold)
   }
 
   /** A part: drawn over the progress window p0..p1 when ready(); draw(a, b) adds the stretch a..b,
@@ -841,7 +852,9 @@ export class MapSheet {
 
   /** Advance to loading progress p (0..1); returns whether everything's drawn. */
   step(now, p) {
-    const dt = this.last ? Math.min(0.25, (now - this.last) / 1000) : 0;
+    // (at most a frame's worth each time: after a stall in the loading the drawing carries on
+    // smoothly instead of jumping ahead)
+    const dt = this.last ? Math.min(1 / 30, (now - this.last) / 1000) : 0;
     this.last = now;
     let overlays = false;
     for (const t of this.parts) {
@@ -868,8 +881,8 @@ export class MapSheet {
     }
   }
 
-  /** The finished sheet, into `canvas`. */
-  compose() {
+  /** The sheet, into `canvas` (with its fold creases, or not). */
+  compose(creases) {
     const c = this.ctx;
     c.globalCompositeOperation = 'source-over';
     c.globalAlpha = 1;
@@ -881,6 +894,8 @@ export class MapSheet {
     c.globalCompositeOperation = 'multiply';
     c.drawImage(this.age, 0, 0);
     c.globalCompositeOperation = 'source-over';
+    if (!creases) return;
+    foldShadows(c);
     creaseLines(c);
   }
 
@@ -889,7 +904,7 @@ export class MapSheet {
     const frame = (now) => {
       const done = this.step(now, progress());
       if (done && this.finishing) {
-        this.compose();
+        this.compose(true);
         this.resolve?.();
         return;
       }
@@ -1020,12 +1035,9 @@ export class PaperMap {
     });
   }
 
-  /** The sheet is finished: back into the panels (to fold away), the arrow where you stand. */
+  /** The sheet is finished: the arrow where you stand. */
   async loaded(x, z, yaw) {
     await this.shown;
-    this.refresh();
-    this.view?.remove();
-    this.sheet.classList.remove('live');
     this.update(x, z, yaw);
     this.marker.classList.add('show');
   }
@@ -1048,7 +1060,7 @@ export class PaperMap {
   animate(forward) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const S = Math.min(vw * 0.94, vh * 0.9, 900);
+    const S = Math.min(vw * 0.94, vh * 0.86, 900);
     this.sheet.style.width = `${S}px`;
     this.sheet.style.height = `${S}px`;
     this.sheet.style.marginLeft = `${-S / 2}px`;
@@ -1120,6 +1132,13 @@ export class PaperMap {
   async close() {
     if (!this.isOpen || this.busy) return;
     this.busy = true;
+    if (this.view) {
+      // the end of the loading screen: into the panels (with the fold creases) to fold away
+      this.refresh();
+      this.view.remove();
+      this.view = null;
+      this.sheet.classList.remove('live');
+    }
     this.backdrop.classList.remove('loading'); // (the world shows through as it folds away)
     this.marker.classList.remove('show');
     for (const a of this.last ?? []) a.cancel();

@@ -3,7 +3,8 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #2f3a36; /* (the loading backdrop's, until the world is drawn) */
+  /* (the loading screen's backdrop, from the first paint until the world is drawn) */
+  background: radial-gradient(ellipse at center, rgba(12, 16, 14, 0.28), rgba(12, 16, 14, 0.62)), #2f3a36 url('./loading/start-landscape.jpg') center / cover;
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: #eef2ee;
 }
@@ -92,8 +93,8 @@ canvas {
 #overlay.loading #status {
   position: absolute;
   left: 50%;
-  top: calc(50% + min(47vw, 45vh, 450px) + 2vh);
-  transform: translate(-50%, -50%);
+  top: calc(50% + min(47vw, 43vh, 450px) + 26px);
+  transform: translateX(-50%);
   padding: 0;
   background: none;
   font: 22px 'IM Fell English SC', Georgia, serif;
@@ -227,6 +228,9 @@ body.touch #perf {
   display: none;
   z-index: 5;
   background: radial-gradient(ellipse at center, rgba(12, 16, 14, 0.28), rgba(12, 16, 14, 0.62));
+  /* the world behind the map, blurred (the loading screen's picture of it is blurred the same) */
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   perspective: 1700px;
   touch-action: none;
   overflow: hidden;
@@ -234,17 +238,28 @@ body.touch #perf {
 #map-view.open {
   display: block;
 }
-/* while loading, a dark backdrop (the world isn't drawn yet); it fades as the map folds away */
+/* while loading, a blurred picture of the start view (src/loading/: the world isn't drawn yet); it
+   fades into the real one as the map folds away */
 #map-view::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, #4d5a55, #1e2623 75%);
+  background: radial-gradient(ellipse at center, rgba(12, 16, 14, 0.28), rgba(12, 16, 14, 0.62)), #2f3a36 url('./loading/start-landscape.jpg') center / cover;
   opacity: 0;
   transition: opacity 0.7s;
 }
 #map-view.loading::before {
   opacity: 1;
+}
+#map-view.loading {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (orientation: portrait) {
+  body,
+  #map-view::before {
+    background-image: radial-gradient(ellipse at center, rgba(12, 16, 14, 0.28), rgba(12, 16, 14, 0.62)), url('./loading/start-portrait.jpg');
+  }
 }
 /* while it's being drawn, the sheet's canvas itself lies over the panels */
 .map-live {

@@ -393,7 +393,16 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   land early, `prepareVegetation` (the clear-zone filter + `bakeCanopy`) runs before the impostor bake, and the
   cabin/cave/coast plans right after the trail (load share `map` 0.04, between trail and impostors). When done:
   the arrow at the spawn and "Tap to start" (IM Fell, `#overlay.loading`) under the sheet; starting folds it into the
-  icon (`begin()` in main.js; `?autostart` too). Container load: no slower (ready 70 s vs 79–84 s for the old build the
+  icon (`begin()` in main.js; `?autostart` too). **v2 (the user):** behind the sheet a pre-blurred picture of the
+  start view (`src/loading/start-portrait.jpg` 390×844 from the phone profile, `start-landscape.jpg` 960×540 from
+  desktop, both `?weather=sun` (the game starts in a sun break), Gaussian blur 6 / 4.5 px, under the backdrop's dim
+  gradient; on `body` too, so it's there from the first paint). **Regenerate them when the spawn or its surroundings
+  change** (render `?autostart&still=6&quality=low|high&weather=sun&dpr=2` at 390×844 / 1280×720, blur, save). The
+  open map in game blurs the live world the same way (`backdrop-filter: blur(6px)` on `#map-view`, off while loading).
+  No fold creases while it's drawn or waiting (`foldShadows`/`creaseLines` only in `compose(true)`, for the panels
+  when it folds away). Smoother colouring: each part advances at most a frame's worth (1/30 s ÷ dur) per frame, so after
+  a stall in the loading it carries on instead of jumping, and a dab is drawImage + a prebuilt soft brush
+  (destination-in). The sheet is 86% of the height on landscape screens (was 90%) to leave room for the prompt. Container load: no slower (ready 70 s vs 79–84 s for the old build the
   same day). Test trick: compose `.map-live`'s canvases with their blend modes into one canvas and `toDataURL` it during
   the load; for the ready/fold screens stop the loop (`__pacnw.renderer.setAnimationLoop(null)`) and `page.screenshot()`. Test trick: a page with just `PaperMap` on a saved
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).
