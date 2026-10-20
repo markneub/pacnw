@@ -13,7 +13,8 @@ import { shared, addGroundCover } from './materials.js';
  * The scatter keeps clear of them (plan.blocked); they're colliders.
  */
 
-const WRECK = { x: 172, s: -50, yaw: 0.62, heel: 0.52, pitch: -0.09, sink: 0.2 };
+// (~85 m out, ~2.5 m deep all round: the deep-water rule keeps you off it and from getting behind it)
+const WRECK = { x: 172, s: -85, yaw: 0.62, heel: 0.52, pitch: -0.09, sink: 1.9 };
 
 /** Where everything goes (call once the terrain is ready). */
 export function planCoast() {

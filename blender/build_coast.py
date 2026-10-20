@@ -124,6 +124,14 @@ def build_wreck():
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="DESELECT")
     bpy.ops.object.mode_set(mode="OBJECT")
+    # the hull's half-width along its length (above the waterline), to find what hangs outside it
+    half = {}
+    for v in hull.data.vertices:
+        if v.co.z > 2.5:
+            k = round(v.co.x * 2)
+            half[k] = max(half.get(k, 0.0), abs(v.co.y))
+    def outside(x, y):
+        return abs(y) > half.get(round(x * 2), 0.0) + 0.25
     bm = bmesh.new()
     bm.from_mesh(rig.data)
     bm.verts.ensure_lookup_table()
@@ -158,7 +166,14 @@ def build_wreck():
         size = math.dist((min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs)))
         rope = size > 0.8 and area / size < 0.4
         fitting = size < 1.2 and min(zs) > 4.5
-        if (len(comp) < 12 and min(zs) > 4.0) or high_spar or rope or fitting or (min(zs) > 7.0 and len(comp) < 70):
+        # above the deck, only the mast stumps (upright poles) and the bowsprit stay: everything else hung off the
+        # rigging and floated once it was gone (a ratline net, blocks, a lateen yard: the user)
+        mast = max(zs) - min(zs) > 3 and max(xs) - min(xs) < 1.2 and max(ys) - min(ys) < 1.2
+        bowsprit = min(xs) > 9 and max(xs) - min(xs) > 1.5 and max(ys) - min(ys) < 1.0
+        aloft = max(zs) > 5.0 and not (mast or bowsprit)
+        # anything (a yard-arm end, a block) out beyond the hull's side: nothing holds it up now
+        aloft = aloft or (outside((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2) or max(xs) > 11.4) and min(zs) > 3.0
+        if (len(comp) < 12 and min(zs) > 4.0) or high_spar or rope or fitting or aloft or (min(zs) > 7.0 and len(comp) < 70):
             drop.extend(comp)
     bmesh.ops.delete(bm, geom=drop, context="VERTS")
     bm.to_mesh(rig.data)
@@ -178,6 +193,28 @@ def build_wreck():
                 gone.append(f)
                 break
     bmesh.ops.delete(bm, geom=gone, context="FACES")
+    # and the scraps the holes cut loose (small islands of faces)
+    bm.faces.index_update()
+    seen = set()
+    scraps = []
+    for f0 in bm.faces:
+        if f0.index in seen:
+            continue
+        isl = []
+        stack = [f0]
+        seen.add(f0.index)
+        while stack:
+            f = stack.pop()
+            isl.append(f)
+            for e in f.edges:
+                for g in e.link_faces:
+                    if g.index not in seen:
+                        seen.add(g.index)
+                        stack.append(g)
+        if len(isl) < 24:
+            scraps.extend(isl)
+    bmesh.ops.delete(bm, geom=scraps, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     bm.to_mesh(hull.data)
     bm.free()
     decimate(hull, 16000)

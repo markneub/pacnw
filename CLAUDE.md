@@ -337,15 +337,18 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (masts snapped at 7–10 m) and the bowsprit cut, loose rope bits dropped, and every yard and spar left up a mast removed
   (pieces above 6 m spanning > 1.2 m, any level crosswise spar above 4 m: the spritsail yard hung in the air under the cut
   bowsprit, the user), small fittings above 7 m dropped, and **all the rope** (the user: "wire things floating"): components long and thin
-  (surface area / bbox diagonal < 0.4 m) plus the blocks/deadeyes up the masts (< 1.2 m across, above 4.5 m), three ragged holes (faces inside jagged
+  (surface area / bbox diagonal < 0.4 m) plus the blocks/deadeyes up the masts (< 1.2 m across, above 4.5 m),
+  and (still floating bits, the user) above 5 m only the three mast stumps (upright poles) stay, nothing outside the
+  hull's half-width at its x (or past its bow, x > 11.4) above 3 m, and hull scraps the holes cut loose (< 24 faces), three ragged holes (faces inside jagged
   ellipsoids deleted) on the side that ends up on top, decimated to 23k tris; `barrel`/`crate` (Poly Haven flotsam);
   modelled `lighthouse` (stone plinth 1 m into the ground, tapered white tower 14 m, iron gallery with corbels and rail,
   glazed lantern room (`LhGlass`), a ribbed Fresnel lens (`LhLamp`), red cap + ventilator + rod, door +Y, windows; 2.2k
   tris) and `keeper_house` (white gabled walls, red roof slabs, brick chimney, trim, step). Textures: no metal/roughness
   maps, 512 px (hull 1024) JPEG q80. JS `src/coast.js`: `planCoast()` puts the lighthouse on the highest, flattest spot
   toward the headland's seaward end (score = height − 3 × relief + the ground 12 m seaward), the house 20 m landward,
-  the wreck at x 172, 50 m out (heel 0.52 rad about its length, bow down 0.09, yaw 0.62: the stove-in deck faces the
-  beach), 6 barrels/crates on the drift line (one in the swash). `blocked()` keeps the scatter off them, and the
+  the wreck at x 172, **85 m out** (~2.5 m deep all round, so the deep-water rule keeps you off it and from walking round
+  behind it: the user; seated 1.9 m above the sea floor; heel 0.52 rad about its length, bow down 0.09, yaw 0.62: the
+  stove-in deck faces the beach), 6 barrels/crates on the drift line (one in the swash). `blocked()` keeps the scatter off them, and the
   headland top is a windswept meadow: only shore pines/saplings (30% of them), none within 30 m of the light (a tall
   fir on the cliff hid the tower from the beach; `exclude(x, z, margin, treeName)` now gets the placement name).
   Wood (hull, flotsam): `addGroundCover` (bleached, sand at the base) + greyed, smooth dark weed patches below a wavy tide
