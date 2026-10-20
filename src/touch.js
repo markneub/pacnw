@@ -103,7 +103,13 @@ export class TouchControls {
     if (e.pointerId === this.steerId) {
       e.preventDefault();
       if (this.mode === 'pending') {
-        if (Math.hypot(e.clientX - this.originX, e.clientY - this.originY) > HOLD_SLOP) this.startWalk(e);
+        if (Math.hypot(e.clientX - this.originX, e.clientY - this.originY) > HOLD_SLOP) {
+          // seated on a bench a drag only looks round (a tap gets you up)
+          if (this.player.seat) {
+            clearTimeout(this.holdTimer);
+            this.startLook();
+          } else this.startWalk(e);
+        }
       } else if (this.mode === 'walk') {
         this.walk(e);
       } else if (this.mode === 'look') {

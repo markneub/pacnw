@@ -1345,6 +1345,7 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
   const viewProj = new THREE.Matrix4();
   const lastPos = new THREE.Vector3(Infinity, 0, 0);
   const lastDir = new THREE.Vector3();
+  let lastFov = 0;
   const dir = new THREE.Vector3();
 
   function wideFrustum(camera) {
@@ -1367,7 +1368,8 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
   function updateNear(camera, force = false) {
     camera.updateMatrixWorld();
     camera.getWorldDirection(dir);
-    const moved = force || camera.position.distanceTo(lastPos) > STEP || dir.dot(lastDir) < Math.cos(TURN);
+    const moved = force || camera.position.distanceTo(lastPos) > STEP || dir.dot(lastDir) < Math.cos(TURN)
+      || Math.abs(camera.fov - lastFov) > 4; // (the view widens on a bench: player.js)
     let built = false;
     for (const pool of nearPools) {
       const refilled = pool.update(camera.position, poolRadius(pool.radiusKey), force);
@@ -1381,6 +1383,7 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
     if (moved) {
       lastPos.copy(camera.position);
       lastDir.copy(dir);
+      lastFov = camera.fov;
     }
   }
 

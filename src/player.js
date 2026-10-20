@@ -5,6 +5,8 @@ import { walkAt as groundAt, openWaterLevel } from './terrain.js'; // (footbridg
 // Water deeper than this stops you (the lake, ponds and the sea): you can wade out until it's
 // about chest deep, so the eyes (and the camera) always stay above the surf.
 const MAX_WADE = 1.1;
+// Seated (sitDown) the view widens: tan(fov / 2) × this (70° → ~85° vertical).
+const SEAT_FOV = 1.3;
 const waterDepth = (x, z) => openWaterLevel(x, z) - groundAt(x, z);
 
 /**
@@ -50,6 +52,7 @@ export class Player {
     this.sitEye = PLAYER.eyeHeight;
     this.seatFrom = new THREE.Vector3();
     this.seatYaw0 = 0;
+    this.baseFov = camera.fov; // (seated, the view widens: SEAT_FOV)
 
     camera.rotation.order = 'YXZ';
 
@@ -147,8 +150,7 @@ export class Player {
     const fwd = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     if (this.seat || this.sitK > 0) {
-      // walking gets you up (once you're down: not halfway onto the seat)
-      if (this.seat && this.sitK >= 1 && (fwd || strafe || this.stick.length() > 0.12)) this.standUp();
+      // (seated you only look round: walking keys do nothing, a tap gets you up)
       this.updateSeat(dt);
       return;
     }
@@ -259,6 +261,12 @@ export class Player {
     this.onGround = true;
     this.bobAmp *= Math.exp(-dt * 8);
     this.slopePitch = this.pitch; // (back on your feet, the view eases from here)
+    // a wider view sitting: the bench is for taking it in
+    const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(this.baseFov) / 2) * (1 + (SEAT_FOV - 1) * e)));
+    if (Math.abs(fov - this.camera.fov) > 1e-3) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
     this.syncCamera();
   }
 

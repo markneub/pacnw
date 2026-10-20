@@ -417,8 +417,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
 - **Sitting on the bench** (`src/seat.js`, the user: "tap to sit on the bench"): within 2.2 m of a bench and looking at
   it (cos > 0.6) the prompt says "Sit"; tap / E / click → `player.sitDown(seat)`: `sitK` eases 0 → 1 over 0.8 s, the
   feet move to the seat's middle (+8 cm forward), eye height 1.7 → 1.28 m (`eye()`), the yaw turns to the bench's facing
-  (the short way), then free look. Walking input (keys or the touch throttle > 0.12) or another tap stands you up
-  (`standUp`) to 1.4 m in front (outside its 0.9 m collider). No collisions, slope pitch or gaze while seated; no prompt
+  (the short way), and the view widens (`SEAT_FOV`: tan(fov/2) × 1.3, 70° → ~85°, eased with sitK; the near pools
+  re-cull when the fov changes > 4°). Seated you only look (walking keys do nothing; on touch a drag goes straight to
+  look mode); only another tap stands you up (`standUp`) to 1.4 m in front (outside its 0.9 m collider). No collisions, slope pitch or gaze while seated; no prompt
   while seated. The one bench (the lake viewpoint) now sits on the lake's side of the trail facing `LAKE`'s centre (it
   was on the lower side facing away from the trail: north into the bank). **The prompt is shared**: `src/hint.js`
   `createHint()` → `hint(text)`; cabin.js and seat.js expose `prompt`, main.js shows `cabin.prompt ?? seats.prompt` and

@@ -8,8 +8,9 @@ const STAND_FWD = 1.4; // where you get up to: in front, clear of the collider (
 
 /**
  * Benches you can sit on (the user: "tap to sit on the bench"). Close to one and looking at it, the prompt
- * says "Sit"; tap (or E / click) and you ease down onto it, turned to face its view, and can look around.
- * Walking (or another tap) gets you up again, in front of it.
+ * says "Sit"; tap (or E / click) and you ease down onto it, turned to face its view, and the view widens
+ * (player.js SEAT_FOV). Seated you only look round (a drag on a phone looks); another tap gets you up, in
+ * front of it.
  */
 export function buildSeats(benches = []) {
   const seats = benches.map((b) => {
@@ -39,7 +40,7 @@ export function buildSeats(benches = []) {
         if (d < 0.6 || (fwd.x * dx + fwd.z * dz) / (d * Math.max(fl, 1e-4)) > 0.6) near = s;
       }
     }
-    // (none while seated: you get up by walking off, or tap)
+    // (none while seated: you know how you sat down)
     prompt = near ? 'Sit' : null;
   }
 
