@@ -410,7 +410,12 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   draws in 60 batches (was 24), the contours are computed with ticks, the clear-zone filter ticks per placement type.
   **`?perf` smoothness readout** on the start screen: per loading step, frames drawn, the longest freeze and how
   many gaps were > 100 ms (a gap counts against the step running when it began). Ask the user for a screenshot of it
-  to find what stutters on their phone; SwiftShader's freezes (seconds, software GPU) say nothing about phones. Container load: no slower (ready 70 s vs 79–84 s for the old build the
+  to find what stutters on their phone; SwiftShader's freezes (seconds, software GPU) say nothing about phones.
+  The user's phone (`?perf`): ready in **4.2 s**, with freezes of 530 (terrain), 360 (trail), 240 (map), 230 (shading)
+  ms, ~180 (impostors, warm-up): too little smooth time to colour in during the load. So (v4) only the frame, title,
+  compass and contours (load progress 0.08–0.55) draw during the load; the wash (0–1.8 s), creeks (1–2), woods
+  (1–2.6), trail (1.8–3.4) and pictures play after it (`later()` parts, timed from `finish()`), before "Tap to start"
+  and before the render loop starts, so nothing competes for those frames. Container load: no slower (ready 70 s vs 79–84 s for the old build the
   same day). Test trick: compose `.map-live`'s canvases with their blend modes into one canvas and `toDataURL` it during
   the load; for the ready/fold screens stop the loop (`__pacnw.renderer.setAnimationLoop(null)`) and `page.screenshot()`. Test trick: a page with just `PaperMap` on a saved
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).

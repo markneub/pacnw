@@ -541,16 +541,16 @@ function rectAt(x, y, w, h, s) {
 }
 
 /**
- * The map, drawn while the game loads as if inked by hand: the neat line and the title first,
- * then the coast and the contours rising from the sea to the peaks, a colour wash spreading out
+ * The map, drawn as the game loads as if inked by hand: the neat line and the title first,
+ * then the coast and the contours rising from the sea to the peaks; then a colour wash spreading out
  * from the trailhead, the creeks running down, the woods, and last the red trail from the
  * trailhead to the cabin, the little pictures appearing as it goes.
  *
- * Each part has a window of the loading progress (0..1, the loading bar's position) and is drawn
- * bit by bit as the progress passes through it, once its data exists (the contours need the
- * terrain, the wash and the woods the canopy, ...): setTerrain, setTrail, setLand. A part whose
- * data comes late, or that the progress has run past, catches up over at least `dur` s, so nothing
- * appears all at once. Layers: the paper; the wash (soft dabs of the finished land raster); the line
+ * The frame, title and contours have windows of the loading progress (0..1) and are drawn bit by
+ * bit as it passes through them, once their data exists (setTerrain, setTrail, setLand); one the
+ * progress has run past catches up over at least `dur` s. The colour, woods, creeks, trail and
+ * pictures play after the loading (finish()), on a fixed ~3.5 s timeline, when nothing else
+ * competes for the frames. Layers: the paper; the wash (soft dabs of the finished land raster); the line
  * work (drawn incrementally into its own canvas); the title, compass, scale bar and pictures
  * (redrawn with their fade each time); the aged paper multiplied over it all. Once finish() has
  * resolved, `canvas` is the finished sheet.
@@ -645,7 +645,7 @@ export class MapSheet {
     });
 
     // the coast and the sea's water lines, then the contours, level by level up the mountains
-    this.part(0.08, 0.3, 1.4, has('levels'), (a, b) => {
+    this.part(0.08, 0.55, 1.4, has('levels'), (a, b) => {
       const { levels, total } = this.data;
       const k0 = Math.floor(a * total);
       const k1 = Math.floor(b * total);
@@ -692,7 +692,7 @@ export class MapSheet {
       B.fillStyle = g;
       B.fillRect(0, 0, 2 * R, 2 * R);
     }
-    this.part(0.2, 0.62, 1.6, has('land'), (a, b) => {
+    this.later(0, 1.8, has('land'), (a, b) => {
       const { land, dabs } = this.data;
       const i1 = b >= 1 ? dabs.length : Math.floor(b * dabs.length);
       for (let i = Math.floor(a * dabs.length); i < i1; i++) {
@@ -708,7 +708,7 @@ export class MapSheet {
     });
 
     // the creeks, run down from their sources, thicker downstream
-    this.part(0.42, 0.6, 0.9, has('creeks'), (a, b) => {
+    this.later(1.0, 2.0, has('creeks'), (a, b) => {
       I.save();
       I.beginPath();
       I.rect(MARGIN, MARGIN, INNER, INNER);
@@ -737,7 +737,7 @@ export class MapSheet {
     });
 
     // the woods, symbol by symbol, after the wash has reached them
-    this.part(0.5, 0.8, 1.2, has('trees'), (a, b) => {
+    this.later(1.0, 2.6, has('trees'), (a, b) => {
       const { trees } = this.data;
       I.save();
       I.lineWidth = 0.7;
@@ -747,7 +747,7 @@ export class MapSheet {
     });
 
     // the trail, dashed in from the trailhead to the cabin
-    this.part(0.7, 0.93, 1.4, has('trail'), (a, b) => {
+    this.later(1.8, 3.4, has('trail'), (a, b) => {
       const { trail, trailLen } = this.data;
       const at = (s) => {
         let lo = 0;
@@ -784,8 +784,8 @@ export class MapSheet {
     });
     // the pictures: the cave by the trailhead, the wreck and the lighthouse along the coast, the
     // cabin at the trail's end
-    for (const [kind, p0] of [['cave', 0.72], ['wreck', 0.79], ['lighthouse', 0.83], ['cabin', 0.92]]) {
-      this.part(p0, p0 + 0.03, 0.4, () => !!this.data.marks?.[kind], null, (c, f) => {
+    for (const [kind, t0] of [['cave', 1.9], ['wreck', 2.3], ['lighthouse', 2.5], ['cabin', 3.2]]) {
+      this.later(t0, t0 + 0.3, () => !!this.data.marks?.[kind], null, (c, f) => {
         c.globalAlpha = f;
         glyphs(c, { [kind]: this.data.marks[kind] });
       });
@@ -797,6 +797,13 @@ export class MapSheet {
    *  overlay(ctx, f) draws it whole at f each time the sheet is composed. */
   part(p0, p1, dur, ready, draw, overlay = null) {
     this.parts.push({ p0, p1, dur, ready, draw, overlay, done: 0 });
+  }
+
+  /** A part drawn after the loading, from t0 to t1 s into finish(): the colour, the woods, the
+   *  trail. (On a phone the whole load takes ~4 s with freezes of up to ~0.5 s in it, which made
+   *  the colouring jerky; once it's done nothing else runs, so these play at the full frame rate.) */
+  later(t0, t1, ready, draw, overlay = null) {
+    this.parts.push({ p0: t0, p1: t1, later: true, ready, draw, overlay, done: 0 });
   }
 
   /** The terrain is ready: the contours and creeks (tick(f) as it goes). */
@@ -857,12 +864,20 @@ export class MapSheet {
     // smoothly instead of jumping ahead)
     const dt = this.last ? Math.min(1 / 30, (now - this.last) / 1000) : 0;
     this.last = now;
+    // the after-loading timeline runs on its own clock, a frame's worth at most per frame (it
+    // slows down rather than skipping when a frame comes late)
+    if (this.finishing) this.showClock = (this.showClock ?? -dt) + dt;
     let overlays = false;
     for (const t of this.parts) {
       if (t.done >= 1 || !t.ready()) continue;
-      const target = this.finishing ? 1 : clamp01((p - t.p0) / (t.p1 - t.p0));
-      if (target <= t.done) continue;
-      const to = Math.min(target, t.done + dt / t.dur);
+      let to;
+      if (t.later) {
+        if (!this.finishing) continue;
+        to = clamp01((this.showClock - t.p0) / (t.p1 - t.p0));
+      } else {
+        const target = this.finishing ? 1 : clamp01((p - t.p0) / (t.p1 - t.p0));
+        to = Math.min(target, t.done + dt / t.dur);
+      }
       if (to <= t.done) continue;
       t.draw?.(t.done, to);
       t.done = to;
@@ -914,7 +929,8 @@ export class MapSheet {
     requestAnimationFrame(frame);
   }
 
-  /** Draw whatever's left (quickly); resolves when the sheet is finished. */
+  /** Draw whatever's left: the line work quickly, then the colour, woods and trail (~3.5 s);
+   *  resolves when the sheet is finished. */
   finish() {
     this.finishing = true;
     return new Promise((r) => {

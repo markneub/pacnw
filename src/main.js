@@ -335,18 +335,19 @@ async function init() {
   cave.warmUp(renderer); // (its shadow cubes)
   await warmUp();
   step('warm-up');
-  if (params.has('perf')) {
-    const line = `${timings.join(' · ')} · longest stall ${longestStall().toFixed(0)} ms · ready ${(performance.now() / 1000).toFixed(1)} s after navigation`;
-    console.info('load:', line);
+  const line = `${timings.join(' · ')} · longest stall ${longestStall().toFixed(0)} ms · ready ${(performance.now() / 1000).toFixed(1)} s after navigation`;
+  if (loadTimes) console.info('load:', line);
+
+  // the map's last strokes (the colour, woods and trail), then the arrow where you stand and the start prompt
+  animateBar(1, [[0, 1], [1, 1]]);
+  if (smooth) smooth.step = 'colouring';
+  await sheet.finish();
+  if (loadTimes) {
     // and on the start screen, for phones (no console there): one step per line
     smooth.done = true;
     const rows = [...smooth.rows].map(([k, r]) => `${k.padEnd(10)} ${String(r.frames).padStart(4)} fr · worst ${r.worst.toFixed(0).padStart(4)} ms · ${r.long} over 100`);
     loadTimes.textContent = `build ${__BUILD_SHA__}\n${line.split(' · ').join('\n')}\nsmoothness (frames, longest freeze):\n${rows.join('\n')}`;
   }
-
-  // the map's last strokes, then the arrow where you stand and the start prompt
-  animateBar(1, [[0, 1], [1, 1]]);
-  await sheet.finish();
   await paperMap.loaded(player.pos.x, player.pos.z, player.yaw);
   status.textContent = touch ? 'Tap to start' : 'Click to start';
   overlay.classList.add('ready');
