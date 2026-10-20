@@ -13,15 +13,30 @@ import '@fontsource/dancing-script/600.css';
  */
 export const POEM = [
   [
-    'Where the cedars hold the rain',
-    'and the creek runs cold and clear,',
-    'I have walked the trail again',
-    'to the cabin waiting here.',
+    'Stopping by Woods on a Snowy Evening',
     '',
-    'Light the stove and bank the fire,',
-    'let the snow come down tonight;',
-    'every road I took went higher,',
-    'every one came back to light.',
+    'Whose woods these are I think I know.',
+    'His house is in the village though;',
+    'He will not see me stopping here',
+    'To watch his woods fill up with snow.',
+    '',
+    'My little horse must think it queer',
+    'To stop without a farmhouse near',
+    'Between the woods and frozen lake',
+    'The darkest evening of the year.',
+  ],
+  [
+    'He gives his harness bells a shake',
+    'To ask if there is some mistake.',
+    'The only other sound’s the sweep',
+    'Of easy wind and downy flake.',
+    '',
+    'The woods are lovely, dark and deep,',
+    'But I have promises to keep,',
+    'And miles to go before I sleep,',
+    'And miles to go before I sleep.',
+    '',
+    '— Robert Frost',
   ],
 ];
 

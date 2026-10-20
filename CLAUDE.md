@@ -412,7 +412,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).
 - **The note in the cabin** (`src/note.js`, the user: a paper with an ~8-line poem on the hut's desk, tap to bring it
   close and read, tap again to put it down, no hands). `POEM` holds the lines (**filler**: the user will supply the
-  poem). **Pages:** `POEM` is an array of pages (arrays of lines); tapping the held note flips to the next page (0.36 s turn
+  poem; now Robert Frost's "Stopping by Woods on a Snowy Evening" (public domain), 2 pages, in its own commit "Cabin
+  note: Stopping by Woods on a Snowy Evening"; it replaced the user's anniversary note there, rewritten out of history). **Pages:** `POEM` is an array of pages (arrays of lines); tapping the held note flips to the next page (0.36 s turn
   about its vertical axis, the texture swapped edge-on), the last tap puts it down, and it's back on page 1 once it's on
   the table. One size of writing for all pages, the widest line fitted to the sheet (≤ 44 px on the 720 px canvas); a
   page number at the bottom when there's more than one. A 19 × 26 cm sheet (canvas: warm paper, edge darkening, a stain, two fold creases, fibres; Dancing Script 600
