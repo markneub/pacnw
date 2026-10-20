@@ -986,7 +986,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   rings.
 - **No HUD** (the user: drop the place/altitude line; the H key went with it).
 - Loading screen: the paper map (see Paper map), then "Tap/Click to start" under it; no instructions or flavour text.
-  A one-line controls hint toasts once on start. The long loading loops call `await loadTick(f)` (`src/loadprogress.js`):
+  No controls hint on start (the user: the controls are self-explanatory; removed on phone and desktop). The long loading loops call `await loadTick(f)` (`src/loadprogress.js`):
   `prepareTerrain()` (a row at a time), `buildTrail` (grid rows, each A* leg), `bakeImpostors` (per tree type ×
   albedo/normal, with a 1-pixel readback so the GPU work is really done), `scatter`/`buildVegetation` (rows, then each
   placement type), `setTerrain`/`setLand` (the map), and `warmUp` (`renderer.compile(object, camera, scene)` in batches
