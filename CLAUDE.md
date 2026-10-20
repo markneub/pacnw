@@ -355,7 +355,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   line ~1.1 m, barnacles as small round 3D dots (4.5 cm cells) in a band under it (11 cm blocky cells read as camouflage); the hull is DoubleSide (you see in through the holes). **At night** (`shared.uNight`, eased): the lens
   glows, two additive cone beams (140 m, open, view-angle soft, fading with distance) turn once every 12 s, and a glare
   disc at the lamp flashes as a beam sweeps past the viewer (pow(align, 60)). Colliders: the tower (circle), house and
-  hull (rotated rects). HUD: "Lighthouse" / "Shipwreck". Views: wreck `x=205&z=1012&yaw=2.41&weather=sun`, headland from
+  hull (rotated rects). **Beyond the far plane** (420 m on phones; the beach is ~500 m away: the tower was clipped and the
+  beams hung in the sky, the user) `pullIn` draws the lighthouse, house, beams and glare pulled in along the view ray to
+  0.92 × far and scaled by the same factor: the same size and place on screen. HUD: "Lighthouse" / "Shipwreck". Views: wreck `x=205&z=1012&yaw=2.41&weather=sun`, headland from
   the beach `x=430&z=1005&yaw=-1.95&pitch=0.12` (add `&night` for the beams), lighthouse `x=545&z=1080&yaw=-2.6&pitch=0.2`.
 - **Paper map** (`src/map.js`, the user: a translucent map icon, tap → "a cool, fast animation of a map unfolding",
   real paper, lay of the land, no writing but a title, where you are + which way you face, compass, scale, maybe
@@ -750,7 +752,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   first 14 m and from 0.5 m in front of the mouth (`CAVE_GLSL` `inCaveMouth` in materials.js, mirroring cave.js's
   shape; margin −0.5 m at the doorway (smaller than the tube: else sky showed at the corners) → +0.3 m by 0.8 m in,
   and only above the floor + 3 cm). Rock is double-sided (back faces count as outdoors, lit like the bank); rain/snow stop and motes
-  hide while the camera is inside (`uCaveIn`). The scatter keeps off the bank and the approach (`planCave().blocked`).
+  hide while the camera is inside (`uCaveIn`). The scatter keeps off the bank and the approach (`planCave().blocked`: trees ~26 m back, ferns ~15 m; logs are tested
+  along their length (vegetation.js `exclude`): a nurse log centred outside the zone lay across the mouth, the user).
   **Light** (no three.js lights): `caveMaterial` (standard + patch, triplanar `public/textures/cave` = Poly Haven
   dark_rock_02 walls, forest_ground_04 floor; `fetch_textures.py cave`): outdoor light fades over the first ~4 m (rock
   above the roof or in front of the mouth (`aOut`) counts as outdoors), 12 torches (a pair 4.5 m in (deeper than the arch, so its rim stays grey by day), then every 12 m

@@ -104,7 +104,7 @@ export function planCave() {
     const es = (s - 3) / (7.5 + margin);
     const ev = v / (9.5 + margin);
     if (es * es + ev * ev < 1) return true;
-    return s > -6 - margin && s < 0 && Math.abs(v) < 2.5 + margin; // the way in
+    return s > -12 - 4 * margin && s < 0 && Math.abs(v) < 3 + margin; // the way in (trees ~26 m back: a fir stood in the mouth)
   };
   return { blocked, y: Y0 };
 }

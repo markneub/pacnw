@@ -218,13 +218,14 @@ function buildBeam() {
 /** The lamp's glare: a soft camera-facing disc, brighter as a beam swings past the viewer. */
 function buildGlare() {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uI: { value: 0 } },
+    uniforms: { uI: { value: 0 }, uS: { value: 1 } },
     vertexShader: /* glsl */ `
+      uniform float uS;
       varying vec2 vUv;
       void main() {
         vUv = uv * 2.0 - 1.0;
         vec4 c = viewMatrix * modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-        c.xy += position.xy * 6.0;
+        c.xy += position.xy * 6.0 * uS;
         gl_Position = projectionMatrix * c;
       }`,
     fragmentShader: /* glsl */ `
@@ -348,7 +349,24 @@ export async function buildCoast(plan, assets) {
   const toCam = new THREE.Vector3();
   const dir = new THREE.Vector3();
   let on = 0;
+  // Past the camera's far plane (420 m on phones; the beach is ~500 m away) the lighthouse would be clipped away
+  // and its beams left hanging in the sky (the user): beyond 92% of it, the lighthouse, house, beams and glare
+  // are drawn pulled in along the view ray and scaled down by the same factor, so they look exactly the same
+  // size, in the same place (a dark shape under the beams).
+  const far = [lh, house, beam, glare].map((o) => ({ o, pos: o.position.clone(), scale: o.scale.clone() }));
+  const ctr = new THREE.Vector3(plan.lighthouse.x, plan.lighthouse.y + 8, plan.lighthouse.z);
+  function pullIn(camera) {
+    const d = camera.position.distanceTo(ctr);
+    const k = Math.min(1, (camera.far * 0.92) / Math.max(d, 1e-3));
+    for (const f of far) {
+      f.o.position.copy(f.pos).sub(camera.position).multiplyScalar(k).add(camera.position);
+      f.o.scale.copy(f.scale).multiplyScalar(k);
+    }
+    glare.material.uniforms.uS.value = k;
+  }
+
   function update(dt, t, camera) {
+    pullIn(camera);
     // lit at night (eased, so the swap in the cave doesn't pop)
     const target = shared.uNight.value > 0.5 ? 1 : 0;
     on += (target - on) * Math.min(1, dt * 3);

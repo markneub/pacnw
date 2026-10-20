@@ -1068,7 +1068,29 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
       if (name === 'signpost') continue;
       const tree = KIND(name) === 'trees';
       const margin = tree ? 3.5 : 0.8;
-      placements[name] = placements[name].filter((q) => !exclude(q.x, q.z, margin, tree && name));
+      // logs lie along their local X: test points along their length (a nurse log centred just outside
+      // the cave's clear zone lay across its mouth: the user)
+      let reach = null;
+      if (name.startsWith('log') && protos[name]) {
+        reach = [0, 0];
+        for (const { geometry } of protos[name]) {
+          geometry.computeBoundingBox();
+          reach[0] = Math.min(reach[0], geometry.boundingBox.min.x);
+          reach[1] = Math.max(reach[1], geometry.boundingBox.max.x);
+        }
+      }
+      const out = (q) => {
+        if (!reach) return exclude(q.x, q.z, margin, tree && name);
+        const k = q.scale * (q.scaleX ?? 1);
+        const c = Math.cos(q.rotY);
+        const sn = Math.sin(q.rotY);
+        for (let i = 0; i <= 6; i++) {
+          const t = (reach[0] + ((reach[1] - reach[0]) * i) / 6) * k;
+          if (exclude(q.x + c * t, q.z - sn * t, margin, false)) return true;
+        }
+        return false;
+      };
+      placements[name] = placements[name].filter((q) => !out(q));
     }
   }
   await loadTick(0.8);
