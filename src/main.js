@@ -292,6 +292,7 @@ async function init() {
 
   // the bench(es) you can sit on, and the one prompt for everything you can tap
   const seats = buildSeats(veg.placements.bench);
+  if (touch) for (const g of seats.gaze) player.addGaze({ ...g, active: () => !player.seat && player.sitK === 0 }); // (as the cabin note)
   const hint = createHint();
   const interact = () => seats.interact(player) || cabin.interact(player);
   if (touch) new TouchControls(renderer.domElement, player).onTap = interact;

@@ -23,6 +23,8 @@ export function buildSeats(benches = []) {
       yaw: Math.atan2(-fx, -fz), // (yaw 0 looks along −z)
     };
   });
+  // each bench draws the eye down to its seat as you come up to it (player.addGaze; main.js: phones only)
+  const gaze = seats.map((s) => ({ pos: new THREE.Vector3(s.x, s.seatY + 0.5, s.z), reach: 3.6 }));
   const fwd = new THREE.Vector3();
   let near = null; // the bench you could sit on now
   let prompt = null;
@@ -54,5 +56,5 @@ export function buildSeats(benches = []) {
     return true;
   }
 
-  return { update, interact, get prompt() { return prompt; } };
+  return { update, interact, gaze, get prompt() { return prompt; } };
 }
