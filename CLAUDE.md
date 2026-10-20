@@ -412,7 +412,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).
 - **The note in the cabin** (`src/note.js`, the user: a paper with an ~8-line poem on the hut's desk, tap to bring it
   close and read, tap again to put it down, no hands). `POEM` holds the lines (**filler**: the user will supply the
-  poem). A 19 × 26 cm sheet (canvas: warm paper, edge darkening, a stain, two fold creases, fibres; Dancing Script 600
+  poem). **Pages:** `POEM` is an array of pages (arrays of lines); tapping the held note flips to the next page (0.36 s turn
+  about its vertical axis, the texture swapped edge-on), the last tap puts it down, and it's back on page 1 once it's on
+  the table. One size of writing for all pages, the widest line fitted to the sheet (≤ 44 px on the 720 px canvas); a
+  page number at the bottom when there's more than one. A 19 × 26 cm sheet (canvas: warm paper, edge darkening, a stain, two fold creases, fibres; Dancing Script 600
   in dark blue-black ink, each line slightly uneven) lying on the table beside the lantern (cabin local
   (lamp.x + 0.39, 0.779, lamp.z − 0.1), turned 0.35 rad). Basic material (readable whatever the light), brightness 0.4 ×
   the fire flicker on the table, warm 0.8 held. `cabin.interact`: put it down if held, else pick it up if `canRead`

@@ -369,7 +369,7 @@ export async function buildCabin(plan, assets) {
 
   function interact(player) {
     if (note.held) {
-      note.held = false; // (put it back down)
+      if (!note.turn()) note.held = false; // (the next page, or put it back down after the last)
       return true;
     }
     if (canRead) {

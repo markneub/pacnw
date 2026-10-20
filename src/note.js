@@ -3,22 +3,26 @@ import '@fontsource/dancing-script/600.css';
 
 /**
  * A handwritten note on the cabin's table (cabin.js). Tap it (or click / E) and it lifts off the
- * table in an arc and turns to face you, held up close enough to read; tap again and it's laid
- * back down where it was. No hands: it just floats.
+ * table in an arc and turns to face you, held up close enough to read; tap again and it turns to
+ * the next page (a quick flip), and on the last page it's laid back down where it was. No hands:
+ * it just floats.
  *
- * The words are in POEM (filler for now: the user will supply the real poem), in a legible
- * script (Dancing Script), dark ink on folded, slightly worn paper.
+ * The words are in POEM, one array of lines per page ('' = a gap), in a legible script (Dancing
+ * Script), dark ink on folded, slightly worn paper. The writing is sized so the widest line on any
+ * page fits the sheet (all pages the same size): split into more pages rather than let it shrink.
  */
 export const POEM = [
-  'Where the cedars hold the rain',
-  'and the creek runs cold and clear,',
-  'I have walked the trail again',
-  'to the cabin waiting here.',
-  '',
-  'Light the stove and bank the fire,',
-  'let the snow come down tonight;',
-  'every road I took went higher,',
-  'every one came back to light.',
+  [
+    'Where the cedars hold the rain',
+    'and the creek runs cold and clear,',
+    'I have walked the trail again',
+    'to the cabin waiting here.',
+    '',
+    'Light the stove and bank the fire,',
+    'let the snow come down tonight;',
+    'every road I took went higher,',
+    'every one came back to light.',
+  ],
 ];
 
 const W = 0.19; // m: a small sheet, folded in thirds
@@ -30,8 +34,17 @@ function hash(x, y) {
   return s - Math.floor(s);
 }
 
-async function noteTexture() {
-  await document.fonts.load('600 48px "Dancing Script"').catch(() => {});
+const FONT = (size) => `600 ${size}px "Dancing Script", cursive`;
+
+/** The writing's size: the widest line on any page fits between the margins, at most 44 px. */
+function fitSize(ctx) {
+  ctx.font = FONT(100);
+  let widest = 0;
+  for (const line of POEM.flat()) widest = Math.max(widest, ctx.measureText(line).width);
+  return Math.min(44, Math.floor((100 * (PX - 70 - 46)) / Math.max(1, widest)));
+}
+
+function pageTexture(lines, page, size) {
   const w = PX;
   const h = Math.round((PX * H) / W);
   const c = document.createElement('canvas');
@@ -74,23 +87,27 @@ async function noteTexture() {
   }
   ctx.putImageData(img, 0, 0);
   // the poem: each line a touch uneven, as written by hand
-  const size = 44;
-  const lineH = 68;
-  const lines = POEM;
+  const lineH = Math.round(size * 1.55);
   const top = (h - lineH * (lines.length - 1)) / 2;
-  ctx.font = `600 ${size}px "Dancing Script", cursive`;
+  ctx.font = FONT(size);
   ctx.fillStyle = 'rgba(28, 30, 56, 0.93)';
   ctx.textBaseline = 'middle';
   lines.forEach((line, i) => {
     if (!line) return;
     ctx.save();
-    const x = 70 + (hash(i, 3) - 0.5) * 14 + (i % 5 === 1 || i % 5 === 3 ? 26 : 0);
-    const y = top + i * lineH + (hash(i, 7) - 0.5) * 5;
+    const x = 70 + (hash(i + 31 * page, 3) - 0.5) * 14;
+    const y = top + i * lineH + (hash(i + 31 * page, 7) - 0.5) * 5;
     ctx.translate(x, y);
-    ctx.rotate((hash(i, 11) - 0.5) * 0.02 - 0.006);
+    ctx.rotate((hash(i + 31 * page, 11) - 0.5) * 0.02 - 0.006);
     ctx.fillText(line, 0, 0);
     ctx.restore();
   });
+  // a page number, if there's more than one
+  if (POEM.length > 1) {
+    ctx.font = FONT(Math.round(size * 0.7));
+    ctx.textAlign = 'center';
+    ctx.fillText(`${page + 1} / ${POEM.length}`, w / 2, h - 50);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -100,8 +117,10 @@ async function noteTexture() {
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export async function buildNote(tableMatrix) {
-  const tex = await noteTexture();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, toneMapped: false });
+  await document.fonts.load('600 48px "Dancing Script"').catch(() => {});
+  const size = fitSize(document.createElement('canvas').getContext('2d'));
+  const pages = POEM.map((lines, i) => pageTexture(lines, i, size));
+  const mat = new THREE.MeshBasicMaterial({ map: pages[0], side: THREE.DoubleSide, toneMapped: false });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
   mesh.name = 'note';
   mesh.frustumCulled = false;
@@ -118,6 +137,8 @@ export async function buildNote(tableMatrix) {
   const p0 = new THREE.Vector3();
   let held = false;
   let t = 0; // 0 on the table .. 1 held
+  let page = 0;
+  let flip = 1; // 0..1 through a page turn (1 = still)
 
   /** Where it's held: facing the camera, filling most of the view (in its smaller direction). */
   function holdPose(camera) {
@@ -144,9 +165,22 @@ export async function buildNote(tableMatrix) {
       mesh.quaternion.slerpQuaternions(restQuat, heldQuat, k);
       // (a gentle sway while held)
       if (k > 0.99) mesh.rotateZ(Math.sin(performance.now() * 0.0011) * 0.006);
+      // a page turn: edge-on halfway, where the next page takes over
+      if (flip < 1) {
+        const f = Math.min(1, flip + dt / 0.36);
+        if (flip < 0.5 && f >= 0.5) mat.map = pages[page];
+        flip = f;
+        mesh.rotateY((f < 0.5 ? ease(2 * f) : ease(2 * f - 1) - 1) * Math.PI * 0.5);
+      }
     } else {
       mesh.position.copy(restPos);
       mesh.quaternion.copy(restQuat);
+      // back on the table: the first page on top again
+      if (page !== 0) {
+        page = 0;
+        flip = 1;
+        mat.map = pages[0];
+      }
     }
     // in front of everything while it's off the table (walls can't cut through it)
     mat.depthFunc = t === 0 ? THREE.LessEqualDepth : THREE.AlwaysDepth; // (and still writes depth: the window glass stays behind it)
@@ -166,6 +200,14 @@ export async function buildNote(tableMatrix) {
     },
     get moving() {
       return t > 0 && t < 1;
+    },
+    /** Turn to the next page; false on the last one (then it's put down). */
+    turn() {
+      if (page >= pages.length - 1) return false;
+      if (flip < 1) mat.map = pages[page]; // (a turn still going: finish it at once)
+      page++;
+      flip = 0;
+      return true;
     },
     restPos,
   };
