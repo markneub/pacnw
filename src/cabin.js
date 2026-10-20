@@ -460,7 +460,6 @@ export async function buildCabin(plan, assets) {
 
   // the key light's direction, in the cabin frame (found once: weather.js moves it)
   let keyLight = null;
-  let hintShownFor = 0; // (the put-down hint fades after a moment, so it doesn't sit over the words)
   const v = new THREE.Vector3();
   const inv3 = new THREE.Matrix3().setFromMatrix4(U.uCabInv.value);
 
@@ -504,12 +503,11 @@ export async function buildCabin(plan, assets) {
     const near = Math.abs(pl.x - (L.door.x0 + DOOR_W / 2)) < 1.6 && Math.abs(pl.z - D) < 2.2;
     canToggle = near && (facing > 0.45 || dd < 0.9) && !(open && inSwing(pl.x, pl.z, 0.45)) && !canRead && !note.held;
     let text = null;
-    if (note.held) text = 'Put down note';
-    else if (canRead) text = 'Read note';
+    // (none while the note is held: you've just picked it up, so you know how to put it down)
+    if (canRead) text = 'Read note';
     else if (canToggle) text = open ? 'Close door' : 'Open door';
     if (text && hintLabel.textContent !== text) hintLabel.textContent = text;
-    hint.classList.toggle('show', !!text && !(note.held && !note.moving && hintShownFor > 2.5));
-    hintShownFor = note.held ? hintShownFor + dt : 0;
+    hint.classList.toggle('show', !!text);
   }
 
   /** (dev: ?door=open, for screenshots) */
