@@ -254,6 +254,8 @@ async function init() {
     coast.collide(pos, r);
   });
 
+  player.addGaze(cabin.gaze);
+
   // Spawn in the southern valley looking north toward the mountains.
   // ?x=&z=&yaw=&pitch= override this (handy for screenshots / bookmarking).
   const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);

@@ -32,6 +32,11 @@ export class Player {
     this.levelPitch = false; // one-thumb touch steering: ease the view to follow the ground ahead
     this.slopePitch = 0; // smoothed pitch of the ground ahead (radians)
     this.spin = new THREE.Vector2(); // look glide after a released swipe (rad/s, decays)
+    // Gaze attractors: things worth looking at (the note on the cabin table...) that ease the view's tilt toward
+    // themselves when you're close and facing them (addGaze). Looking up or down yourself lets go of one until you
+    // walk away from it.
+    this.gaze = [];
+    this.pitchInput = 0; // how far the player tilted the view themselves this frame (rad)
 
     camera.rotation.order = 'YXZ';
 
@@ -49,8 +54,41 @@ export class Player {
   }
 
   look(dx, dy) {
+    this.pitchInput += Math.abs(dy);
     this.yaw -= dx;
     this.pitch = THREE.MathUtils.clamp(this.pitch - dy, -1.45, 1.45);
+  }
+
+  /**
+   * Something worth looking at: { pos (world, its point of interest), reach (m, horizontal: it starts to pull
+   * within this), cone ([cos, cos]: the facing over which the pull fades in), active?() }.
+   */
+  addGaze(target) {
+    this.gaze.push({ cone: [0.7, 0.9], active: null, ...target, released: false });
+  }
+
+  /** The strongest gaze pull now: sets this.gazeS (0..1) and this.gazePitch. */
+  attend() {
+    const fx = -Math.sin(this.yaw);
+    const fz = -Math.cos(this.yaw);
+    const eye = this.pos.y + PLAYER.eyeHeight;
+    this.gazeS = 0;
+    for (const t of this.gaze) {
+      const dx = t.pos.x - this.pos.x;
+      const dz = t.pos.z - this.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > t.reach || (t.active && !t.active())) {
+        t.released = false;
+        continue;
+      }
+      const s = THREE.MathUtils.smoothstep((fx * dx + fz * dz) / Math.max(d, 1e-3), t.cone[0], t.cone[1])
+        * (1 - THREE.MathUtils.smoothstep(d, t.reach - 0.8, t.reach));
+      if (s > 0.2 && this.pitchInput > 0.015) t.released = true; // (they're looking where they like; not mouse jitter)
+      if (t.released || s <= this.gazeS) continue;
+      this.gazeS = s;
+      this.gazePitch = Math.max(-1.1, Math.atan2(t.pos.y - eye, Math.max(d, 0.35)));
+    }
+    this.pitchInput = 0;
   }
 
   lock() {
@@ -79,6 +117,7 @@ export class Player {
     let fwdIn = fwd;
     let strafeIn = strafe;
     let throttle = 1;
+    this.attend();
     if (this.levelPitch) {
       // look along the ground ahead rather than at the horizon: up a hill you
       // see the slope you're climbing, not the dirt in front of your face
@@ -88,9 +127,13 @@ export class Player {
       const h0 = groundAt(this.pos.x, this.pos.z);
       let grade = 0;
       for (let d = 2; d <= 10; d += 2) grade += (groundAt(this.pos.x + fx * d, this.pos.z + fz * d) - h0) / d;
-      const target = THREE.MathUtils.clamp(Math.atan(grade / 5) * 0.8, -0.55, 0.55);
+      let target = THREE.MathUtils.clamp(Math.atan(grade / 5) * 0.8, -0.55, 0.55);
+      target += (this.gazePitch - target) * this.gazeS; // (something worth looking at wins)
       this.slopePitch += (target - this.slopePitch) * (1 - Math.exp(-dt * 3));
       this.pitch += (this.slopePitch - this.pitch) * (1 - Math.exp(-dt * 1.2));
+    } else if (this.gazeS > 0) {
+      this.pitch += (this.gazePitch - this.pitch) * (1 - Math.exp(-dt * 2)) * this.gazeS;
+      this.slopePitch = this.pitch;
     }
 
     const stickLen = Math.min(1, this.stick.length());

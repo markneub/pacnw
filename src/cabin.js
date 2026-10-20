@@ -338,6 +338,7 @@ export async function buildCabin(plan, assets) {
   )));
   root.add(note.mesh);
   let canRead = false;
+  let insideNow = false; // (the player, this frame)
 
   // ---- the door, the hint ----
   // a two-part prompt: the input (Tap on phones, the E key on desktop) and what it does
@@ -489,12 +490,13 @@ export async function buildCabin(plan, assets) {
     camera.getWorldDirection(fwd);
     const nd = camera.position.distanceTo(note.restPos);
     v.copy(note.restPos).sub(camera.position).normalize();
-    canRead = !note.held && nd < 1.9 && fwd.dot(v) > 0.88;
+    canRead = !note.held && nd < 2.1 && fwd.dot(v) > 0.88;
     if (note.held && nd > 2.6) note.held = false;
     note.update(dt, camera, 0.4 * (0.92 + 0.08 * f));
 
     // the hint: near the door and looking at it
     const pl = local(player.pos.x, player.pos.z);
+    insideNow = contains(player.pos.x, player.pos.z);
     camera.getWorldDirection(fwd);
     const tx = doorCentre.x - camera.position.x;
     const tz = doorCentre.z - camera.position.z;
@@ -515,7 +517,9 @@ export async function buildCabin(plan, assets) {
     open = v;
     angle = v ? DOOR_OPEN : 0;
   };
-  return { group: root, collide, update, interact, contains, plan, setOpen, note };
+  // the note draws your eye down to the table as you come up to it (player.addGaze), from inside only
+  const gaze = { pos: note.restPos, reach: 2.4, active: () => !note.held && insideNow };
+  return { group: root, collide, update, interact, contains, plan, setOpen, note, gaze };
 }
 
 /**
