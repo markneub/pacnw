@@ -421,10 +421,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   slight sway; `depthFunc` Always + renderOrder 20 while off the table (walls can't cut it; it still writes depth, or the
   window glass blended over it). Walking > 2.6 m away lays it down. Prompt "Read note"; none while
   it's held (the user: you just picked it up, you know how to put it down). **The prompt** (`#hint`, the user: two-piece,
-  minimal, familiar, a font we already use, not opaque but legible): one see-through pill (tint 0.52 + backdrop blur, a
-  faint rim), IM Fell English SC like "Tap to start", the input as an outlined chip ("Tap" pill on touch, an "E" key on
-  desktop; a click still works) + the action: "Open door", "Close door", "Read note". Style in style.css; checked on
-  forest and bright snow backgrounds. View: `x=62.03&z=-927.4&yaw=2.61&pitch=-0.7&door=open`.
+  minimal, familiar, a font we already use, not opaque but legible, then: no box round it): IM Fell English SC like
+  "Tap to start"; only the input chip has a background (see-through tint 0.5 + blur, a light outline: "Tap" pill on
+  touch, an "E" key on desktop; a click still works); the action ("Open door", "Close door", "Read note") is bare text
+  with a tight dark shadow (1 px outline + 1 px drop + 3 px haze). Style in style.css; checked on forest and pale snow. View: `x=62.03&z=-927.4&yaw=2.61&pitch=-0.7&door=open`.
 - **Ocean** (`src/ocean.js`, `?off=water`, bench row `ocean` + opt-in view `beach`): one swell train (10 s, from 0.22 rad
   west of shore-normal). `bakeCoast` (load, ~0.1 s) marches each 4 m column in from the south edge in 2 m steps
   accumulating travel time with linear dispersion (Eckart), k_z = √(k² − k_x²) (Snell), into an RGBA32F texture: R travel
