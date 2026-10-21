@@ -747,6 +747,8 @@ export function fallsBlocked(x, z, margin, tree) {
   if (!f) return false;
   const p = FALLS.pool;
   if (Math.hypot((x - p.x) / p.rl, (z - p.z) / p.ra) < 1.25 + margin / p.rl) return true;
+  // (no trees on the bowl's floor in front of the falls: the trail no longer crosses it to keep it open)
+  if (tree && f.d < 0 && f.a < 40) return true;
   const k = cliffShare(f.s);
   if (k < 0.02) return false;
   const D = alcoveDepth(f.s);

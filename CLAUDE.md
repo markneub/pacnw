@@ -939,7 +939,8 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   of the falls is gone) and round to the west ledge; behind the falls W → E; out up the east ledge; the **snowfield**
   stop moved (110, −540) → (210, −560) onto the way north (at the old spot the trail went west to it and back). Trail
   4.17 → 3.87 km, grade p95 18%, 3 footbridges. Changing the terrain moved trees and rerouted creeks a little
-  on flats far off (the priority flood's tie-breaks). Budget (container, phone `still`, 390×844): bowl
+  on flats far off (the priority flood's tie-breaks). `holecheck trail`: no holes. No trees on the bowl's floor within 40 m of the
+  face (`fallsBlocked`): with the crossing gone they grew in front of the falls. Budget (container, phone `still`, 390×844): bowl
   107 draws / 0.33M tris, behind the water 151 / 0.45M (spawn 115 / 0.45M in the same run). Not yet benched on a phone
   (`?bench=falls&views=falls`). Map: a falls pictogram. Bench: opt-in view `falls`, row `falls` ("- waterfall"). Views (sun): bowl
   `x=-24&z=-372&yaw=0&pitch=0.3`, behind the water `x=-23.5&z=-418.4&yaw=3.3&pitch=0.25`, along the passage
