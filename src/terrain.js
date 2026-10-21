@@ -182,6 +182,69 @@ export function baseHeight(x, z) {
 
 /** baseHeight without the waterfall's bowl. */
 function naturalHeight(x, z) {
+  return fallsRamp(x, z, landHeight(x, z));
+}
+
+/**
+ * Ledges up the riser either side of the waterfall's bowl (the trail's ways in and out): the bowl
+ * sits 20 m above the valley and 50 m below the snow bench, and the only walkable ways were up
+ * beside the creek and a long switchback east, so the trail ran into and out of the bowl alongside
+ * itself (the user). Each is a shelf along a polyline, rising evenly with arc length from the
+ * ground at its start to the ground (or the bowl's floor) at its end, cut into the slope above and
+ * built out below, its edges blending back into the ground over ~12 m.
+ */
+const RAMPS = [
+  // west: from the valley up onto the bowl's floor
+  { pts: [[-150, -292], [-46, -346]], toFloor: true },
+  // east: from the bowl's mouth along the riser, round the shoulder east of it and up onto the snow bench
+  { pts: [[30, -352], [200, -365], [280, -390], [305, -450]] },
+];
+/** A ramp's polyline with arc lengths, end heights and bounds (on first use). */
+function rampInfo(r) {
+  if (r.len) return r;
+  r.len = [0];
+  for (let i = 1; i < r.pts.length; i++) r.len.push(r.len[i - 1] + Math.hypot(r.pts[i][0] - r.pts[i - 1][0], r.pts[i][1] - r.pts[i - 1][1]));
+  const [ax, az] = r.pts[0];
+  const [bx, bz] = r.pts.at(-1);
+  r.ends = [landHeight(ax, az), r.toFloor ? FALLS.floor - FALLS.slope * (bz - FALLS.z) + 0.1 : landHeight(bx, bz)];
+  const xs = r.pts.map((p) => p[0]);
+  const zs = r.pts.map((p) => p[1]);
+  r.box = [Math.min(...xs) - 40, Math.min(...zs) - 40, Math.max(...xs) + 40, Math.max(...zs) + 40];
+  return r;
+}
+function fallsRamp(x, z, h) {
+  for (const ramp of RAMPS) {
+    const r = rampInfo(ramp);
+    if (x < r.box[0] || z < r.box[1] || x > r.box[2] || z > r.box[3]) continue;
+    // the nearest point on the polyline: distance across, arc length along (past the ends: beyond 0 / the length)
+    let best = Infinity;
+    let along = 0;
+    const L = r.len.at(-1);
+    for (let i = 1; i < r.pts.length; i++) {
+      const [ax, az] = r.pts[i - 1];
+      const dx = r.pts[i][0] - ax;
+      const dz = r.pts[i][1] - az;
+      const l = r.len[i] - r.len[i - 1];
+      let t = ((x - ax) * dx + (z - az) * dz) / (l * l);
+      if (i > 1) t = Math.max(0, t);
+      if (i < r.pts.length - 1) t = Math.min(1, t);
+      const q = Math.hypot(x - ax - dx * Math.min(1, Math.max(0, t)), z - az - dz * Math.min(1, Math.max(0, t)));
+      if (q < best) {
+        best = q;
+        along = r.len[i - 1] + t * l;
+      }
+    }
+    if (best > 16 || along < -24 || along > L + 24) continue;
+    const level = r.ends[0] + (r.ends[1] - r.ends[0]) * Math.min(1, Math.max(0, along / L));
+    // (a ragged edge: the shelf's width wanders; its ends blend in over ~24 m)
+    const half = 3.5 + 1.2 * nDetail(x * 0.05 + 9, z * 0.05 - 4);
+    const w = (1 - smoothstep(half, half + 12, best)) * smoothstep(-24, 0, along) * (1 - smoothstep(L, L + 24, along));
+    h += (level - h) * w;
+  }
+  return h;
+}
+
+function landHeight(x, z) {
   const hills = fbm(nBase, x * 0.0016, z * 0.0016, 5) * 32 + 22;
   const detail = nDetail(x * 0.02, z * 0.02) * 1.2;
 

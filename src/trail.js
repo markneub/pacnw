@@ -23,10 +23,13 @@ export const TRAIL_STOPS = [
   { name: 'lake', label: 'Lake viewpoint', x: 55, z: 385 },
   // (a waypoint, no sign: over the rapids' footbridge and up the creek's east bank)
   { name: 'rapids', x: 95, z: -40, hidden: true },
+  // (another: back over the creek and round to the west, up the ledge onto the bowl's floor (terrain.js
+  // RAMPS); in and out by the same side, the trail ran back alongside itself, the user)
+  { name: 'westbank', x: -165, z: -245, hidden: true },
   // behind the waterfall (fallsshape.js): the trail takes a fixed way through the alcove (passage),
-  // east to west, then climbs the bowl's west side and crosses the creek above the falls
+  // west to east, then up the east ledge onto the snow bench
   { name: 'falls', label: 'Waterfall', ...fallsPassage()[26], passage: fallsPassage().reverse() },
-  { name: 'snowfield', label: 'Snowfield', x: 110, z: -540 },
+  { name: 'snowfield', label: 'Snowfield', x: 210, z: -560 },
   { name: 'basin', label: 'High basin', x: 70, z: -920 },
 ];
 /** Numeric spatial-hash key (no string garbage in per-frame lookups). */

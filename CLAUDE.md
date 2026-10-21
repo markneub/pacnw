@@ -208,7 +208,7 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (foothills ~50 m → lower snow bench ~150 m, z −420…−680 → upper basin ~225 m, z −820…−1000, walled like a cirque → the pass
   ~280 m) up a corridor around x ≈ 60 that wanders ±120 m; ridged peaks flank it (`flank`) and close in around the basin;
   hills fade to 40% under the benches; the rim starts at 0.39 × WORLD_SIZE. Sun breaks thin the high fog more (density
-  × 0.62 − 0.22·snowT) so the peaks show. The south edge is now the coast (see The coast). Trail stops (before the beach): trailhead → lake → snowfield (110, −540) → high basin (70, −920);
+  × 0.62 − 0.22·snowT) so the peaks show. The south edge is now the coast (see The coast). Trail stops (before the beach): trailhead → lake → snowfield (now (210, −560)) → high basin (70, −920);
   2.5 km, 1.2 km in snow, grade p50 10% / p95 24%, cross-slope p95 7%. Load (container): vegetation 4.3 → ~9.9 s (twice the
   area). Changing `heightAt`/scatter moved every tree. Views: snowfield `x=90&z=-500&yaw=0.2`, basin `x=70&z=-900&yaw=0.1`,
   looking back down `x=110&z=-640&yaw=3.0` (bench `views=snow` is now the snowfield). Old coordinates north of z ≈ 0 are stale.
@@ -926,9 +926,20 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   foot and in the alcove. **Trail:** stops ... → lake → (hidden waypoint `rapids` (95, −40): the rapids' footbridge
   and up the east bank) → **Waterfall** (a fixed `passage` behind the falls, `fallsPassage`, W → E at half the
   alcove's depth: ~12 m behind the water) → snowfield. A* treats the cliff/cap as rock (`rock` cells); no footbridge
-  or bench-cut creek notch under the overhang. Hidden stops (`hidden: true`) get no sign. The trail crosses the creek
-  on a footbridge ~45 m in front of the falls, goes up the west side, behind, and switchbacks up the east slope.
-  Trail 3.95 → 4.17 km, grade p95 18%, `holecheck trail`: no holes. Budget (container, phone `still`, 390×844): bowl
+  or bench-cut creek notch under the overhang. Hidden stops (`hidden: true`) get no sign. Trail 3.95 → 4.17 km.
+  **A loop, not an out-and-back** (the user: the trail ran close alongside itself before and after the falls): the
+  bowl's floor sits ~20 m above the valley and ~50 m below the bench, and the only walkable ways up were beside the
+  creek on the east, so the trail came in along the east side, crossed in front of the falls and left by the same
+  side ~15 m from where it came in, then switchbacked (two 250 m legs 35 m apart). Now two **ledges** (terrain.js
+  `RAMPS`/`fallsRamp`, in `naturalHeight`: a shelf along a polyline rising evenly from the ground at its start to the
+  ground or the bowl's floor at its end, half-width 3.5 ± 1.2 m, edges blending back over 12 m): west from (−150,
+  −292) up onto the bowl's floor at (−46, −346) (~12%), east from the mouth (30, −352) along the riser round the
+  shoulder to (305, −450) on the bench (~14%; a straight one was 20%, which the A* grade cost zig-zags on). A hidden
+  waypoint `westbank` (−165, −245) takes the trail back over the creek at ~(28, −179) (new footbridge; the one in front
+  of the falls is gone) and round to the west ledge; behind the falls W → E; out up the east ledge; the **snowfield**
+  stop moved (110, −540) → (210, −560) onto the way north (at the old spot the trail went west to it and back). Trail
+  4.17 → 3.87 km, grade p95 18%, 3 footbridges. Changing the terrain moved trees and rerouted creeks a little
+  on flats far off (the priority flood's tie-breaks). Budget (container, phone `still`, 390×844): bowl
   107 draws / 0.33M tris, behind the water 151 / 0.45M (spawn 115 / 0.45M in the same run). Not yet benched on a phone
   (`?bench=falls&views=falls`). Map: a falls pictogram. Bench: opt-in view `falls`, row `falls` ("- waterfall"). Views (sun): bowl
   `x=-24&z=-372&yaw=0&pitch=0.3`, behind the water `x=-23.5&z=-418.4&yaw=3.3&pitch=0.25`, along the passage
