@@ -22,8 +22,8 @@ export async function loadTextureSet(renderer, set, { lowPower, flipY = true }) 
   const size = lowPower ? small : big;
   const loader = new THREE.TextureLoader();
   const aniso = Math.min(renderer.capabilities.getMaxAnisotropy(), lowPower ? 4 : 8);
-  const load = async (file, srgb) => {
-    const tex = await loader.loadAsync(base + file);
+  const load = async (dir, file, srgb) => {
+    const tex = await loader.loadAsync(dir + file);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.anisotropy = aniso;
@@ -32,9 +32,11 @@ export async function loadTextureSet(renderer, set, { lowPower, flipY = true }) 
     return tex;
   };
   return Promise.all(manifest.layers.map(async (layer) => {
+    // (a layer can borrow another set's files: `dir`, e.g. the surface set's "wood" is the cabin's)
+    const dir = layer.dir ? `${import.meta.env.BASE_URL}textures/${layer.dir}/` : base;
     const [alb, nrm] = await Promise.all([
-      load(`${layer.name}_${size}_albedo.jpg`, true),
-      load(`${layer.name}_${size}_normal.jpg`, false),
+      load(dir, `${layer.name}_${size}_albedo.jpg`, true),
+      load(dir, `${layer.name}_${size}_normal.jpg`, false),
     ]);
     return { ...layer, alb, nrm };
   }));

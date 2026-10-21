@@ -221,17 +221,20 @@ const scanMaterials = [];
 
 function convertMaterial(src, assetName, lod, cache) {
   const kind = KIND(assetName);
-  const swapXY = assetName.startsWith('log'); // lies along X: run the bark furrows along it
+  // the bench's seat: worn, weathered planed wood you can sit on, not the stumps' mossy fresh-cut `Wood` (the
+  // moss's 25 cm speckle read as flat green squares up close, the user)
+  const seat = assetName === 'bench' && src.name === 'Wood';
+  const swapXY = assetName.startsWith('log') || seat; // lies along X: run the bark furrows (the seat's grain) along it
   const scan = src.name.startsWith('ScanRock');
   const cards = src.name.endsWith('Cards');
   const pebble = assetName.startsWith('pebbles'); // near-pool ground clutter, but stone: no sway, no double-sided
-  const key = `${src.name}|${kind}|${lod}|${swapXY}`;
+  const key = `${src.name}|${kind}|${lod}|${swapXY}|${seat}`;
   if (cache.has(key)) return cache.get(key);
 
   const mat = new THREE.MeshStandardMaterial({
     name: src.name,
     // scans: plain grey until their photo arrives (applyRockTextures)
-    color: scan ? new THREE.Color(0.3, 0.3, 0.29) : src.color.clone(),
+    color: scan ? new THREE.Color(0.3, 0.3, 0.29) : seat ? new THREE.Color(0.42, 0.36, 0.29) : src.color.clone(),
     roughness: src.roughness ?? 0.9,
     metalness: 0,
     // bark is smooth so trunks read as round; scans have real smooth surfaces;
@@ -257,13 +260,13 @@ function convertMaterial(src, assetName, lod, cache) {
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns' && !pebble) addWindSway(mat, 2.5, undefined, 'fade');
   // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
-  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : /BrokenWood|RotWood/.test(src.name) ? 0.1 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0, bleach: /Bark|Wood/.test(src.name) });
+  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : seat ? 0 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : /BrokenWood|RotWood/.test(src.name) ? 0.1 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0, bleach: /Bark|Wood/.test(src.name) });
   if (cards) patchCards(mat);
   // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
   if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);
   // close-up bark / rock photos (not on far tiers: they're never close).
   // On scans the tiling lichen is only a fine grain over their own photo.
-  const layer = surfaceLayerFor(src.name);
+  const layer = seat ? 'wood' : surfaceLayerFor(src.name);
   if (layer && lod !== 'far') addSurfaceDetail(mat, layer, { swapXY, amount: scan ? 0.3 : 1 });
   if (scan) scanMaterials.push({ mat, set: `scan${src.name.slice(-1)}`, near: lod !== 'far' });
   cache.set(key, mat);

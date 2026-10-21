@@ -60,6 +60,20 @@
         0.03938
       ],
       "url": "https://polyhaven.com/a/brown_mud_02"
+    },
+    {
+      "name": "wood",
+      "dir": "cabin",
+      "asset": "rough_wood",
+      "tile": 1.2,
+      "strength": 0.9,
+      "avg": [
+        0.1483,
+        0.12415,
+        0.0976
+      ],
+      "url": "https://polyhaven.com/a/rough_wood",
+      "note": "the bench seat (vegetation.js); files shared with textures/cabin"
     }
   ]
 }
