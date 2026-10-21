@@ -12,7 +12,8 @@ export async function loadTextureSet(renderer, set, { lowPower, flipY = true }) 
   const base = `${import.meta.env.BASE_URL}textures/${set}/`;
   let manifest;
   try {
-    const res = await fetch(`${base}manifest.json`);
+    // per build: Pages lets browsers keep it 10 min, and a stale one lacks new layers (the bench seat's wood)
+    const res = await fetch(`${base}manifest.json?v=${__BUILD_SHA__}`);
     if (!res.ok) return null;
     manifest = await res.json();
   } catch {

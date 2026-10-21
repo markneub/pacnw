@@ -234,7 +234,7 @@ function convertMaterial(src, assetName, lod, cache) {
   const mat = new THREE.MeshStandardMaterial({
     name: src.name,
     // scans: plain grey until their photo arrives (applyRockTextures)
-    color: scan ? new THREE.Color(0.3, 0.3, 0.29) : seat ? new THREE.Color(0.42, 0.36, 0.29) : src.color.clone(),
+    color: scan ? new THREE.Color(0.3, 0.3, 0.29) : seat ? new THREE.Color(0.38, 0.32, 0.26) : src.color.clone(),
     roughness: src.roughness ?? 0.9,
     metalness: 0,
     // bark is smooth so trunks read as round; scans have real smooth surfaces;
@@ -267,7 +267,7 @@ function convertMaterial(src, assetName, lod, cache) {
   // close-up bark / rock photos (not on far tiers: they're never close).
   // On scans the tiling lichen is only a fine grain over their own photo.
   const layer = seat ? 'wood' : surfaceLayerFor(src.name);
-  if (layer && lod !== 'far') addSurfaceDetail(mat, layer, { swapXY, amount: scan ? 0.3 : 1 });
+  if (layer && lod !== 'far') addSurfaceDetail(mat, layer, { swapXY, amount: scan ? 0.3 : seat ? 1.5 : 1 }); // (the seat's grain stronger: weathered, it shows)
   if (scan) scanMaterials.push({ mat, set: `scan${src.name.slice(-1)}`, near: lod !== 'far' });
   cache.set(key, mat);
   return mat;

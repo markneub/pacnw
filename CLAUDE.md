@@ -426,8 +426,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `createHint()` → `hint(text)`; cabin.js and seat.js expose `prompt`, main.js shows `cabin.prompt ?? seats.prompt` and
   routes taps/E/clicks to `seats.interact(player) || cabin.interact(player)`. **The seat's top** (the user: "bad texture": the stumps'
   `Wood` under full moss, whose 25 cm `speck` cells read as flat green squares up close): in `convertMaterial` the bench's
-  `Wood` is its own material (`seat`): weathered (0.42, 0.36, 0.29), no moss, and the cabin's `rough_wood` photo as a
-  surface-detail layer `wood` with `swapXY` (grain along the seat). The surface manifest's `wood` layer borrows the
+  `Wood` is its own material (`seat`): weathered (0.38, 0.32, 0.26), no moss, and the cabin's `rough_wood` photo as a
+  surface-detail layer `wood` with `swapXY` (grain along the seat), amount 1.5. Texture manifests are fetched with
+  `?v=<build sha>` (Pages caches them 10 min: the user's phone got the new seat colour with no grain). The surface manifest's `wood` layer borrows the
   cabin's files (`"dir": "cabin"`, read by textures.js); `fetch_textures.py surface` would drop that entry. View: `x=58.2&z=381.7&yaw=1.56`.
 - **The note in the cabin** (`src/note.js`, the user: a paper with an ~8-line poem on the hut's desk, tap to bring it
   close and read, tap again to put it down, no hands). `POEM` holds the lines (**filler**: the user will supply the
