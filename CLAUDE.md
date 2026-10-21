@@ -917,7 +917,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   GPU puffs (5 s) from the plunge, faded up close. Foam on the pool round the landing. Roar: weather.js `Ambience`
   (rumble < 320 Hz + roar band 1.1 kHz by distance to the curtain, into the cave reverb when under the overhang).
   **Walking:** a walk modifier puts you on the cliff top when you're up there (`state.up`: > 3 m over the floor) or
-  past the alcove's back wall; colliders keep you out of the rock below and back from the edge above; the fence
+  past the alcove's back wall; a collider keeps you out of the rock below where the face is over 2.5 m (nothing
+  up top: you can step off; one that kept you back from the edge was an invisible wall across the arms' slopes, the
+  user). Gotcha: `fallsLocal` returns one shared object: copy d/s/φ before calling anything else (the collider read
+  the face point's d after `fallsTopAt` and pushed ~1 m near the arms). Test: walk.mjs-style sweeps in node. The fence
   (posts every 2.4 m on the bowl's side of the passage, 1.75 m off its line) is a segment collider. The scatter keeps
   off the pool, the rock and the cap (`fallsBlocked`); `addFallsGreenery` (hash) crowds ferns/salal at the cliffs'
   foot and in the alcove. **Trail:** stops ... → lake → (hidden waypoint `rapids` (95, −40): the rapids' footbridge
