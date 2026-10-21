@@ -42,6 +42,10 @@ export const shared = {
 
   // the two torches outside the cave's mouth (xyz, intensity): they light the ground and plants round it
   uCaveTorch: { value: [new THREE.Vector4(), new THREE.Vector4()] },
+  // under the waterfall's overhang (falls.js): RG half float over uFallsRect (min x, min z, size x, size z):
+  // how much of the sky the rock hides there, and the ceiling's height (lit normally above it)
+  uFallsShade: { value: null },
+  uFallsRect: { value: new THREE.Vector4(0, 0, 0, 0) },
 };
 
 /**
@@ -626,10 +630,26 @@ export function patchSunlight(shader, { torches = true } = {}) {
       }`)
     .replace('#include <lights_fragment_begin>', `
       float sunVis = 1.0;
+      float fallsOcc = 0.0;
       #ifdef USE_FOG
         sunVis = sunVisibility(vFogWorld);
+        // under the waterfall's overhang (falls.js): the rock hides the sky and the sun
+        vec2 fsUv = (vFogWorld.xz - uFallsRect.xy) / uFallsRect.zw;
+        if (all(greaterThan(fsUv, vec2(0.0))) && all(lessThan(fsUv, vec2(1.0)))) {
+          vec2 fs = texture2D(uFallsShade, fsUv).rg;
+          fallsOcc = fs.r * (1.0 - smoothstep(fs.g + 0.6, fs.g + 1.6, vFogWorld.y));
+          sunVis *= 1.0 - fallsOcc;
+        }
       #endif
-      ${SUNLIGHT_CHUNK}`);
+      ${SUNLIGHT_CHUNK}`)
+    .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+      reflectedLight.indirectDiffuse *= 1.0 - 0.7 * fallsOcc;
+      reflectedLight.indirectSpecular *= 1.0 - 0.85 * fallsOcc;`);
+  shader.uniforms.uFallsShade = shared.uFallsShade;
+  shader.uniforms.uFallsRect = shared.uFallsRect;
+  shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
+      uniform sampler2D uFallsShade;
+      uniform vec4 uFallsRect;`);
 }
 patchSunlight.enabled = true;
 export const sunKey = () => (patchSunlight.enabled && shared.uCanopyMap.value ? 'sv1' : 'sv0');

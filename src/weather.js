@@ -18,6 +18,8 @@ function shelter(mat) {
   mat.uniforms.uShelter = shared.uShelter;
   mat.uniforms.uShelterPitch = shared.uShelterPitch;
   mat.uniforms.uCaveIn = shared.uCaveIn; // (and none in the cave)
+  mat.uniforms.uFallsShade = shared.uFallsShade;
+  mat.uniforms.uFallsRect = shared.uFallsRect;
 }
 
 function createRain(count = 14000) {
@@ -64,8 +66,16 @@ function createRain(count = 14000) {
       uniform vec4 uShelter;
       uniform float uShelterPitch;
       uniform float uCaveIn;
+      uniform sampler2D uFallsShade;
+      uniform vec4 uFallsRect;
       bool sheltered(vec3 p) {
         vec3 l = (uShelterInv * vec4(p, 1.0)).xyz;
+        // (and under the waterfall's overhang: falls.js's shade map, below its ceiling)
+        vec2 fsUv = (p.xz - uFallsRect.xy) / uFallsRect.zw;
+        if (all(greaterThan(fsUv, vec2(0.0))) && all(lessThan(fsUv, vec2(1.0)))) {
+          vec2 fs = texture2D(uFallsShade, fsUv).rg;
+          if (fs.r > 0.31 && p.y < fs.g + 0.5) return true;
+        }
         return abs(l.x) < uShelter.x && l.z > uShelter.y && l.z < uShelter.z && l.y > -2.0 && l.y < uShelter.w - uShelterPitch * abs(l.x);
       }
       void main() {
@@ -143,8 +153,16 @@ function createSnow(count = 14000) {
       uniform vec4 uShelter;
       uniform float uShelterPitch;
       uniform float uCaveIn;
+      uniform sampler2D uFallsShade;
+      uniform vec4 uFallsRect;
       bool sheltered(vec3 p) {
         vec3 l = (uShelterInv * vec4(p, 1.0)).xyz;
+        // (and under the waterfall's overhang: falls.js's shade map, below its ceiling)
+        vec2 fsUv = (p.xz - uFallsRect.xy) / uFallsRect.zw;
+        if (all(greaterThan(fsUv, vec2(0.0))) && all(lessThan(fsUv, vec2(1.0)))) {
+          vec2 fs = texture2D(uFallsShade, fsUv).rg;
+          if (fs.r > 0.31 && p.y < fs.g + 0.5) return true;
+        }
         return abs(l.x) < uShelter.x && l.z > uShelter.y && l.z < uShelter.z && l.y > -2.0 && l.y < uShelter.w - uShelterPitch * abs(l.x);
       }
       void main() {
@@ -333,6 +351,7 @@ export class Weather {
     this.envs = null; // { day, night } environment maps (main.js)
     // set by main.js from the cave: how far in (0 outside .. 1 deep), the nearest torch (m)
     this.cave = { depth: 0, torch: 100 };
+    this.falls = { dist: 1e9, under: 0 }; // (falls.js: m from the curtain; 0..1 under the overhang)
     this.outdoors = 1; // 0 in the cave (main.js): the exposure doesn't follow the weather in there
   }
 
@@ -487,6 +506,7 @@ export class Weather {
 
     shared.uWind.value = 0.7 + this.snowAmount * 0.8 + Math.sin(time * 0.13) * 0.3;
 
+    if (this.audio) this.audio.falls = this.falls;
     if (this.audio && !silent) this.audio.update(this.rainAmount, this.snowAmount, time, sun, this.night, this.cave, snowT);
   }
 
@@ -599,6 +619,24 @@ class Ambience {
     this.crackleBus.gain.value = 0;
     this.crackleBus.connect(this.caveBus);
     this.noiseBuf = buf;
+    // the waterfall (falls.js): a deep rumble and a broad roar, louder as you come near, echoing in its alcove
+    const fallsLp = ctx.createBiquadFilter();
+    fallsLp.type = 'lowpass';
+    fallsLp.frequency.value = 320;
+    this.fallsLow = ctx.createGain();
+    this.fallsLow.gain.value = 0;
+    src(0.55).connect(fallsLp).connect(this.fallsLow).connect(ctx.destination);
+    const fallsBp = ctx.createBiquadFilter();
+    fallsBp.type = 'bandpass';
+    fallsBp.frequency.value = 1100;
+    fallsBp.Q.value = 0.5;
+    this.fallsMid = ctx.createGain();
+    this.fallsMid.gain.value = 0;
+    src(0.85).connect(fallsBp).connect(this.fallsMid).connect(ctx.destination);
+    this.fallsVerb = ctx.createGain();
+    this.fallsVerb.gain.value = 0;
+    this.fallsMid.connect(this.fallsVerb).connect(this.caveVerb);
+    this.falls = { dist: 1e9, under: 0 };
     this.nextDrip = 1;
     this.nextCrackle = 0;
     // crickets on a clear night: a few, each chirping steadily at its own pitch and pace
@@ -697,6 +735,12 @@ class Ambience {
           }
         }
       }
+    }
+    {
+      const g = 1 / (1 + Math.pow(this.falls.dist / 22, 1.4));
+      this.fallsLow.gain.setTargetAtTime(0.9 * g, now, 0.3);
+      this.fallsMid.gain.setTargetAtTime(0.45 * g * (1 - 0.3 * this.falls.under), now, 0.3);
+      this.fallsVerb.gain.setTargetAtTime(0.6 * this.falls.under, now, 0.4);
     }
     const gust = Math.max(0, Math.sin(t * 0.37) * Math.sin(t * 0.11 + 1.3)); // calm about half the time
     this.rainGain.gain.setTargetAtTime(rain * 0.4, now, 0.3);

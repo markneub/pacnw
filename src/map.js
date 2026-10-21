@@ -240,6 +240,25 @@ function glyphs(ctx, marks) {
     ctx.fillStyle = INK;
     ctx.fill();
   }
+  if (marks.falls) {
+    // a cliff's edge with the water falling from it, and a splash
+    const [x, y] = toPx(marks.falls.x, marks.falls.z);
+    ctx.fillStyle = 'rgba(120, 104, 86, 0.9)';
+    ctx.fillRect(x - 10, y - 9, 20, 3);
+    ctx.strokeRect(x - 10, y - 9, 20, 3);
+    ctx.strokeStyle = 'rgba(52, 92, 128, 0.95)';
+    for (const dx of [-1.6, 0, 1.6]) {
+      ctx.beginPath();
+      ctx.moveTo(x + dx, y - 6);
+      ctx.lineTo(x + dx * 1.4, y + 3);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.ellipse(x, y + 4.5, 5, 1.8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = INK;
+    ctx.fillStyle = INK;
+  }
   if (marks.cabin) {
     const [x, y] = toPx(marks.cabin.x, marks.cabin.z);
     ctx.beginPath();
@@ -771,7 +790,7 @@ export class MapSheet {
     }
     // the pictures, as the trail passes nearest them
     const marks = this.data.marks ?? {};
-    for (const kind of ['cave', 'cabin', 'lighthouse', 'wreck']) {
+    for (const kind of ['cave', 'falls', 'cabin', 'lighthouse', 'wreck']) {
       const m = marks[kind];
       if (!m) continue;
       const [mx, my] = toPx(m.x, m.z);

@@ -64,6 +64,8 @@ URL params for bookmarking a spot: `?x=-60&z=-250&yaw=0.4&pitch=0&weather=snow`.
 | --- | --- |
 | `blender/build_assets.py` | Procedurally models trees, ferns, logs and furniture in Blender → `public/models/forest.glb` |
 | `blender/build_cabin.py` | Models the mountain cabin (shell, door, furnishings) → `public/models/cabin.glb` + `src/cabin_layout.json` |
+| `src/fallsshape.js` | The waterfall's shape: the bowl's U-shaped cliff line, the alcove under the overhang, the terrain cut, the plunge pool, the trail's way behind the falls (pure: the world bake uses it) |
+| `src/falls.js` | The waterfall: its basalt cliff and alcove, the falling water, spray and pool foam, the fence, shade under the overhang, walking and colliders |
 | `src/cave.js` | The cave north of the trailhead: its tunnel and the bank it opens out of, torches (flames, flickering light, cube-map shadows), a far end that opens onto its own mouth at the other time of day; walking in and out |
 | `blender/build_coast.py` | The shipwreck (from Poly Haven's CC0 Dutch ship), flotsam, the lighthouse and its keeper's house → `public/models/coast.glb` |
 | `src/coast.js` | Places the lighthouse, house and wreck on the coast; the lighthouse's beams at night |

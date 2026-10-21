@@ -47,7 +47,7 @@ export function signTexts(trail) {
     rows: stops.filter((_, j) => j !== k)
       .map((s) => ({ s, m: along(points, stop.index, s.index) }))
       .sort((p, q) => p.m - q.m).slice(0, MAX_ROWS).sort((p, q) => p.s.index - q.s.index)
-      .map(({ s, m }) => [label(s), miles(m), s.index > stop.index ? -1 : 1]),
+      .map(({ s, m }) => [label(s), miles(m), (s.index > stop.index ? -1 : 1) * (stop.name === 'falls' ? -1 : 1)]), // (that one stands on the far side: vegetation.js)
   }));
 }
 

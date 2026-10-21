@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
 import { loadTick } from './loadprogress.js';
+import { fallsPassage, fallsLocal, underCap } from './fallsshape.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
   streams, setWalkModifier, streamBed, marshAt, waterLevelAt, sandAt,
@@ -20,6 +21,11 @@ export const TRAIL_STOPS = [
   { name: 'dunes', label: 'Dune trail', x: 300, z: 948 },
   { name: 'marsh', label: 'Marsh boardwalk', x: 160, z: 480 },
   { name: 'lake', label: 'Lake viewpoint', x: 55, z: 385 },
+  // (a waypoint, no sign: over the rapids' footbridge and up the creek's east bank)
+  { name: 'rapids', x: 95, z: -40, hidden: true },
+  // behind the waterfall (fallsshape.js): the trail takes a fixed way through the alcove (passage),
+  // east to west, then climbs the bowl's west side and crosses the creek above the falls
+  { name: 'falls', label: 'Waterfall', ...fallsPassage()[26], passage: fallsPassage().reverse() },
   { name: 'snowfield', label: 'Snowfield', x: 110, z: -540 },
   { name: 'basin', label: 'High basin', x: 70, z: -920 },
 ];
@@ -69,7 +75,7 @@ for (let dz = -2; dz <= 2; dz++) {
  */
 const TURN_COST = 40;
 const WET_COST = 60; // m per 6 m cell in or beside a creek
-function route(heights, side, wet, marsh, level, sand, a, b) {
+function route(heights, side, wet, marsh, level, sand, rock, a, b) {
   const D = MOVES.length;
   const idx = (ix, iz) => iz * NX + ix;
   const toCell = (p) => [Math.round((p.x - MIN_X) / CELL), Math.round((p.z - MIN_Z) / CELL)];
@@ -121,6 +127,7 @@ function route(heights, side, wet, marsh, level, sand, a, b) {
       if (closed[ns]) continue;
       const h = heights[n];
       if (h < level[n] + 1.2 && !marsh[n]) continue; // (the marsh is crossed on a boardwalk)
+      if (rock[n] && n !== goal) continue; // (the waterfall's cliffs: under them the terrain is the bowl's floor)
       const grade = (h - heights[cur]) / dist;
       // steep grades cost a lot more than distance; side-slope makes the
       // tread hard to cut, so avoid traversing cliffs too
@@ -292,7 +299,7 @@ export async function buildTrail({ route: baked = null } = {}) {
 
   const distanceTo = (x, z) => nearest(x, z).d;
 
-  const stops = TRAIL_STOPS.map((stop) => {
+  const stops = TRAIL_STOPS.filter((s) => !s.hidden).map((stop) => {
     let index = 0;
     let bestD = Infinity;
     points.forEach((p, i) => {
@@ -377,13 +384,13 @@ export async function buildTrail({ route: baked = null } = {}) {
   const crossings = [];
   for (let i = 0, wet = false; i < points.length; i++) {
     const c = streams().nearest(points[i].x, points[i].y);
-    const now = !!c.seg && c.d < c.half + 0.5;
+    const now = !!c.seg && c.d < c.half + 0.5 && !underCap(points[i].x, points[i].y); // (behind the falls the creek is overhead)
     if (now && !wet) {
       // the middle of the wet run
       let j = i;
       while (j + 1 < points.length) {
         const cj = streams().nearest(points[j + 1].x, points[j + 1].y);
-        if (!cj.seg || cj.d >= cj.half + 0.5) break;
+        if (!cj.seg || cj.d >= cj.half + 0.5 || underCap(points[j + 1].x, points[j + 1].y)) break;
         j++;
       }
       const m = Math.round((i + j) / 2);
@@ -468,7 +475,7 @@ export async function buildTrail({ route: baked = null } = {}) {
     // spans it) instead of the tread damming it like a culvert
     const c = streams().nearest(x, z);
     let out = h;
-    if (c.seg && h > g) {
+    if (c.seg && h > g && !underCap(x, z)) {
       const cut = 1 - THREE.MathUtils.smoothstep(c.d, c.half + 0.4, c.half + 2.2);
       out = h + (g - h) * cut;
     }
@@ -548,6 +555,7 @@ async function searchRoute() {
   const marsh = new Uint8Array(NX * NZ);
   const level = new Float32Array(NX * NZ); // the water level there (the lake's, or the sea's at the coast)
   const sand = new Float32Array(NX * NZ);
+  const rock = new Uint8Array(NX * NZ);
   for (let iz = 0; iz < NZ; iz++) {
     for (let ix = 0; ix < NX; ix++) {
       const x = MIN_X + ix * CELL;
@@ -557,19 +565,26 @@ async function searchRoute() {
       marsh[iz * NX + ix] = marshAt(x, z) > 0.25 ? 1 : 0;
       level[iz * NX + ix] = waterLevelAt(x, z);
       sand[iz * NX + ix] = sandAt(x, z);
+      // the waterfall's cliff and the alcove under it (only the fixed passage goes in there)
+      const f = fallsLocal(x, z);
+      rock[iz * NX + ix] = f && f.d > -1.5 && underCap(x, z) ? 1 : 0;
       // creeks: stepping into one costs a lot, so the trail crosses once, squarely, rather than
       // following a channel (it once crossed the same creek twice at a hairpin)
       const c = streams().nearest(x, z);
       // (the rapids, streams.js, are where the trail is meant to cross the main creek: cheap there)
-      if (c.seg && c.d < c.half + 4) wet[iz * NX + ix] = c.seg.a.rapid > 0.3 ? 0.1 : 1;
+      if (c.seg && c.d < c.half + 4 && !underCap(x, z)) wet[iz * NX + ix] = c.seg.a.rapid > 0.3 ? 0.1 : 1;
     }
     await loadTick((0.25 * iz) / NZ);
   }
 
+  // (a stop with a passage: routed to its first point, along it, and on from its last)
   let coarse = [];
   for (let i = 0; i < TRAIL_STOPS.length - 1; i++) {
-    const leg = route(heights, side, wet, marsh, level, sand, TRAIL_STOPS[i], TRAIL_STOPS[i + 1]);
+    const a = TRAIL_STOPS[i].passage?.at(-1) ?? TRAIL_STOPS[i];
+    const b = TRAIL_STOPS[i + 1].passage?.[0] ?? TRAIL_STOPS[i + 1];
+    const leg = route(heights, side, wet, marsh, level, sand, rock, a, b);
     coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
+    if (TRAIL_STOPS[i + 1].passage) coarse = coarse.concat(TRAIL_STOPS[i + 1].passage.slice(1).map((p) => new THREE.Vector2(p.x, p.z)));
     await loadTick(0.25 + (0.4 * (i + 1)) / (TRAIL_STOPS.length - 1));
   }
   return coarse;

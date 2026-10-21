@@ -6,6 +6,7 @@ import { shared, wetChunks, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter, p
 import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 import { buildStreams } from './streams.js';
 import { patchRocky } from './rockyslope.js';
+import { FALLS, LIP, POOL_LEVEL, fallsLocal, cutBowl, streamGround, poolBowl, topSurface } from './fallsshape.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -102,13 +103,52 @@ function highCountry(x, z) {
 let streamNet = null;
 /** The streams (streams.js), built on first use from the uncarved terrain. */
 export function streams() {
-  if (!streamNet) streamNet = buildStreams(baseHeight, {
+  // (over the waterfall's overhang they see the natural ground: the creek runs across the top to the lip)
+  if (!streamNet) streamNet = buildStreams((x, z) => streamGround(x, z, naturalHeight(x, z)), {
     size: WORLD_SIZE,
     waterLevel: WATER_LEVEL,
     lake: LAKE,
     inland: (x, z) => coastZ(x) - z >= 220,
   });
+  if (!streamNet.falls) addFallsWater(streamNet);
   return streamNet;
+}
+
+/**
+ * The waterfall (fallsshape.js) in the stream net: its plunge pool is a pond, the creek's water
+ * isn't drawn from the lip to the pool's outflow (falls.js draws the falling water), and no rocks
+ * lie in the bed over the overhang (they'd be seated on the alcove's floor below it).
+ */
+function addFallsWater(net) {
+  const p = FALLS.pool;
+  const poolR = (x, z) => Math.hypot((x - p.x) / p.rl, (z - p.z) / p.ra);
+  const cells = [];
+  const half = WORLD_SIZE / 2;
+  for (let z = Math.ceil((p.z - p.ra * 1.3 + half) / 8) * 8 - half; z <= p.z + p.ra * 1.3; z += 8) {
+    for (let x = Math.ceil((p.x - p.rl * 1.3 + half) / 8) * 8 - half; x <= p.x + p.rl * 1.3; x += 8) if (poolR(x, z) < 1.25) cells.push([x, z]);
+  }
+  net.ponds.push({ x: p.x, z: p.z, level: POOL_LEVEL, r: p.rl * 1.25, cells, cell: 8 });
+  for (const st of net.streams) {
+    for (const q of st.points) {
+      const f = fallsLocal(q.x, q.z);
+      // (from just short of the lip, down the face and across the pool)
+      q.drop = !!f && f.d < 1.5 && (poolR(q.x, q.z) < 1.15 || q.z < p.z) && q.z > FALLS.z - FALLS.Lb - 6;
+      // the creek spreads out over its last metres to the lip, so it goes over as a broad sheet
+      if (f && f.d > 0) q.width *= 1 + 0.9 * smoothstep(25, 4, Math.hypot(q.x - FALLS.x, q.z - (FALLS.z - FALLS.Lb)));
+    }
+  }
+  // the bed where the creek goes over (its last point on the top)
+  net.lipBed = -Infinity;
+  for (const q of net.streams[0].points) {
+    const f = fallsLocal(q.x, q.z);
+    if (f && f.d > 0 && !q.drop) net.lipBed = q.bed;
+    if (q.drop) break;
+  }
+  net.rocks = net.rocks.filter((r) => {
+    const f = fallsLocal(r.x, r.z);
+    return !f || (f.d < -1.5 && poolR(r.x, r.z) > 0.8);
+  });
+  net.falls = true;
 }
 
 /**
@@ -116,7 +156,18 @@ export function streams() {
  * channels cut into it.
  */
 export function heightAt(x, z) {
-  return streams().carve(x, z, baseHeight(x, z));
+  return poolBowl(x, z, streams().carve(x, z, baseHeight(x, z)));
+}
+
+/**
+ * The natural ground's surface over the waterfall's overhang and the cliff top behind it
+ * (fallsshape.js: the terrain there is the bowl's floor; falls.js lays the cliff over it).
+ */
+export function fallsTopAt(x, z) {
+  // (never below the creek's bed at the lip: its channel's last segment runs from there down to the
+  // pool, and the carve's interpolation along it cut a notch sloping down the face)
+  const h = streams().carve(x, z, topSurface(x, z, naturalHeight(x, z)));
+  return Math.hypot(x - LIP.x, z - LIP.z) < 9 ? Math.max(h, streams().lipBed) : h;
 }
 
 /**
@@ -126,6 +177,11 @@ export function heightAt(x, z) {
  * feel natural.
  */
 export function baseHeight(x, z) {
+  return cutBowl(x, z, naturalHeight(x, z));
+}
+
+/** baseHeight without the waterfall's bowl. */
+function naturalHeight(x, z) {
   const hills = fbm(nBase, x * 0.0016, z * 0.0016, 5) * 32 + 22;
   const detail = nDetail(x * 0.02, z * 0.02) * 1.2;
 
@@ -484,7 +540,10 @@ export function openWaterLevel(x, z) {
 }
 
 /** 0..1: the stream bed and its wet, stony margin (1 in the channel, fading over the lower bank). */
-export function streamBed(x, z) {
+export function streamBed(x, z, y = -Infinity) {
+  // (the creek runs over the waterfall's overhang: the alcove under it is dry; its top, y, isn't)
+  const f = fallsLocal(x, z);
+  if (f && f.d > 0 && y < FALLS.floor + 10) return 0;
   const c = streams().nearest(x, z);
   return c.seg ? 1 - smoothstep(c.half + 0.5, c.half + 3.5, c.d) : 0;
 }
@@ -494,7 +553,7 @@ export function streamBed(x, z) {
  * [forest floor, rock, snow, mud/dirt], summing to 1. Mirrors groundColor().
  */
 export function groundLayers(x, y, z, slope, out = [0, 0, 0, 0]) {
-  const bed = streamBed(x, z);
+  const bed = streamBed(x, z, y);
   const snow = snowCover(x, z, y, slope) * (1 - bed); // running water keeps its bed clear of snow
   const rock = Math.max(smoothstep(0.42, 0.62, slope), bed) * (1 - snow);
   const sand = sandAt(x, z) * (1 - rock) * (1 - snow);
@@ -544,7 +603,7 @@ export function groundColor(x, y, z, slope, target = new THREE.Color()) {
   c.lerp(tmp, smoothstep(0.42, 0.62, slope));
 
   // stream beds: wet, dark cobbles, no snow
-  const bed = streamBed(x, z);
+  const bed = streamBed(x, z, y);
   tmp.copy(COL.rockDark).lerp(COL.mud, 0.35 + 0.3 * n1).multiplyScalar(0.8);
   c.lerp(tmp, bed);
 
@@ -721,7 +780,8 @@ export function buildTerrain() {
         }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec2 cutUv = (vGroundPos.xz - uCutRect.xy) / uCutRect.zw;
-        if (all(greaterThan(cutUv, vec2(0.0))) && all(lessThan(cutUv, vec2(1.0)))
+        // (not the waterfall's cliff, falls.js, aHollow < −2.3: its ceiling and walls stand over the trail)
+        if (vHollow > -2.3 && all(greaterThan(cutUv, vec2(0.0))) && all(lessThan(cutUv, vec2(1.0)))
             && texture2D(uCutMask, cutUv).r > 0.5) discard;
         // inside the cave's first metres (cave.js) the ground would show through the tunnel
         if (inCaveMouth(vGroundPos)) discard;

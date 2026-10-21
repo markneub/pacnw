@@ -884,6 +884,52 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (vs 186 / 1.08M for the scene); desktop 317 at spawn, 73 / 0.4M 30 m in. Views: `x=15&z=599&yaw=0` (add `&night`), inside `?cave=40` (start 40 m in, facing in;
   `&yaw=3.14` looks back). Not yet benched on a phone (`?perf` in the cave: the shadow cubes are the new cost).
   Scripted renders: `window.__pacnw.tick()` runs one frame of the loop (also after `?still` stopped it).
+- **The waterfall** (`src/fallsshape.js` shape, `src/falls.js` cliff/water/fence/sound; the user: reroute the trail
+  "so that it passes behind a big waterfall", with a photo of Silver Falls' South Falls: basalt amphitheatre, mossy
+  undercut, a log rail fence on the trail behind the water). The main creek runs off the lower snow bench at the lip
+  `LIP` ≈ (−23.7, −413.6), ~142 m, and drops ~46 m into a bowl (floor `FALLS.floor` 96, falling 3% downstream) below
+  the snowline. **Plan:** a U (`LINE`: half ellipse W 22 × Lb 14 round the back, arms flaring downstream, a gentle
+  wobble) opening south; every point near it has d (signed distance, > 0 in the rock, a 1 m field) and `sAt` (a smooth
+  "how far round" coordinate ≈ φ, the arc length from the back: the nearest point's φ jumps behind bends and folded
+  the cliff top into hanging sheets). `alcoveDepth(s)` 10 m round the back (to |s| 31), `cliffShare(s)` 1 to |s| 45, 0 by
+  62 (the lower arms are steep slopes, grade 0.55, so the trail can climb out). **Terrain:** a height field can't
+  overhang, so `cutBowl` (in `baseHeight`) is the floor inside the U *and* under the overhang, rising to the surface
+  above (`topSurface`) from `behind(s)` = alcove + 7.5 m (one terrain cell's diagonal: no terrain triangle tilts into
+  the alcove) over `RISE` 5 m; `underCap` = that hidden band. The streams see the natural top over it (`streamGround`),
+  so the creek runs over the cap to the lip; `fallsTopAt` = the carved top (never below `lipBed` within 9 m of the lip:
+  the channel's last segment interpolated a notch down the face; applied everywhere it raised the whole east arm into
+  fins). The plunge pool (`poolBowl`, after the carve, so it isn't "filled") is a pond at `POOL_LEVEL`; stream points
+  from the lip to the pool's outflow are `drop` (no ribbon; the ribbon keeps `s` as `along` for the rock texture) and
+  the creek widens ×1.9 over its last 25 m (a 7.5 m sheet). **Cliff mesh** (`buildCliff`, terrain material, 248
+  columns 0.5 m apart × 73 vertices, ~36k tris): from under the alcove floor up its back wall, the ceiling out to the
+  lip (8.5 m up), the face (basalt columns ~1.1 m set back by their own draw, a ledge, moss patches, wet and dark by the
+  falls) to the rim, then back over the top until it dips under the terrain. Columns run back along the line's normals
+  **smoothed over ±8 m** (`sx/sz`: the wobble crossed neighbouring columns and folded the top). `aHollow` −3 = rock
+  photo over the vertex colours (rockyslope.js `keepCol`), −2.4 on the top band; **< −2.3 skips the trail cutout
+  discard** (the terrain shader cut everything over the trail by xz: the whole ceiling and the arms' faces were
+  missing). Debug trick: hide `terrain` or `falls cliff` in a free-camera render (`scene.getObjectByName`).
+  **Shade:** `shared.uFallsShade` (RG half float, 1 m: occlusion, ceiling height) darkens everything under the overhang
+  in `patchSunlight` (direct × (1 − occ), indirect × (1 − 0.7 occ)) and shelters rain/snow (weather.js `sheltered`).
+  **Water:** three sheets on the free-fall parabola (2.2 m/s off the lip, ~3.1 s, ~7 m out; spreading 1.2 m/s): outer,
+  inner (0.35 m back, narrower) and a faint wide veil; the streak texture (`streakTexture`, whole wave numbers) is
+  sampled at (across, seconds since the lip − time), so it moves with the water and stretches as it falls; glassy over
+  the lip, white by 0.5 s, ragged edges, breaking up over the last 0.35 s; lit from both sides (translucent). Spray: 48
+  GPU puffs (5 s) from the plunge, faded up close. Foam on the pool round the landing. Roar: weather.js `Ambience`
+  (rumble < 320 Hz + roar band 1.1 kHz by distance to the curtain, into the cave reverb when under the overhang).
+  **Walking:** a walk modifier puts you on the cliff top when you're up there (`state.up`: > 3 m over the floor) or
+  past the alcove's back wall; colliders keep you out of the rock below and back from the edge above; the fence
+  (posts every 2.4 m on the bowl's side of the passage, 1.75 m off its line) is a segment collider. The scatter keeps
+  off the pool, the rock and the cap (`fallsBlocked`); `addFallsGreenery` (hash) crowds ferns/salal at the cliffs'
+  foot and in the alcove. **Trail:** stops ... → lake → (hidden waypoint `rapids` (95, −40): the rapids' footbridge
+  and up the east bank) → **Waterfall** (a fixed `passage` behind the falls, `fallsPassage`, W → E at half the
+  alcove's depth: ~12 m behind the water) → snowfield. A* treats the cliff/cap as rock (`rock` cells); no footbridge
+  or bench-cut creek notch under the overhang. Hidden stops (`hidden: true`) get no sign. The trail crosses the creek
+  on a footbridge ~45 m in front of the falls, goes up the west side, behind, and switchbacks up the east slope.
+  Trail 3.95 → 4.17 km, grade p95 18%, `holecheck trail`: no holes. Budget (container, phone `still`, 390×844): bowl
+  107 draws / 0.33M tris, behind the water 151 / 0.45M (spawn 115 / 0.45M in the same run). Not yet benched on a phone
+  (`?bench=falls&views=falls`). Map: a falls pictogram. Bench: opt-in view `falls`, row `falls` ("- waterfall"). Views (sun): bowl
+  `x=-24&z=-372&yaw=0&pitch=0.3`, behind the water `x=-23.5&z=-418.4&yaw=3.3&pitch=0.25`, along the passage
+  `x=-12&z=-417.5&yaw=1.3&pitch=0.12`.
 - **Night** (via the cave, or `?night`; `weather.setNight`): a clear night under a full moon low in the SSW over the sea
   (`MOON_DIR` (−0.22, 0.45, 0.87), `MOON_COLOR` silver-blue). The key-light direction is no longer baked into shaders:
   `shared.uKeyDir/uKeyColor/uKeyOff` (sun or moon) drive the dapple (`patchSunlight`), glitter (`uGlDir/uGlColor`), the

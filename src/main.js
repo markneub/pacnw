@@ -28,6 +28,8 @@ import { Post } from './post.js';
 import { planCabin, buildCabin, loadCabinAssets } from './cabin.js';
 import { loadWorld } from './world.js';
 import { planCave, buildCave, loadCaveAssets } from './cave.js';
+import { buildFalls, fallsBlocked } from './falls.js';
+import { LIP } from './fallsshape.js';
 import { planCoast, buildCoast, loadCoastAssets } from './coast.js';
 import { buildSeats } from './seat.js';
 import { createHint } from './hint.js';
@@ -187,13 +189,14 @@ async function init() {
   const cabinPlan = planCabin(trail); // (the scatter keeps clear of it, and of the cave's mouth)
   const cavePlan = planCave();
   const coastPlan = planCoast(); // (the lighthouse, its house and the wreck)
-  sheet.setTrail(trail, { cave: { x: CAVE.x, z: CAVE.z }, cabin: cabinPlan, lighthouse: coastPlan.lighthouse, wreck: coastPlan.wreck });
+  sheet.setTrail(trail, { cave: { x: CAVE.x, z: CAVE.z }, falls: { x: LIP.x, z: LIP.z + 6 }, cabin: cabinPlan, lighthouse: coastPlan.lighthouse, wreck: coastPlan.wreck });
   step('trail');
 
   // the placements (less the clear zones) and their canopy, which the map's land needs
   progress('map');
   const protos = await protosReady;
-  const exclude = (x, z, margin, tree) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin) || coastPlan.blocked(x, z, margin, tree);
+  const exclude = (x, z, margin, tree) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin) || coastPlan.blocked(x, z, margin, tree)
+    || fallsBlocked(x, z, margin, tree);
   const prepared = await prepareVegetation(protos, trail, { exclude, placements: world?.placements });
   await sheet.setLand(prepared.canopyAt, (f) => loadTick(f));
   step('map');
@@ -242,6 +245,9 @@ async function init() {
   shadeGround(cave.patch, veg.canopyAt);
   scene.add(cabin.group);
   if (params.get('door') === 'open') cabin.setOpen(true);
+  // the waterfall off the snow bench: its cliff and alcove, the falling water and spray
+  const falls = buildFalls();
+  scene.add(falls.group);
   // the lighthouse on the headland, the wreck in the shallows
   const coast = await buildCoast(coastPlan, coastReady);
   scene.add(coast.group);
@@ -255,6 +261,7 @@ async function init() {
     cabin.collide(pos, r);
     cave.collide(pos, r);
     coast.collide(pos, r);
+    falls.collide(pos, r);
   });
 
   if (touch) player.addGaze(cabin.gaze); // (phones only: with a mouse, looking down is easy, and the view moving by itself fights the hand)
@@ -589,8 +596,10 @@ async function init() {
     paperMap.update(player.pos.x, player.pos.z, player.yaw);
     coast.update(dt, t, camera);
     cave.track(player);
+    falls.track(player);
     crossCave();
     cave.update(dt, t, camera, renderer);
+    falls.update(dt, t, weather, camera);
     weather.update(dt, t, camera);
     updateGroundDetail(camera, camera.position.z > 650); // (snow's detail slot shows sand at the coast)
 

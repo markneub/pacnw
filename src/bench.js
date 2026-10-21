@@ -29,6 +29,8 @@ const VIEWS = [
   { key: 'beach', name: 'beach', x: 50, z: 962, yaw: 3.14, pitch: -0.08, optIn: true },
   // on the beach with the wreck in front (only when asked for: views=wreck)
   { key: 'wreck', name: 'wreck', x: 205, z: 1012, yaw: 2.41, pitch: 0, optIn: true },
+  // in the waterfall's bowl, looking up at it (only when asked for: views=falls)
+  { key: 'falls', name: 'falls', x: -24, z: -372, yaw: 0, pitch: 0.25, optIn: true },
 ];
 
 /**
@@ -36,7 +38,7 @@ const VIEWS = [
  *  rows   which rows to run, e.g. ['trees', 'grass']; empty = all. Keys: trees,
  *         ferns, rocks, ground, detail, tex, grass, grass50, near40, water, ocean, coast, sky,
  *         weather, motes, post, sort, empty, dpr (all the resolution rows). "full" always runs.
- *  views  e.g. ['spawn']; empty = all (spawn, forest, snow); 'creek', 'beach' and 'wreck' only when named
+ *  views  e.g. ['spawn']; empty = all (spawn, forest, snow); 'creek', 'beach', 'wreck' and 'falls' only when named
  *  heat   seconds of flat-out rendering first. Phones slow their GPU after
  *         ~20 s of full load; heat=30 measures that throttled state directly.
  *  quick  smoke test for slow software renderers (one view, tiny batches)
@@ -120,6 +122,7 @@ export async function runBench({
     ['water', '- water', () => hide(...[byName('lake'), byName('streams'), byName('ocean')].filter(Boolean))],
     ['ocean', '- ocean', () => hide(...[byName('ocean')].filter(Boolean))],
     ['coast', '- wreck/lighthouse', () => hide(...[byName('coast')].filter(Boolean))],
+    ['falls', '- waterfall', () => hide(...[byName('falls')].filter(Boolean))],
     ['sky', '- sky', () => hide(byName('sky'))],
     ['weather', '- rain/snow', () => hide(weather.rain, weather.snow)],
     ['motes', '- motes', () => {

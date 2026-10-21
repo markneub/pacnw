@@ -89,19 +89,21 @@ export function patchRocky(shader, { tread = false } = {}) {
         float s = 1.0 - rn.y;
         // not on snow, sand or mud (their layers), nor on a trail's tread
         float allow = (1.0 - smoothstep(0.03, 0.25, vRkLayers.z)) * (1.0 - vRkLayers.w)${tread ? ' * (1.0 - smoothstep(0.05, 0.4, vTread))' : ''};
+        float keepCol = 0.0; // the waterfall's cliff (falls.js, aHollow −3): all rock, in its own colours
         #ifdef RK_HOLLOW
-          allow *= clamp(2.0 + vHollow, 0.0, 1.0); // the cave's ground patch: aHollow −1 (rock as usual) … −2 (none)
+          keepCol = step(vHollow, -2.5);
+          allow *= keepCol > 0.5 ? 1.0 : clamp(2.0 + vHollow, 0.0, 1.0); // the cave's ground patch: aHollow −1 (rock as usual) … −2 (none)
         #endif
-        if (s > 0.04 && allow > 0.01) {
+        if ((s > 0.04 || keepCol > 0.5) && allow > 0.01) {
           vec2 q = vRkPos.xz;
-          float m = rkField(q, vRkPos.y, s);
+          float m = keepCol > 0.5 ? 1.0 : rkField(q, vRkPos.y, s);
           rkMask = smoothstep(0.49, 0.53, m) * allow;
           float fringe = smoothstep(0.4, 0.49, m) * (1.0 - rkMask) * allow;
           diffuseColor.rgb *= 1.0 - 0.18 * fringe; // loose debris and shade around the rock
           if (rkMask > 0.0) {
             vec3 p = vRkPos;
             float tone = rkNoise(q * 0.06 + p.y * 0.04) * 0.6 + rkNoise(q * 0.5 + p.y * 0.3) * 0.4;
-            vec3 rk = mix(uRkA, uRkB, tone);
+            vec3 rk = keepCol > 0.5 ? diffuseColor.rgb / max(vRkShade, 0.05) : mix(uRkA, uRkB, tone);
             #ifdef GROUND_DETAIL
             {
               // The rock photo at every distance, so far rock looks like near rock: at its close-up

@@ -7,6 +7,7 @@ import {
   heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt, marshAt, MARSH, sandAt, coastZ, SEA_LEVEL, LAKE,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
+import { FALLS, fallsLocal, alcoveDepth, cliffShare } from './fallsshape.js';
 import { addWindSway, addGroundCover, addTrunkMoss, shared } from './materials.js';
 import { bakePrototypeAO, bakeCanopy } from './bake.js';
 import { NearPool } from './detail.js';
@@ -535,8 +536,10 @@ function placeTrailFurniture(trail, add) {
   for (const stop of stops) {
     // boards point along local +X; rotate that onto the trail direction
     const i = Math.min(stop.index + 3, points.length - 3);
-    const { x, z, t } = beside(i, TRAIL_WIDTH + 0.6);
-    put('signpost', x, z, Math.atan2(-t.y, t.x));
+    // (behind the waterfall, on the rock's side, turned round: the fence runs along the other; signs.js flips its arrows)
+    const flip = stop.name === 'falls' ? -1 : 1;
+    const { x, z, t } = beside(i, (TRAIL_WIDTH + 0.6) * flip);
+    put('signpost', x, z, Math.atan2(-t.y, t.x) + (flip < 0 ? Math.PI : 0));
   }
 
   // the marsh boardwalk, a 3 m section at each spot (sections overlap a little on bends)
@@ -981,6 +984,34 @@ function addTalus(placements, trail) {
   }
 }
 
+/**
+ * The waterfall's bowl (fallsshape.js) is always wet with spray: sword ferns crowd the foot of
+ * the cliffs and the alcove's floor, salal between, a few vine maples out on the floor (hash, no rng).
+ */
+function addFallsGreenery(placements, trail) {
+  const put = (name, p) => (placements[name] ||= []).push(p);
+  const STEP = 1.7;
+  const P = FALLS.pool;
+  for (let gz = FALLS.z - FALLS.Lb - 12; gz < FALLS.z + 60; gz += STEP) {
+    for (let gx = FALLS.x - 60; gx < FALLS.x + 60; gx += STEP) {
+      const x = gx + hash2(gx + 1.3, gz - 0.7) * STEP;
+      const z = gz + hash2(gx - 2.1, gz + 3.3) * STEP;
+      const f = fallsLocal(x, z);
+      if (!f || cliffShare(f.s) < 0.3) continue;
+      const D = alcoveDepth(f.s);
+      if (f.d > D - 1.0 || Math.hypot((x - P.x) / P.rl, (z - P.z) / P.ra) < 1.35) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.9 || offStream(x, z) < 1.2) continue;
+      const wall = 1 - THREE.MathUtils.smoothstep(f.d, -9, -1); // 1 at the foot of the cliffs and under the overhang
+      const r = hash2(x * 1.9, z * 0.7);
+      const y = groundAt(x, z);
+      const rot = hash2(z, x) * 6.28;
+      if (r < 0.12 + 0.5 * wall) put(hash2(x, z * 3) < 0.5 ? 'fern_a' : 'fern_b', { x, y, z, rotY: rot, scale: 0.9 + 0.9 * hash2(x + 3, z), tint: hash2(x - 1, z + 2) });
+      else if (r < 0.2 + 0.62 * wall) put('salal', { x, y, z, rotY: rot, scale: 0.8 + 0.5 * hash2(x + 7, z), tint: hash2(x - 4, z + 2) });
+      else if (wall < 0.1 && f.d < -8 && r > 0.985) put('vine_maple', { x, y: y - 0.25, z, rotY: rot, scale: 0.8 + 0.45 * hash2(x, z + 9), tint: hash2(x + 9, z) });
+    }
+  }
+}
+
 function addSlopeGrowth(placements, trail) {
   const half = WORLD_SIZE / 2 - 20;
   const put = (name, p) => (placements[name] ||= []).push(p);
@@ -1043,6 +1074,7 @@ export async function placeVegetation(protos, trail) {
   addDriftwood(placements, trail);
   addSlopeGrowth(placements, trail);
   addTalus(placements, trail);
+  addFallsGreenery(placements, trail);
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
   for (const name of Object.keys(placements)) {
     if (!name.startsWith('pebbles')) continue;

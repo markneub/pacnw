@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { rawGroundAt, streams } from './terrain.js';
+import { rawGroundAt, streams, fallsTopAt } from './terrain.js';
+import { underCap } from './fallsshape.js';
 import { shared, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter } from './materials.js';
 
 /**
@@ -18,14 +19,23 @@ export function buildStreamWater(trail) {
   group.name = 'streams';
   const mat = streamMaterial(rockTexture(streamRocks(trail)));
   for (const [si, s] of streams().streams.entries()) {
-    const geo = ribbon(s.points, si);
-    if (!geo) continue;
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.name = 'stream';
-    // after the trail's transparent fringe: where the trail crosses, the fringe (sorted by distance
-    // with the water) was drawn over the creek in a straight line across it
-    mesh.renderOrder = 1;
-    group.add(mesh);
+    // (in runs: the waterfall, falls.js, draws the water from its lip to the plunge pool's outflow)
+    const runs = [[]];
+    for (const p of s.points) {
+      if (p.drop) {
+        if (runs[runs.length - 1].length) runs.push([]);
+      } else runs[runs.length - 1].push(p);
+    }
+    for (const run of runs) {
+      const geo = ribbon(run, si);
+      if (!geo) continue;
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.name = 'stream';
+      // after the trail's transparent fringe: where the trail crosses, the fringe (sorted by distance
+      // with the water) was drawn over the creek in a straight line across it
+      mesh.renderOrder = 1;
+      group.add(mesh);
+    }
   }
   return group;
 }
@@ -70,7 +80,8 @@ function ribbon(pts, si) {
   const level = new Float32Array(n);
   let prev = Infinity;
   for (let i = 0; i < n; i++) {
-    const g = rawGroundAt(pts[i].x, pts[i].z);
+    // (over the waterfall's overhang the ground under the water is the cliff's top, not the terrain)
+    const g = underCap(pts[i].x, pts[i].z) ? fallsTopAt(pts[i].x, pts[i].z) : rawGroundAt(pts[i].x, pts[i].z);
     const want = g + 0.12 + pts[i].width * 0.03;
     level[i] = Math.max(Math.min(want, prev), g + 0.06);
     prev = level[i];
@@ -92,7 +103,7 @@ function ribbon(pts, si) {
     const l = Math.hypot(dx, dz) || 1;
     dx /= l;
     dz /= l;
-    if (i > 0) along += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+    along = pts[i].s; // (the stream's own arc length: the rocks' texture is laid out by it, and a run may start partway)
     const fall = Math.max(0, (level[Math.max(0, i - 1)] - level[Math.min(n - 1, i + 1)]) / l);
     const speed = 0.35 + Math.min(2.2, fall * 14);
     // the water's half width: the bed plus a little (the 5 m terrain grid only roughly holds the
