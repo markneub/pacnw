@@ -212,7 +212,10 @@ function field() {
 }
 
 const near = { d: 0, phi: 0, s: 0, a: 0 };
-/** Signed distance from the face (d > 0 in the rock), the nearest point's φ and sAt there, or null away from the falls. */
+/**
+ * Signed distance from the face (d > 0 in the rock), the nearest point's φ and sAt there, or null away from the falls.
+ * One shared object, overwritten by the next call (copy what you need before calling anything else).
+ */
 export function fallsLocal(x, z) {
   const g = field();
   const fx = x - g.x0;

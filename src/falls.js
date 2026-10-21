@@ -670,7 +670,7 @@ export function buildFalls() {
     const f = fallsLocal(x, z);
     return state.up || f.d > alcoveDepth(f.s) - 0.3 ? Math.max(g, fallsTopAt(x, z)) : g;
   });
-  /** Below: kept out of the rock (the alcove's back wall, the arms' faces). Above: kept back from the edge. */
+  /** Kept out of the rock below (the alcove's back wall, the arms' faces); the fence. */
   function collide(pos, r) {
     // the fence (from either side)
     for (const [ax, az, bx, bz] of fence.segs) {
@@ -686,23 +686,24 @@ export function buildFalls() {
         pos.z += (oz / o) * (lim - o);
       }
     }
+    // the rock: from below, out of the alcove's back wall and the faces, where there's a real cliff
+    // (over 2.5 m: lower lips you walk up onto, like any steep ground). Nothing up top: you can step off
+    // the edge (a collider keeping you back from it stood across the foot of the arms' slopes, where the
+    // cliff fades out: an invisible wall, the user)
+    if (state.up) return;
     const f = fallsLocal(pos.x, pos.z);
     if (!f || cliffShare(f.s) < 0.02) return;
-    const p = lineAt(f.phi);
-    const F = floorLevel(pos.x, pos.z);
-    const step = fallsTopAt(p.x + p.nx * 0.5, p.z + p.nz * 0.5) - F; // (how much cliff there is here)
-    if (step < 1.2) return;
-    let lim;
-    if (state.up) {
-      if (f.d >= 0.8 + r) return;
-      lim = 0.8 + r;
-    } else {
-      const wall = alcoveDepth(f.s) - 0.6 - r;
-      if (f.d <= wall || f.d > behind(f.s) + RISE + 3) return;
-      lim = wall;
-    }
-    pos.x += p.nx * (lim - f.d);
-    pos.z += p.nz * (lim - f.d);
+    // (copied: fallsLocal returns one shared object, and fallsTopAt below calls it for the face point. Read
+    // after that, the face's distance stood in for the player's: a push of ~1 m anywhere near the arms, the
+    // user's invisible wall)
+    const { d, s: fs, phi } = f;
+    const wall = alcoveDepth(fs) - 0.1 - r;
+    if (d <= wall || d > behind(fs) + RISE + 3) return;
+    const p = lineAt(phi);
+    const step = fallsTopAt(p.x + p.nx * 0.5, p.z + p.nz * 0.5) - floorLevel(pos.x, pos.z); // (how much cliff there is here)
+    if (step < 2.5) return;
+    pos.x += p.nx * (wall - d);
+    pos.z += p.nz * (wall - d);
   }
   /** Up on the cliff top or down in the bowl (from where the player stands). */
   function track(player) {
