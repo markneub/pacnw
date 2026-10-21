@@ -28,7 +28,7 @@ const SOURCES = [
   { x: 470, z: -180 }, // east foothills
 ];
 
-export function buildStreams(height, { size, waterLevel, lake }) {
+export function buildStreams(height, { size, waterLevel, lake, inland = () => true }) {
   const half = size / 2;
   const n = Math.floor(size / GRID) + 1;
   const h = new Float32Array(n * n);
@@ -146,6 +146,20 @@ export function buildStreams(height, { size, waterLevel, lake }) {
       k = -1;
     }
     traces.push({ cells, joins: k >= 0 && owner[k] >= 0 && owner[k] !== traces.length ? k : -1 });
+  }
+
+  // Standing water: hollows below the lake's level away from it (no stream ends there). The scatter
+  // already keeps them clear (waterLevelAt is never below the lake's level), so they get a pond too.
+  const inLake = (x, z) => Math.hypot(x - lake.x, (z - lake.z) * 1.4) < lake.r * 1.6;
+  const pooled = new Uint8Array(n * n);
+  for (let k = 0; k < n * n; k++) {
+    if (pooled[k] || h[k] >= waterLevel) continue;
+    const x = -half + (k % n) * GRID;
+    const z = -half + Math.floor(k / n) * GRID;
+    if (inLake(x, z) || !inland(x, z)) continue;
+    const p = pondAround(k, waterLevel);
+    for (const [cx, cz] of p.cells) pooled[Math.round((cz + half) / GRID) * n + Math.round((cx + half) / GRID)] = 1;
+    if (p.cells.length > 1 && p.cells.every(([cx, cz]) => !inLake(cx, cz) && inland(cx, cz))) ponds.push(p);
   }
 
   // the cells of a pond: everything below its level connected to its low spot

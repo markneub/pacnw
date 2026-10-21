@@ -1,6 +1,6 @@
 import '@fontsource/im-fell-english-sc';
-import { WORLD_SIZE, WATER_LEVEL, SNOWLINE } from './config.js';
-import { terrainGrid, waterLevelAt, snowAmount, SEA_LEVEL, marshAt } from './terrain.js';
+import { WORLD_SIZE, SNOWLINE } from './config.js';
+import { terrainGrid, openWaterLevel, snowAmount, SEA_LEVEL, marshAt } from './terrain.js';
 import { shared } from './materials.js';
 
 /**
@@ -105,7 +105,7 @@ async function drawLand(ctx, { canopyAt, tick }) {
       let col;
       let shadeK = 1;
       // water: the sea in the south, the lake and ponds
-      const level = z > 600 ? SEA_LEVEL : h < WATER_LEVEL + 2 ? waterLevelAt(x, z) : -Infinity;
+      const level = z > 600 ? SEA_LEVEL : openWaterLevel(x, z); // (only water that's drawn)
       if (h < level - 0.05) {
         const depth = level - h;
         col = level === SEA_LEVEL && z > 600 ? mix3(C.shallow, C.deep, smooth(0, 22, depth)) : mix3(C.lake, C.deep, smooth(0, 9, depth) * 0.6);

@@ -102,7 +102,12 @@ function highCountry(x, z) {
 let streamNet = null;
 /** The streams (streams.js), built on first use from the uncarved terrain. */
 export function streams() {
-  if (!streamNet) streamNet = buildStreams(baseHeight, { size: WORLD_SIZE, waterLevel: WATER_LEVEL, lake: LAKE });
+  if (!streamNet) streamNet = buildStreams(baseHeight, {
+    size: WORLD_SIZE,
+    waterLevel: WATER_LEVEL,
+    lake: LAKE,
+    inland: (x, z) => coastZ(x) - z >= 220,
+  });
   return streamNet;
 }
 
