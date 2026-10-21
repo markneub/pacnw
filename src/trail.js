@@ -35,7 +35,33 @@ export const TRAIL_STOPS = [
 /** Numeric spatial-hash key (no string garbage in per-frame lookups). */
 const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
 
-export const TRAIL_WIDTH = 1.05; // half-width of the visible tread (it wanders ±15%)
+export const TRAIL_WIDTH = 1.05; // half-width of the visible tread (it wanders ~0.75–1.4 m: treadHalf)
+
+/** Smooth value noise in −1..1 (world-anchored, deterministic). */
+function vnoise(x, z) {
+  const h = (i, j) => {
+    let k = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) | 0;
+    k = Math.imul(k ^ (k >>> 13), 1274126177);
+    return ((k ^ (k >>> 16)) >>> 0) / 2147483648 - 1;
+  };
+  const i = Math.floor(x);
+  const j = Math.floor(z);
+  let u = x - i;
+  let v = z - j;
+  u = u * u * (3 - 2 * u);
+  v = v * v * (3 - 2 * v);
+  return (h(i, j) * (1 - u) + h(i + 1, j) * u) * (1 - v) + (h(i, j + 1) * (1 - u) + h(i + 1, j + 1) * u) * v;
+}
+/**
+ * The tread's half-width where its edge passes (x, z): it narrows and widens along the trail
+ * (a ~25 m swell, ~7 m bulges, an odd worn-out spot), and, sampled where each edge lies, the
+ * two sides wander independently. (A constant width with a gentle wobble read as a laid path, the user.)
+ */
+function treadHalf(x, z) {
+  const k = 0.2 * vnoise(x / 25 + 31.7, z / 25 - 12.3) + 0.16 * vnoise(x / 7 - 4.1, z / 7 + 8.9);
+  const wide = Math.max(0, vnoise(x / 40 + 7.3, z / 40 + 2.2) - 0.45) * 0.5; // here and there a broad, trampled patch
+  return TRAIL_WIDTH * Math.min(1.32, Math.max(0.7, 1 + k + wide));
+}
 
 // Cross-section of the bench cut into the hillside: level out to BENCH_HALF,
 // then a cut bank (uphill) or fill slope (downhill) blending back into the
@@ -677,6 +703,8 @@ function buildCorridorMesh(points, distanceTo) {
   const positions = [];
   const colors = [];
   const treadAttr = [];
+  const treadCol = []; // the tread's colour here (the shader lays it over the vertex colour inside the edge)
+  const edgeAttr = []; // m inside the tread's edge (< 0 outside), its softness, the marsh mask
   const printAttr = []; // footprints in the sand: arc length, offset across, how sandy
   const layers = [];
   const lw = [0, 0, 0, 0];
@@ -740,19 +768,21 @@ function buildCorridorMesh(points, distanceTo) {
       const bedHere = streamBed(x, z);
       col.lerp(tmp, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - snow * 0.85) * (1 - bedHere) * (1 - sandy));
 
-      const wobble = Math.sin(x * 0.31 + z * 0.17) * 0.18 + Math.sin(x * 0.07 - z * 0.11) * 0.2;
+      const half = treadHalf(x, z);
       // (in snow a softer edge and a boot-packed groove down the middle, over the snow's own colour:
       // a flat grey-blue fill read as a painted stripe)
-      const edge = 0.3 + 0.5 * Math.max(snow, sandy);
+      const edge = 0.14 + 0.5 * Math.max(snow, sandy);
       // (no tread under the marsh boardwalk: the marsh runs on beneath it)
-      const t = (1 - THREE.MathUtils.smoothstep(d + wobble, TRAIL_WIDTH - edge, TRAIL_WIDTH + edge)) * (1 - THREE.MathUtils.smoothstep(marshAt(x, z), 0.05, 0.2));
-      const groove = 1 - Math.min(1, d / TRAIL_WIDTH) ** 2;
-      tmp.copy(dirt).lerp(dirtWet, Math.min(1, d / TRAIL_WIDTH) * 0.6);
+      const dry = 1 - THREE.MathUtils.smoothstep(marshAt(x, z), 0.05, 0.2);
+      const t = (1 - THREE.MathUtils.smoothstep(d, half - edge, half + edge)) * dry;
+      const groove = 1 - Math.min(1, d / half) ** 2;
+      tmp.copy(dirt).lerp(dirtWet, Math.min(1, d / half) * 0.6);
       tmpSnow.copy(col).lerp(packed, 0.4 + 0.45 * groove);
       tmp.lerp(tmpSnow, snow);
       tmpSnow.copy(col).lerp(churned, 0.3 + 0.3 * groove);
       tmp.lerp(tmpSnow, sandy);
-      col.lerp(tmp, t);
+      treadCol.push(tmp.r, tmp.g, tmp.b);
+      edgeAttr.push(Math.max(-3, Math.min(3, half - d)), edge, dry);
 
       // detail layers: exposed soil on the banks and the tread itself read as dirt
       const dirtW = Math.max(t, THREE.MathUtils.smoothstep(cut, 0.15, 0.9) * 0.75 * (1 - bedHere)) * (1 - snow * 0.85) * (1 - sandy);
@@ -761,7 +791,7 @@ function buildCorridorMesh(points, distanceTo) {
       // fade the strip's outer edge into the terrain beneath
       const alpha = Math.min(1 - THREE.MathUtils.smoothstep(Math.abs(u), CUTOUT_HALF + 0.3, CORRIDOR_HALF), rowPts[i].fade);
       colors.push(col.r, col.g, col.b, alpha);
-      treadAttr.push(t * (1 - 0.7 * snow) * (1 - sandy)); // (less dark grit on trodden snow, none on sand)
+      treadAttr.push((1 - 0.7 * snow) * (1 - sandy)); // (× the tread: less dark grit on trodden snow, none on sand)
       printAttr.push((i - ext.length) * STEP, u, sandy * (1 - THREE.MathUtils.smoothstep(marshAt(x, z), 0.05, 0.2)));
     }
     if (i > 0) {
@@ -778,6 +808,8 @@ function buildCorridorMesh(points, distanceTo) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
   geo.setAttribute('aTread', new THREE.Float32BufferAttribute(treadAttr, 1));
+  geo.setAttribute('aTreadCol', new THREE.Float32BufferAttribute(treadCol, 3));
+  geo.setAttribute('aEdge', new THREE.Float32BufferAttribute(edgeAttr, 3));
   geo.setAttribute('aPrint', new THREE.Float32BufferAttribute(printAttr, 3));
   geo.setAttribute('aLayers', new THREE.Float32BufferAttribute(layers, 4));
   geo.setAttribute('aShade', new THREE.Float32BufferAttribute(new Float32Array(positions.length / 3).fill(1), 1));
@@ -818,11 +850,14 @@ function buildCorridorMesh(points, distanceTo) {
     shader.uniforms.uPuddle = shared.uPuddle;
     shader.uniforms.uSnowline = shared.uSnowline;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aTread;\nattribute vec3 aPrint;\nvarying float vTread;\nvarying vec3 vPrint;\nvarying vec3 vGroundPos;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTread = aTread;\nvPrint = aPrint;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <common>', '#include <common>\nattribute float aTread;\nattribute vec3 aTreadCol;\nattribute vec3 aEdge;\nattribute vec3 aPrint;\nvarying float vTreadK;\nvarying vec3 vTreadCol;\nvarying vec3 vEdge;\nvarying vec3 vPrint;\nvarying vec3 vGroundPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTreadK = aTread;\nvTreadCol = aTreadCol;\nvEdge = aEdge;\nvPrint = aPrint;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-        varying float vTread;
+        varying float vTreadK;
+        varying vec3 vTreadCol;
+        varying vec3 vEdge;
+        float vTread;
         varying vec3 vPrint;
         varying vec3 vGroundPos;
         uniform float uWet;
@@ -875,6 +910,18 @@ function buildCorridorMesh(points, distanceTo) {
     patchGroundDetail(shader);
     patchRocky(shader, { tread: true });
     patchPuddles(shader);
+    // (last, so it lands first after the chunk: the detail, rock and grit patches all see the tread)
+    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        // the tread, edged per pixel: worn ragged, grass and duff nibbling in, scuffs out past it
+        float rag = (gNoise(vGroundPos.xz * 1.1 + 5.1) - 0.5) * 0.6 + (gNoise(vGroundPos.xz * 3.7 - 2.3) - 0.5) * 0.3
+          + (gNoise(vGroundPos.xz * 11.0) - 0.5) * 0.14;
+        float treadIn = smoothstep(-vEdge.y, vEdge.y, vEdge.x + rag);
+        // scuffed, half-worn patches out past the edge (and tufts left standing just inside it)
+        float scuff = smoothstep(0.62, 0.78, gNoise(vGroundPos.xz * 0.8 - 9.3) * 0.6 + gNoise(vGroundPos.xz * 2.9 + 1.7) * 0.4);
+        treadIn = max(treadIn, scuff * 0.7 * smoothstep(-0.9, -0.1, vEdge.x + rag * 0.5));
+        treadIn *= vEdge.z;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vTreadCol * diffuse, treadIn);
+        vTread = treadIn * vTreadK;`);
   };
   mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
   // The faded outer fringe blends over the terrain, so it's transparent, and it must not write
@@ -918,7 +965,7 @@ function buildCorridorMesh(points, distanceTo) {
     const v0 = r0 * rowLen;
     const v1 = (r1 + 1) * rowLen;
     const part = new THREE.BufferGeometry();
-    for (const name of ['position', 'normal', 'color', 'aTread', 'aPrint', 'aLayers', 'aShade']) {
+    for (const name of ['position', 'normal', 'color', 'aTread', 'aTreadCol', 'aEdge', 'aPrint', 'aLayers', 'aShade']) {
       const attr = geo.attributes[name];
       part.setAttribute(name, new THREE.BufferAttribute(attr.array.slice(v0 * attr.itemSize, v1 * attr.itemSize), attr.itemSize));
     }
@@ -983,6 +1030,8 @@ function buildCorridorMesh(points, distanceTo) {
     skirt.setAttribute('position', new THREE.Float32BufferAttribute(sPos, 3));
     skirt.setAttribute('color', new THREE.Float32BufferAttribute(sCol, 4));
     skirt.setAttribute('aTread', new THREE.Float32BufferAttribute(new Float32Array(sPos.length / 3), 1));
+    skirt.setAttribute('aTreadCol', new THREE.Float32BufferAttribute(new Float32Array(sPos.length), 3));
+    skirt.setAttribute('aEdge', new THREE.Float32BufferAttribute(new Float32Array(sPos.length).map((_, i) => (i % 3 === 0 ? -3 : i % 3 === 1 ? 0.2 : 0)), 3));
     skirt.setAttribute('aPrint', new THREE.Float32BufferAttribute(new Float32Array(sPos.length), 3));
     skirt.setAttribute('aLayers', new THREE.Float32BufferAttribute(sLay, 4));
     skirt.setAttribute('aShade', new THREE.Float32BufferAttribute(new Float32Array(sPos.length / 3).fill(1), 1));
