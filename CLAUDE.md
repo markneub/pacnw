@@ -564,11 +564,11 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (steep traverses). 35 → 25 cairns, base relief ≤ 0.22 m (was up to 1.3 m). No rng.
 - **Irregular tread** (the user: the path was "a consistent width which isn't very realistic"): `treadHalf(x, z)`
   (trail.js, world value noise, so overlapping switchback strips agree) sets the half-width where each edge passes:
-  ±20% over ~25 m, ±16% over ~7 m, now and then a broad trampled patch, clamped 0.74–1.39 m, so the two sides wander
+  ±27% over ~25 m, ±21% over ~7 m, now and then a broad trampled patch, clamped 0.63–1.52 m (the user: "increase both a bit"), so the two sides wander
   independently. The edge is drawn **per pixel**: the strip carries `aEdge` (m inside the edge, softness 0.14 m (+0.5
   in snow/sand), marsh mask) and `aTreadCol` (the tread's colour; the vertex colour is now the ground without it), and
-  the fragment shader mixes them with 3-octave noise (±0.3/0.15/0.07 m) on the edge plus scuffed half-worn patches up to
-  ~0.9 m outside it. That block is spliced in after all the other patches so it lands first after `color_fragment`
+  the fragment shader mixes them with 3-octave noise (±0.4/0.21/0.1 m) on the edge plus scuffed half-worn patches up to
+  ~1.2 m outside it. That block is spliced in after all the other patches so it lands first after `color_fragment`
   (ground detail, rock and grit see the tread; `vTread` is now a fragment-local = tread × `aTread`'s grit factor).
   Detail layers (`dirtW`) stay per vertex. Geometry unchanged (the bench stays `BENCH_HALF`).
 - Trail in snow: no flat fill colour (a grey-blue `packed` stripe read as paint). The tread there is the snow's own colour

@@ -58,9 +58,9 @@ function vnoise(x, z) {
  * two sides wander independently. (A constant width with a gentle wobble read as a laid path, the user.)
  */
 function treadHalf(x, z) {
-  const k = 0.2 * vnoise(x / 25 + 31.7, z / 25 - 12.3) + 0.16 * vnoise(x / 7 - 4.1, z / 7 + 8.9);
-  const wide = Math.max(0, vnoise(x / 40 + 7.3, z / 40 + 2.2) - 0.45) * 0.5; // here and there a broad, trampled patch
-  return TRAIL_WIDTH * Math.min(1.32, Math.max(0.7, 1 + k + wide));
+  const k = 0.27 * vnoise(x / 25 + 31.7, z / 25 - 12.3) + 0.21 * vnoise(x / 7 - 4.1, z / 7 + 8.9);
+  const wide = Math.max(0, vnoise(x / 40 + 7.3, z / 40 + 2.2) - 0.4) * 0.6; // here and there a broad, trampled patch
+  return TRAIL_WIDTH * Math.min(1.45, Math.max(0.6, 1 + k + wide));
 }
 
 // Cross-section of the bench cut into the hillside: level out to BENCH_HALF,
@@ -913,12 +913,12 @@ function buildCorridorMesh(points, distanceTo) {
     // (last, so it lands first after the chunk: the detail, rock and grit patches all see the tread)
     shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         // the tread, edged per pixel: worn ragged, grass and duff nibbling in, scuffs out past it
-        float rag = (gNoise(vGroundPos.xz * 1.1 + 5.1) - 0.5) * 0.6 + (gNoise(vGroundPos.xz * 3.7 - 2.3) - 0.5) * 0.3
-          + (gNoise(vGroundPos.xz * 11.0) - 0.5) * 0.14;
+        float rag = (gNoise(vGroundPos.xz * 1.1 + 5.1) - 0.5) * 0.8 + (gNoise(vGroundPos.xz * 3.7 - 2.3) - 0.5) * 0.42
+          + (gNoise(vGroundPos.xz * 11.0) - 0.5) * 0.2;
         float treadIn = smoothstep(-vEdge.y, vEdge.y, vEdge.x + rag);
         // scuffed, half-worn patches out past the edge (and tufts left standing just inside it)
-        float scuff = smoothstep(0.62, 0.78, gNoise(vGroundPos.xz * 0.8 - 9.3) * 0.6 + gNoise(vGroundPos.xz * 2.9 + 1.7) * 0.4);
-        treadIn = max(treadIn, scuff * 0.7 * smoothstep(-0.9, -0.1, vEdge.x + rag * 0.5));
+        float scuff = smoothstep(0.58, 0.74, gNoise(vGroundPos.xz * 0.8 - 9.3) * 0.6 + gNoise(vGroundPos.xz * 2.9 + 1.7) * 0.4);
+        treadIn = max(treadIn, scuff * 0.75 * smoothstep(-1.2, -0.1, vEdge.x + rag * 0.5));
         treadIn *= vEdge.z;
         diffuseColor.rgb = mix(diffuseColor.rgb, vTreadCol * diffuse, treadIn);
         vTread = treadIn * vTreadK;`);
