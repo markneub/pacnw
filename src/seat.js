@@ -5,6 +5,10 @@ import * as THREE from 'three';
 const SEAT_EYE = 1.28; // eye height seated (the seat's top + ~0.72 m)
 const SIT_FWD = 0.08; // head a little forward of the seat's middle
 const STAND_FWD = 1.4; // where you get up to: in front, clear of the collider (0.9 + the player's 0.4)
+const SEAT_HALF = 0.95; // the seat's half-length (along local X)
+// "Sit" shows within this of the nearest point of the seat: the bench stands ~2.45 m off the trail's middle, so
+// a reach from its centre of 2.2 m never showed walking past (the gaze pull, 3.6 m, did)
+const SIT_REACH = 3;
 
 /**
  * Benches you can sit on (the user: "tap to sit on the bench"). Close to one and looking at it, the prompt
@@ -18,6 +22,7 @@ export function buildSeats(benches = []) {
     const fz = Math.cos(b.rotY);
     return {
       x: b.x, z: b.z,
+      ax: Math.cos(b.rotY), az: -Math.sin(b.rotY), // (the seat's length: local +X)
       seatX: b.x + fx * SIT_FWD, seatZ: b.z + fz * SIT_FWD, seatY: b.y,
       standX: b.x + fx * STAND_FWD, standZ: b.z + fz * STAND_FWD,
       yaw: Math.atan2(-fx, -fz), // (yaw 0 looks along −z)
@@ -35,10 +40,14 @@ export function buildSeats(benches = []) {
       camera.getWorldDirection(fwd);
       const fl = Math.hypot(fwd.x, fwd.z);
       for (const s of seats) {
-        const dx = s.x - camera.position.x;
-        const dz = s.z - camera.position.z;
+        // to the nearest point along the seat
+        const ox = camera.position.x - s.x;
+        const oz = camera.position.z - s.z;
+        const t = THREE.MathUtils.clamp(ox * s.ax + oz * s.az, -SEAT_HALF, SEAT_HALF);
+        const dx = s.x + s.ax * t - camera.position.x;
+        const dz = s.z + s.az * t - camera.position.z;
         const d = Math.hypot(dx, dz);
-        if (d > 2.2) continue;
+        if (d > SIT_REACH) continue;
         if (d < 0.6 || (fwd.x * dx + fwd.z * dz) / (d * Math.max(fl, 1e-4)) > 0.6) near = s;
       }
     }

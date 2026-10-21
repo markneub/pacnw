@@ -414,13 +414,14 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   same day). Test trick: compose `.map-live`'s canvases with their blend modes into one canvas and `toDataURL` it during
   the load; for the ready/fold screens stop the loop (`__pacnw.renderer.setAnimationLoop(null)`) and `page.screenshot()`. Test trick: a page with just `PaperMap` on a saved
   canvas, `document.getAnimations()` paused at set `currentTime`s, `page.screenshot()` (no WebGL, so it works).
-- **Sitting on the bench** (`src/seat.js`, the user: "tap to sit on the bench"): within 2.2 m of a bench and looking at
-  it (cos > 0.6) the prompt says "Sit"; tap / E / click → `player.sitDown(seat)`: `sitK` eases 0 → 1 over 0.8 s, the
+- **Sitting on the bench** (`src/seat.js`, the user: "tap to sit on the bench"): within 3 m of the nearest point of its
+  1.9 m seat and looking at that point (cos > 0.6) the prompt says "Sit" (it was 2.2 m from the centre: the bench stands
+  ~2.45 m off the trail's middle, so walking past it the gaze pulled but no prompt showed, the user); tap / E / click → `player.sitDown(seat)`: `sitK` eases 0 → 1 over 0.8 s, the
   feet move to the seat's middle (+8 cm forward), eye height 1.7 → 1.28 m (`eye()`), the yaw turns to the bench's facing
   (the short way), and the view widens (`SEAT_FOV`: tan(fov/2) × 1.3, 70° → ~85°, eased with sitK; the near pools
   re-cull when the fov changes > 4°). Seated you only look (walking keys do nothing; on touch a drag goes straight to
   look mode); only another tap stands you up (`standUp`) to 1.4 m in front (outside its 0.9 m collider). No collisions, slope pitch or gaze while seated; no prompt
-  while seated. **Gaze attractor** (touch only, like the note): the seat (+0.5 m), reach 3.6 m (full by 2.8 m, before the 2.2 m "Sit" range), while standing. The one bench (the lake viewpoint) now sits on the lake's side of the trail facing `LAKE`'s centre (it
+  while seated. **Gaze attractor** (touch only, like the note): the seat (+0.5 m), reach 3.6 m (full by 2.8 m, inside the 3 m "Sit" range), while standing. The one bench (the lake viewpoint) now sits on the lake's side of the trail facing `LAKE`'s centre (it
   was on the lower side facing away from the trail: north into the bank). **The prompt is shared**: `src/hint.js`
   `createHint()` → `hint(text)`; cabin.js and seat.js expose `prompt`, main.js shows `cabin.prompt ?? seats.prompt` and
   routes taps/E/clicks to `seats.interact(player) || cabin.interact(player)`. View: `x=58.2&z=381.7&yaw=1.56`.
