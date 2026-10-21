@@ -191,6 +191,10 @@ def mats():
         "maple_cards": card_material("MapleCards", os.path.join(ROOT, "public", "textures", "foliage", "maple_spray.png")),
         "maple_bark": material("MapleBark", (0.37, 0.36, 0.26)),  # smooth, greenish grey-brown
         "salal_cards": card_material("SalalCards", os.path.join(ROOT, "public", "textures", "foliage", "salal_spray.png")),
+        "salmonberry_cards": card_material("SalmonberryCards", os.path.join(ROOT, "public", "textures", "foliage", "salmonberry_spray.png")),
+        "huckleberry_cards": card_material("HuckleberryCards", os.path.join(ROOT, "public", "textures", "foliage", "huckleberry_spray.png")),
+        "cane": material("Cane", (0.45, 0.36, 0.27)),  # salmonberry canes: pale, peeling tan-brown
+        "huck_stem": material("HuckStem", (0.3, 0.44, 0.2)),  # red huckleberry: bright green, angular twigs
         "fern_cards": card_material("FernCards", os.path.join(ROOT, "public", "textures", "foliage", "fern_frond.png")),
         "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
     }
@@ -833,6 +837,85 @@ def salal(M, name, seed, shoots=16):
     return b.build(name)
 
 
+def salmonberry(M, name, seed, canes=13):
+    """
+    Salmonberry (Rubus spectabilis): a clump of pale brown canes 1.4-2.4 m, upright in the middle
+    and arching out at the edge, leafy over their upper part with trifoliate leaves and orange to red
+    berries (salmonberry_spray.png on 2:1 cards, u from the base to the tip, folded slightly along the
+    shoot so they don't vanish edge-on). Shading normals point out of the clump and up.
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    cane, leaves = M["cane"], M["salmonberry_cards"]
+    for k in range(canes):
+        a = TAU * k / canes + rng.uniform(-0.3, 0.3)
+        out = Vector((math.cos(a), math.sin(a), 0.0))
+        side = Vector((-out.y, out.x, 0.0))
+        inner = rng.random()
+        L = rng.uniform(1.5, 2.5)
+        lean = math.radians(rng.uniform(8, 22) + 22 * (1 - inner))
+        arch = rng.uniform(0.4, 0.9) * (1.2 - inner * 0.6)
+        base = out * rng.uniform(0.0, 0.3) + Vector((0.0, 0.0, -0.1))
+
+        def at(t, L=L, lean=lean, arch=arch, base=base, out=out):
+            horiz = L * (math.sin(lean) * t + arch * 0.4 * t ** 2.2)
+            return base + out * horiz + Vector((0.0, 0.0, L * (math.cos(lean) * t - arch * 0.3 * t ** 3)))
+
+        pts = [at(i / 7) for i in range(8)]
+        _limb(b, cane, pts, [rng.uniform(0.013, 0.018) * (1.0 - 0.6 * i / 7) for i in range(8)], sides=5)
+        # leafy shoots alternate along the upper part, and one at the tip
+        t = rng.uniform(0.22, 0.32)
+        sgn = rng.choice((-1, 1))
+        while t < 1.0:
+            p = at(t)
+            tan = (at(min(1.0, t + 0.05)) - at(max(0.0, t - 0.05))).normalized()
+            sgn = -sgn
+            d = (side * sgn * rng.uniform(0.7, 1.0) + out * rng.uniform(0.2, 0.6) + tan * 0.3)
+            d.z = rng.uniform(-0.05, 0.25)
+            d.normalize()
+            cl = rng.uniform(0.6, 0.85)
+            sd = Vector((-d.y, d.x, 0.0)).normalized()
+            _card(b, leaves, p + d * (0.5 * cl), d, sd, cl, cl * 0.5, rng.uniform(0.06, 0.16), (0.0, 0.0), fold=0.3)
+            t += rng.uniform(0.08, 0.12)
+        tip = at(1.0)
+        d = (at(1.0) - at(0.9)).normalized()
+        sd = Vector((-d.y, d.x, 0.0)).normalized()
+        _card(b, leaves, tip + d * 0.3, d, sd, 0.65, 0.32, 0.1, (0.0, 0.0), fold=0.3)
+    return b.build(name)
+
+
+def red_huckleberry(M, name, seed, stems=6):
+    """
+    Red huckleberry (Vaccinium parvifolium): an airy, bright green shrub ~1-1.8 m of thin, angular
+    stems that fork into near-horizontal layers of small-leaved sprays hung with red berries
+    (huckleberry_spray.png on 2:1 cards, u from the base out, folded slightly). It often grows out of
+    a stump or a nurse log (vegetation.js), so its base is narrow.
+    """
+    rng = random.Random(seed)
+    b = MeshBuilder()
+    stem, leaves = M["huck_stem"], M["huckleberry_cards"]
+    for k in range(stems):
+        a = TAU * k / stems + rng.uniform(-0.4, 0.4)
+        out = Vector((math.cos(a), math.sin(a), 0.0))
+        L = rng.uniform(0.9, 1.7)
+        lean = math.radians(rng.uniform(5, 28))
+        kink = [Vector((rng.uniform(-0.08, 0.08), rng.uniform(-0.08, 0.08), 0.0)) for _ in range(6)]
+        pts = [out * (math.sin(lean) * L * i / 5) + Vector((0.0, 0.0, -0.05 + math.cos(lean) * L * i / 5)) + kink[i] * (i > 0) for i in range(6)]
+        _limb(b, stem, pts, [0.011 * (1.0 - 0.6 * i / 5) for i in range(6)], sides=4)
+        # side branches every ~0.25 m from 35% up, each holding a flat spray layer
+        for i in range(2, 6):
+            p = pts[i] if i < 5 else pts[5]
+            for _ in range(1 if i < 5 else 2):
+                ang = a + rng.uniform(-1.6, 1.6)
+                d = Vector((math.cos(ang), math.sin(ang), rng.uniform(-0.05, 0.2))).normalized()
+                cl = rng.uniform(0.38, 0.55) * (1.0 - 0.15 * (i == 5))
+                sd = Vector((-d.y, d.x, 0.0)).normalized()
+                twig = [p, p + d * (cl * 0.45), p + d * (cl * 0.85) - Vector((0, 0, 0.02))]
+                _limb(b, stem, twig, [0.006, 0.004, 0.003], sides=3)
+                _card(b, leaves, p + d * (0.5 * cl), d, sd, cl, cl * 0.5, rng.uniform(0.02, 0.06), (0.0, 0.0), fold=0.25)
+    return b.build(name)
+
+
 def vine_maple(M, name, seed=5, leafy=1.0):
     """
     Vine maple (Acer circinatum): an understory tree of several slender stems
@@ -1428,6 +1511,8 @@ def main():
     fern(M, "fern_a", 21)
     fern(M, "fern_b", 22, fronds=24)
     salal(M, "salal", 31)
+    salmonberry(M, "salmonberry", 33)
+    red_huckleberry(M, "huckleberry", 35)
     pebbles(M, "pebbles_a", 61)
     pebbles(M, "pebbles_b", 62, stones=5, spread=0.6)
     pebbles(M, "pebbles_c", 63, stones=7, spread=1.0, size=(0.05, 0.2))

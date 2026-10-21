@@ -596,6 +596,164 @@ def maple_spray(seed=37):
     return finish(out, (N, N))
 
 
+def _berry(d, x, y, r, base, rng, drupelets=True):
+    """A berry: a shaded round (an aggregate of drupelets for the Rubus ones), lit from the upper left."""
+    dark = tuple(int(c * 0.55) for c in base)
+    d.ellipse([x - r, y - r, x + r, y + r], fill=dark + (255,))
+    if drupelets:
+        for _ in range(int(14 + r / SS)):
+            a = rng.uniform(0, TAU)
+            q = r * math.sqrt(rng.random()) * 0.72
+            cx, cy = x + math.cos(a) * q, y + math.sin(a) * q * 0.9
+            rr = r * rng.uniform(0.26, 0.34)
+            lit = 0.5 + 0.5 * max(-1.0, min(1.0, -((cx - x) + (cy - y)) / (1.4 * r)))
+            col = lerp(dark, base, 0.55 + 0.45 * lit)
+            d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=col + (255,))
+            hr = rr * 0.32
+            d.ellipse([cx - rr * 0.35 - hr, cy - rr * 0.35 - hr, cx - rr * 0.35 + hr, cy - rr * 0.35 + hr],
+                      fill=lerp(col, (255, 240, 220), 0.55) + (255,))
+    else:
+        d.ellipse([x - r * 0.92, y - r * 0.92, x + r * 0.86, y + r * 0.86], fill=base + (255,))
+        hr = r * 0.28
+        d.ellipse([x - r * 0.45 - hr, y - r * 0.45 - hr, x - r * 0.45 + hr, y - r * 0.45 + hr],
+                  fill=lerp(base, (255, 245, 235), 0.7) + (255,))
+        # the dried calyx at the tip, a dark dimple
+        d.ellipse([x + r * 0.35 - r * 0.16, y + r * 0.35 - r * 0.16, x + r * 0.35 + r * 0.16, y + r * 0.35 + r * 0.16],
+                  fill=dark + (255,))
+
+
+def _leaf(d, bx, by, ang, L, wid, col, rng, teeth=14, tooth=0.05, tip=0.35, vein=True):
+    """An ovate leaf from (bx, by) along `ang` (radians, image space), toothed edge, midrib and a lit half."""
+    dx, dy = math.cos(ang), math.sin(ang)
+    px, py = -dy, dx
+    pts_a, pts_b = [], []
+    steps = max(teeth * 2, 12)
+    for k in range(steps + 1):
+        g = k / steps
+        half = wid * 0.5 * math.sin(math.pi * min(1.0, g * 0.92 + 0.08)) ** 0.8 * (1 - g) ** tip
+        t = wid * tooth * (1 if k % 2 else -0.3) if 0 < k < steps else 0.0
+        cx, cy = bx + dx * L * g, by + dy * L * g
+        pts_a.append((cx + px * (half + t), cy + py * (half + t)))
+        pts_b.append((cx - px * (half + t), cy - py * (half + t)))
+    d.polygon(pts_a + pts_b[::-1], fill=col + (255,))
+    hi = lerp(col, (170, 200, 120), 0.22)
+    d.polygon([(bx + dx * L * g + px * wid * 0.22 * math.sin(math.pi * g), by + dy * L * g + py * wid * 0.22 * math.sin(math.pi * g)) for g in [k / 10 for k in range(11)]]
+              + [(bx + dx * L * g, by + dy * L * g) for g in [1 - k / 10 for k in range(11)]], fill=hi + (255,))
+    if vein:
+        d.line([(bx, by), (bx + dx * L * 0.9, by + dy * L * 0.9)], fill=lerp(col, (190, 205, 140), 0.4) + (255,), width=max(2, SS))
+        for k in range(1, 5):
+            g = k / 5.5
+            for sgn in (1, -1):
+                ex = bx + dx * L * (g + 0.12) + px * sgn * wid * 0.3 * (1 - g)
+                ey = by + dy * L * (g + 0.12) + py * sgn * wid * 0.3 * (1 - g)
+                d.line([(bx + dx * L * g, by + dy * L * g), (ex, ey)], fill=lerp(col, (150, 175, 110), 0.25) + (255,), width=max(1, SS // 2))
+
+
+def salmonberry_spray(seed=43):
+    """
+    A salmonberry shoot (Rubus spectabilis), 2:1, u along it (base at u = 0): a pale brown,
+    slightly zig-zag stem with alternate trifoliate leaves on petioles (a big, doubly toothed,
+    pointed terminal leaflet and two smaller lopsided side ones), fresh mid-green, and a few
+    raspberry-like berries, golden orange to salmon red, hanging on short stalks from the axils.
+    """
+    rng = random.Random(seed)
+    W, H = 512 * SS, 256 * SS
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    n = 5
+    stem = [(0.02 * W + 0.86 * W * i / n, H * 0.5 + (H * 0.035 if i % 2 else -H * 0.035) * (i > 0)) for i in range(n + 1)]
+    for i in range(n):
+        d.line([stem[i], stem[i + 1]], fill=(128, 98, 70, 255), width=int((4.0 - 2.0 * i / n) * SS))
+    old, young = (48, 88, 36), (96, 140, 52)
+    berries = []
+    for i in range(1, n + 1):
+        f = i / n
+        bx, by = stem[i]
+        side = 1 if i % 2 else -1
+        if i == n:
+            ang, pet = 0.0, 0.0
+        else:
+            ang = side * math.radians(rng.uniform(40, 58))
+            pet = H * 0.09
+        ex, ey = bx + math.cos(ang) * pet, by + math.sin(ang) * pet
+        d.line([(bx, by), (ex, ey)], fill=(110, 120, 60, 255), width=int(2 * SS))
+        col = lerp(old, young, f ** 1.5)
+        col = tuple(max(0, min(255, c + rng.randint(-10, 10))) for c in col)
+        sc = (0.95 if i < n else 0.8) * rng.uniform(0.88, 1.05)
+        L = H * 0.37 * sc
+        # side leaflets first (under the terminal one)
+        for sg in (1, -1):
+            _leaf(d, ex, ey, ang + sg * math.radians(rng.uniform(62, 78)), L * 0.72, L * 0.62, lerp(col, (30, 60, 25), 0.12), rng, teeth=11)
+        _leaf(d, ex, ey, ang + math.radians(rng.uniform(-8, 8)), L, L * 0.66, col, rng, teeth=14)
+        if 1 <= i < n:
+            berries.append((bx, by, -side))
+    # berries hang from the axils on short stalks (drawn last: they sit in front of the leaves)
+    palette = [(232, 138, 34), (240, 112, 48), (214, 70, 40), (226, 150, 40)]
+    for k, (bx, by, sd) in enumerate(berries[:4]):
+        if rng.random() < 0.15:
+            continue
+        sx, sy = bx + H * 0.03, by + sd * H * 0.08
+        d.line([(bx, by), (sx, sy)], fill=(100, 110, 55, 255), width=int(1.6 * SS))
+        r = H * 0.058 * rng.uniform(0.9, 1.15)
+        _berry(d, sx + r * 0.3, sy + sd * r * 0.8, r, palette[k % len(palette)], rng)
+    return finish(img, (512, 256))
+
+
+def huckleberry_spray(seed=47):
+    """
+    A red huckleberry spray (Vaccinium parvifolium), 2:1, u along it (base at u = 0): bright green,
+    angular zig-zag twigs (the main one with forking side twigs, all in one plane, as the shrub holds
+    them) with small, smooth-edged oval leaves alternating along them, sparse, light, and round
+    glossy coral-red berries hanging under the twigs.
+    """
+    rng = random.Random(seed)
+    W, H = 512 * SS, 256 * SS
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    twig_col = (92, 132, 58)
+    leaves, berry_at = [], []
+
+    def twig(x, y, ang, length, width, depth):
+        n = max(3, int(length / (H * 0.07)))
+        pts = [(x, y)]
+        for k in range(1, n + 1):
+            zig = (1 if k % 2 else -1) * math.radians(14)
+            a = ang + zig
+            x, y = x + math.cos(a) * length / n, y + math.sin(a) * length / n
+            pts.append((x, y))
+        for k in range(n):
+            d.line([pts[k], pts[k + 1]], fill=twig_col + (255,), width=max(SS, int(width * (1 - 0.5 * k / n))))
+        for k in range(1, n + 1):
+            px, py = pts[k]
+            side = 1 if k % 2 else -1
+            leaves.append((px, py, ang + side * math.radians(rng.uniform(35, 60)), depth, k / n))
+            if depth < 2 and k < n and rng.random() < (0.55 if depth == 0 else 0.3):
+                sa = ang + side * math.radians(rng.uniform(22, 38))
+                sl = length * rng.uniform(0.3, 0.42)
+                # (kept on the card: shortened to what fits above/below)
+                room = (py - 0.08 * H if math.sin(sa) < 0 else 0.92 * H - py) / max(0.2, abs(math.sin(sa)))
+                twig(px, py, sa, min(sl, room), width * 0.7, depth + 1)
+            if rng.random() < 0.12:
+                berry_at.append((px, py, side))
+
+    twig(0.02 * W, H * 0.5, 0.0, 0.92 * W, 3.2 * SS, 0)
+    for (px, py, a, depth, f) in leaves:
+        if not (0.02 * H < py < 0.98 * H):
+            continue
+        col = lerp((58, 104, 40), (110, 156, 60), rng.random() * 0.6 + 0.2 * f)
+        L = H * rng.uniform(0.1, 0.135) * (0.8 if depth else 1.0)
+        _leaf(d, px, py, a, L, L * rng.uniform(0.55, 0.65), col, rng, teeth=6, tooth=0.0, tip=0.45, vein=True)
+    for (px, py, sd) in berry_at:
+        r = H * 0.04 * rng.uniform(0.9, 1.15)
+        sx, sy = px + rng.uniform(-0.5, 0.5) * r, py + sd * r * 1.6
+        if not (r < sy < H - r):
+            continue
+        d.line([(px, py), (sx, sy)], fill=(90, 120, 55, 255), width=max(SS, int(0.8 * SS)))
+        col = lerp((214, 30, 30), (236, 62, 44), rng.random())
+        _berry(d, sx, sy + sd * r * 0.3, r, col, rng, drupelets=False)
+    return finish(img, (512, 256))
+
+
 SPRAYS = {
     # Douglas fir: longer needles, a few stiff side shoots
     "fir_spray": dict(seed=7, old=(34, 64, 36), new=(92, 128, 52)),
@@ -610,12 +768,18 @@ SPRAYS = {
     "moss_strands": moss_strands,
     "salal_spray": salal_spray,
     "maple_spray": maple_spray,
+    "salmonberry_spray": salmonberry_spray,
+    "huckleberry_spray": huckleberry_spray,
 }
 
 
 def main():
     os.makedirs(OUT, exist_ok=True)
+    import sys
+    only = sys.argv[1:]  # (names to write; default all)
     for name, params in SPRAYS.items():
+        if only and name not in only:
+            continue
         path = os.path.join(OUT, f"{name}.png")
         (params() if callable(params) else spray(**params)).save(path, optimize=True)
         print("wrote", path, os.path.getsize(path) // 1024, "KB")

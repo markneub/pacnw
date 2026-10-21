@@ -84,6 +84,21 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (3 segments) with `SalalCards` = `salal_spray.png` (512×256, alternate toothed ovate leaves on a zig-zag stem), ~100 tris.
   Scattered after the ferns (same rng, so nothing else moves): 2 m cell, p = forest × patch noise (0.028 freq) × 1.1, below
   SNOWLINE − 40. ~63k clumps. Phone spawn 0.66 → 0.71M tris, +1 draw.
+  **Berry bushes** (the user: "some berry bushes occasionally"; picked salmonberry + red huckleberry): kind 'ferns' via
+  `KIND` (near pool, fade, shrub billboards, bench row `ferns`), wind sway strength 0.4 (`BERRY`; ferns' 2.5 at 2 m tall
+  swung ~0.7 m). Textures in make_foliage.py (`python3 tools/make_foliage.py <names>` now writes only those; shared
+  `_leaf`/`_berry` helpers; berries are drawn ~1.5-2x life size or they vanish past a few metres): `salmonberry_spray`
+  (trifoliate toothed leaves, orange to salmon-red raspberry-like berries from the axils) and `huckleberry_spray`
+  (zig-zag green twigs, small oval leaves, round glossy red berries). Models (build_assets.py, no other asset's bytes
+  changed): `salmonberry` (13 pale `Cane` canes 1.5-2.5 m, upright inside / arching outside, `SalmonberryCards` every
+  ~0.1 along the upper 70%, folded 0.3) and `huckleberry` (`red_huckleberry`: 6 thin angular `HuckStem` stems 0.9-1.7 m
+  with near-horizontal spray layers on twigs, `HuckleberryCards` folded 0.25). `CARD_TINT` near neutral (0.8) so the
+  berries stay red. Placement `addBerryBushes` (vegetation.js, hash, no rng, after `addFallsGreenery`): salmonberry
+  thickets (3 m grid, clump noise) by the creeks (densest within ~14 m of the water) and in wet hollows near lake/pond
+  level, a few at forest edges; red huckleberry out of half the stump tops (y + 0.95 × stump scale), on ~45% of
+  nurse-log spots, and sparse on the forest floor (7 m grid). All below SNOWLINE − 15…25, off sand, rock, the trail.
+  ~3.0k salmonberry, ~3.1k huckleberry. Views (sun): salmonberry `x=74.68&z=236.27&yaw=1.68&pitch=-0.05`, huckleberry
+  on a stump `x=-126.8&z=-60.3&yaw=0&pitch=0.12`. Not yet phone-benched (`?bench=ferns`).
   **Hanging moss** (`moss=` in `branchy_conifer`, own rng `seed + 517`, so shapes are unchanged): 2 crossed vertical
   `MossCards` (`moss_strands.png`, 512×256, u = down: 6–8 ropy locks pinched at the top) 0.8–1.8 m long, from 85% of
   dead stubs and some lower-crown branches (t < 0.5) of fir, hemlock and cedar (not snowy trees or saplings). Tint

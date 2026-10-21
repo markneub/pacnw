@@ -17,7 +17,7 @@ import { streamRocks } from './streamwater.js';
 import { rockFieldAt, valueNoise } from './rockyslope.js';
 import { loadTick } from './loadprogress.js';
 
-const KIND = (name) => (/^(fern|salal|pebbles)/.test(name) ? 'ferns'
+const KIND = (name) => (/^(fern|salal|salmonberry|huckleberry|pebbles)/.test(name) ? 'ferns'
   : /^(boulder|log|stump|signpost|cairn|bench|footbridge|boardwalk)/.test(name) ? 'rocks' : 'trees');
 
 /** Metres from the edge of the nearest stream's water (negative in it). */
@@ -213,6 +213,9 @@ const CARD_TINT = {
   FernCards: [0.8, 0.85, 0.74],
   MossCards: [0.55, 0.58, 0.5],
   SalalCards: [0.72, 0.76, 0.68],
+  // (berry shrubs: near neutral, or the linear-light multiply darkens the berries toward brown)
+  SalmonberryCards: [0.8, 0.82, 0.76],
+  HuckleberryCards: [0.8, 0.83, 0.76],
   MapleCards: [0.62, 0.7, 0.5],
   PineCards: [0.4, 0.47, 0.32], // shore pine: dark, a little yellower than the firs
 };
@@ -259,7 +262,7 @@ function convertMaterial(src, assetName, lod, cache) {
   // needles shed water and scatter light: keep sky reflections off foliage
   if (/Needles|Foliage|Fern|Cards/.test(src.name)) mat.envMapIntensity = 0.35;
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
-  else if (kind === 'ferns' && !pebble) addWindSway(mat, 2.5, undefined, 'fade');
+  else if (kind === 'ferns' && !pebble) addWindSway(mat, BERRY.test(assetName) ? 0.4 : 2.5, undefined, 'fade'); // (the berry shrubs are 2 m tall: sway goes with height²)
   // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
   else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : seat ? 0 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : /BrokenWood|RotWood/.test(src.name) ? 0.1 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0, bleach: /Bark|Wood/.test(src.name) });
   if (cards) patchCards(mat);
@@ -931,7 +934,9 @@ export async function bakeTreeImpostors(renderer, protos, { lowPower }) {
   return bakeImpostors(renderer, trees, { frameW: lowPower ? 128 : 192 });
 }
 
-/** Shrubs (ferns, salal) that get a billboard far tier (see impostorMaterial's `shrubs`). */
+const BERRY = /^(salmonberry|huckleberry)/;
+
+/** Shrubs (ferns, salal, berry bushes) that get a billboard far tier (see impostorMaterial's `shrubs`). */
 const SHRUB = (name) => KIND(name) === 'ferns' && !name.startsWith('pebbles');
 
 /** The same bake for the shrubs: low and wide, so square frames. */
@@ -1012,6 +1017,73 @@ function addFallsGreenery(placements, trail) {
   }
 }
 
+/**
+ * Berry bushes (hash, no scatter rng). Salmonberry: thickets along the creeks (densest a few metres
+ * off the water), round wet hollows near the lake and ponds, and now and then at a forest edge.
+ * Red huckleberry: as it grows in the PNW, out of the tops of stumps and along nurse logs, and
+ * sparsely on the forest floor. Not in the snow, on sand or rock.
+ */
+function addBerryBushes(placements, trail) {
+  const put = (name, p) => (placements[name] ||= []).push(p);
+  const half = WORLD_SIZE / 2 - 20;
+  const STEP = 3;
+  for (let gz = -half; gz < half; gz += STEP) {
+    for (let gx = -half; gx < half; gx += STEP) {
+      const x = gx + hash2(gx - 1.9, gz + 0.3) * STEP;
+      const z = gz + hash2(gx + 0.6, gz - 2.7) * STEP;
+      const hv = hash2(x * 1.7, z * 0.9);
+      // thickets: clumps of a few metres in patches of a few tens
+      const clump = THREE.MathUtils.smoothstep(valueNoise(x * 0.22 + 5, z * 0.22 - 3) * 0.65 + valueNoise(x * 0.05 - 2, z * 0.05 + 8) * 0.35, 0.45, 0.68);
+      if (hv > 0.6 * clump + 0.02) continue; // (cheap out before the terrain lookups)
+      const h = heightAt(x, z);
+      if (h > SNOWLINE - 25 || sandAt(x, z) > 0.1) continue;
+      const level = waterLevelAt(x, z);
+      if (h < level + 0.4) continue;
+      const wet = Math.max(1 - THREE.MathUtils.smoothstep(offStream(x, z), 1.5, 14), 1 - THREE.MathUtils.smoothstep(h - level, 0.6, 3));
+      const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
+      const edge = THREE.MathUtils.smoothstep(f, 0.2, 0.35) * (1 - THREE.MathUtils.smoothstep(f, 0.45, 0.6)); // forest edges and gaps
+      const p = (0.55 * wet + 0.08 * edge) * clump;
+      if (hv > p) continue;
+      const slope = slopeAt(x, z);
+      if (slope > 0.4 || rockFieldAt(x, h, z, slope) > 0.44 || snowAmount(x, z, h, slope) > 0.05) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.8 || offStream(x, z) < 1.0) continue;
+      put('salmonberry', { x, y: groundAt(x, z) - 0.05, z, rotY: hash2(z, x) * 6.28, scale: 0.7 + 0.5 * hash2(x + 4, z - 4), tint: hash2(x - 6, z + 1) });
+    }
+  }
+  // red huckleberry: out of stump tops (stump.glb: the cut face's middle ~1.0 m above its origin)
+  for (const s of placements.stump ?? []) {
+    if (hash2(s.x * 3.1, s.z) > 0.5 || s.y > SNOWLINE - 15) continue;
+    put('huckleberry', { x: s.x, y: s.y + 0.95 * s.scale, z: s.z, rotY: hash2(s.z, s.x) * 6.28, scale: 0.85 + 0.35 * hash2(s.x, s.z + 1), tint: hash2(s.x + 2, s.z) });
+  }
+  // ... and along the tops of nurse logs
+  for (const n of placements.log_nurse ?? []) {
+    if (n.y > SNOWLINE - 15) continue;
+    const [dx, dz] = n.axis;
+    for (let k = 0; k < 3; k++) {
+      if (hash2(n.x + k * 7.3, n.z - k) > 0.45) continue;
+      const u = 0.2 + 0.6 * hash2(n.x - k, n.z + k * 3.7);
+      const along = (u - 0.5) * NURSE.length * n.scale;
+      put('huckleberry', { x: n.x + dx * along, y: n.y + nurseAt(u).top * n.scale - 0.08, z: n.z + dz * along, rotY: hash2(n.z + k, n.x) * 6.28, scale: 0.6 + 0.4 * hash2(n.x, n.z + k), tint: hash2(n.x + k, n.z) });
+    }
+  }
+  // ... and here and there on the forest floor
+  const HSTEP = 7;
+  for (let gz = -half; gz < half; gz += HSTEP) {
+    for (let gx = -half; gx < half; gx += HSTEP) {
+      const x = gx + hash2(gx + 3.7, gz - 1.1) * HSTEP;
+      const z = gz + hash2(gx - 5.3, gz + 2.9) * HSTEP;
+      const f = nForest(x * 0.0045, z * 0.0045) * 0.5 + 0.5;
+      if (hash2(x * 0.8, z * 1.9) > 0.12 * THREE.MathUtils.smoothstep(f, 0.35, 0.6)) continue;
+      const h = heightAt(x, z);
+      if (h > SNOWLINE - 25 || h < waterLevelAt(x, z) + 1 || sandAt(x, z) > 0.1) continue;
+      const slope = slopeAt(x, z);
+      if (slope > 0.4 || rockFieldAt(x, h, z, slope) > 0.44) continue;
+      if (trail.distanceTo(x, z) < TRAIL_WIDTH + 0.8 || offStream(x, z) < 1.5) continue;
+      put('huckleberry', { x, y: groundAt(x, z) - 0.05, z, rotY: hash2(z + 1, x) * 6.28, scale: 0.75 + 0.45 * hash2(x - 2, z), tint: hash2(x, z + 5) });
+    }
+  }
+}
+
 function addSlopeGrowth(placements, trail) {
   const half = WORLD_SIZE / 2 - 20;
   const put = (name, p) => (placements[name] ||= []).push(p);
@@ -1075,6 +1147,7 @@ export async function placeVegetation(protos, trail) {
   addSlopeGrowth(placements, trail);
   addTalus(placements, trail);
   addFallsGreenery(placements, trail);
+  addBerryBushes(placements, trail);
   // no loose stones on the footbridges' berms (filtered after the scatter: its rng sequence stays put)
   for (const name of Object.keys(placements)) {
     if (!name.startsWith('pebbles')) continue;
