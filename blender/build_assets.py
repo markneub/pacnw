@@ -195,10 +195,10 @@ def mats():
         "huckleberry_cards": card_material("HuckleberryCards", os.path.join(ROOT, "public", "textures", "foliage", "huckleberry_spray.png")),
         "cane": material("Cane", (0.45, 0.36, 0.27)),  # salmonberry canes: pale, peeling tan-brown
         "huck_stem": material("HuckStem", (0.3, 0.44, 0.2)),  # red huckleberry: bright green, angular twigs
-        # berries (3D: painted on the cards they read flat). Salmonberries are faceted (flat-shaded: the
-        # facets read as drupelets), golden or salmon red; red huckleberries smooth and glossy.
-        "salmon_gold": material("SalmonDrupesGold", (0.93, 0.56, 0.12), 0.45),
-        "salmon_red": material("SalmonDrupesRed", (0.86, 0.3, 0.14), 0.45),
+        # berries (3D: painted on the cards they read flat), smooth-shaded (names ending "Berry"):
+        # salmonberries golden or salmon red, red huckleberries glossy
+        "salmon_gold": material("SalmonGoldBerry", (0.93, 0.56, 0.12), 0.45),
+        "salmon_red": material("SalmonRedBerry", (0.86, 0.3, 0.14), 0.45),
         "huck_berry": material("HuckBerry", (0.85, 0.1, 0.1), 0.3),
         "fern_cards": card_material("FernCards", os.path.join(ROOT, "public", "textures", "foliage", "fern_frond.png")),
         "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
@@ -900,12 +900,12 @@ def salmonberry(M, name, seed, canes=13):
             sd = Vector((-d.y, d.x, 0.0)).normalized()
             _card(b, leaves, p + d * (0.5 * cl), d, sd, cl, cl * 0.5, rng.uniform(0.06, 0.16), (0.0, 0.0), fold=0.3)
             if brng.random() < 0.4:
-                # a berry on a short stalk from the leaf's axil, hanging below the cane (the facets of a
-                # coarse ball read as drupelets; ~2x life size, or they vanish a few metres off)
+                # a berry on a short stalk from the leaf's axil, hanging below the cane (~2x life size, or
+                # they vanish a few metres off)
                 hang = p + (side * -sgn * 0.6 + out * 0.4).normalized() * 0.03 - Vector((0.0, 0.0, 0.06))
                 _stick(b, M["huck_stem"], p, hang + Vector((0.0, 0.0, 0.015)), 0.003, sides=3)
                 _berry(b, M["salmon_gold"] if brng.random() < 0.5 else M["salmon_red"], hang - Vector((0.0, 0.0, 0.01)),
-                       brng.uniform(0.018, 0.022), elong=1.15, segs=6, rings=4)
+                       brng.uniform(0.018, 0.022), elong=1.15, segs=8, rings=5)
             t += rng.uniform(0.08, 0.12)
         tip = at(1.0)
         d = (at(1.0) - at(0.9)).normalized()

@@ -90,10 +90,10 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `_leaf` helper): `salmonberry_spray` (trifoliate toothed leaves) and `huckleberry_spray` (zig-zag green twigs, small
   oval leaves). **Berries are 3D** (the user: painted ones "are all 2D"): `_berry()` (build_assets.py, a closed lat-long
   ball) on a thin `_stick` stalk, ~2× life size (life size vanished past a few metres), from each model's own rng
-  (`seed + 7`, so canes/sprays don't move): salmonberry 40% of leaf axils, r 1.8–2.2 cm × 1.15 tall, 6 × 4 facets,
-  flat-shaded so the facets read as drupelets, `SalmonDrupesGold`/`SalmonDrupesRed`; huckleberry 2–5 per spray hanging
+  (`seed + 7`, so canes/sprays don't move): salmonberry 40% of leaf axils, r 1.8–2.2 cm × 1.15 tall, 8 × 5, smooth
+  (`SalmonGoldBerry`/`SalmonRedBerry`; flat-shaded 6 × 4 "drupelet" facets just looked faceted, the user); huckleberry 2–5 per spray hanging
   3–5.5 cm under it, r 0.9–1.1 cm, 5 × 3, `HuckBerry` smooth + glossy (roughness 0.3; names ending "Berry" are smooth in
-  Blender and not flatShading in JS). Tris: salmonberry ~3.2k, huckleberry ~3.0k (were 1.4k / 0.8k with painted berries). Models (build_assets.py, no other asset's bytes
+  Blender and not flatShading in JS). Tris: salmonberry ~4.6k, huckleberry ~3.0k (were 1.4k / 0.8k with painted berries). Models (build_assets.py, no other asset's bytes
   changed): `salmonberry` (13 pale `Cane` canes 1.5-2.5 m, upright inside / arching outside, `SalmonberryCards` every
   ~0.1 along the upper 70%, folded 0.3) and `huckleberry` (`red_huckleberry`: 6 thin angular `HuckStem` stems 0.9-1.7 m
   with near-horizontal spray layers on twigs, `HuckleberryCards` folded 0.25). `CARD_TINT` near neutral (0.8) so the
