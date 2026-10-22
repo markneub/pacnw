@@ -348,7 +348,7 @@ export async function buildTrail({ route: baked = null } = {}) {
 
   // Forest Road 2840 (road.js): where the trail runs on it, no tread or bench cut of its own (the
   // road is the walking surface), and a junction (a signed stop) where it joins and where it leaves
-  // (a short step off it, onto the footbridge beside a ford, is still the same stretch)
+  // (a short step off it is still the same stretch)
   const onRoad = points.map((p) => roadAt(p.x, p.y).d < 1.5);
   const shared = [];
   for (let i = 0; i < points.length; i++) {
@@ -361,7 +361,19 @@ export async function buildTrail({ route: baked = null } = {}) {
   for (const { a, b } of shared) {
     for (const index of [a, b]) {
       if (index === 0 || index === points.length - 1) continue;
-      stops.push({ name: 'junction', label: ROAD_NAME, junction: true, index, x: points[index].x, z: points[index].y, leaves: index === b ? 1 : -1 });
+      const leaves = index === b ? 1 : -1;
+      // its sign stands on the leg off the road, just clear of the shoulder, on the side away from the
+      // road (side −1: the far side from the usual, turned round to face the trail: vegetation.js, signs.js)
+      let at = index;
+      while (at > 2 && at < points.length - 3 && roadAt(points[at].x, points[at].y).d < ROAD_FLAT + 1.2) at += leaves;
+      const p = points[at];
+      const q = points[at + 2];
+      const o = points[at - 2];
+      const l = Math.hypot(q.x - o.x, q.y - o.y);
+      const nx = -(q.y - o.y) / l;
+      const nz = (q.x - o.x) / l;
+      const side = roadAt(p.x - nx * 2, p.y - nz * 2).d > roadAt(p.x + nx * 2, p.y + nz * 2).d ? -1 : 1;
+      stops.push({ name: 'junction', label: ROAD_NAME, junction: true, index, signAt: at, side, x: points[index].x, z: points[index].y, leaves });
     }
   }
 

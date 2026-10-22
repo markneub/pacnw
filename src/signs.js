@@ -48,7 +48,7 @@ export function signTexts(trail) {
     rows: stops.filter((s, j) => j !== k && !s.junction) // (a road junction is signed, not a destination)
       .map((s) => ({ s, m: along(points, stop.index, s.index) }))
       .sort((p, q) => p.m - q.m).slice(0, MAX_ROWS).sort((p, q) => p.s.index - q.s.index)
-      .map(({ s, m }) => [label(s), miles(m), (s.index > stop.index ? -1 : 1) * (stop.name === 'falls' ? -1 : 1)]), // (that one stands on the far side: vegetation.js)
+      .map(({ s, m }) => [label(s), miles(m), (s.index > stop.index ? -1 : 1) * (stop.side ?? (stop.name === 'falls' ? -1 : 1))]), // (some stand on the far side: vegetation.js)
   }));
 }
 
