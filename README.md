@@ -13,7 +13,8 @@ down the tunnel the forest shows through its other end. Walk out of it and you'r
 you went in by, and day has turned to night: a full moon low over the sea, a sky full of stars, moonlight falling
 through the crowns. Go through again and it's day.
 
-Down on the beach a wrecked ship lies heeled over in the surf, and east of the dunes a lighthouse stands on a rocky
+Hawks and an eagle circle over the clearings and the lake, a pair of ravens follows you up into the snow, and gulls
+wheel over the surf. Down on the beach a wrecked ship lies heeled over in the surf, and east of the dunes a lighthouse stands on a rocky
 headland above sea stacks; at night its beams sweep over the water. In the cabin, a handwritten note waits on the
 table. Tap the map in the corner (or press **M**) and a folded paper map opens out, showing where you are.
 

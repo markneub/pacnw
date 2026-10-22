@@ -35,6 +35,7 @@ import { LIP } from './fallsshape.js';
 import { planCoast, buildCoast, loadCoastAssets } from './coast.js';
 import { buildSeats } from './seat.js';
 import { createHint } from './hint.js';
+import { buildBirds } from './birds.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -263,6 +264,9 @@ async function init() {
   const coast = await buildCoast(coastPlan, coastReady);
   scene.add(coast.group);
   shadeGround(coast.headland, veg.canopyAt); // (its copy of the ground for past the far plane, shaded like the tiles)
+  // hawks, an eagle, ravens and gulls overhead (birds.js)
+  const birds = off.has('birds') ? null : buildBirds({ canopyAt: veg.canopyAt });
+  if (birds) scene.add(birds.group);
   const player = new Player(camera, renderer.domElement, (pos, r) => {
     if (cave.state.inside) {
       cave.collide(pos, r); // (in the tunnel the trees overhead don't count)
@@ -612,6 +616,7 @@ async function init() {
     cave.update(dt, t, camera, renderer);
     falls.update(dt, t, weather, camera);
     weather.update(dt, t, camera);
+    birds?.update(dt, t, camera, weather.night);
     updateGroundDetail(camera, camera.position.z > 650); // (snow's detail slot shows sand at the coast)
 
     // deep in the cave with only the far end in view, the world's detail follows the view out of it
@@ -642,7 +647,7 @@ async function init() {
   });
 
   // (scripted screenshots: one frame of the loop, also after ?still has stopped it)
-  window.__pacnw = { tick: () => tick(), cave, scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, coast, paperMap, worldSize: WORLD_SIZE };
+  window.__pacnw = { tick: () => tick(), cave, scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, coast, birds, paperMap, worldSize: WORLD_SIZE };
 }
 
 /**

@@ -1026,6 +1026,23 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   it, the user). On the paper map the road is a cased line (brown/cream) under the trail's red dashes. Views (sun): east
   junction `x=112.1&z=-181.7&yaw=0.57&pitch=-0.1`, ford `x=-1&z=-222.5&yaw=-1.42&pitch=-0.2`, forest stretch
   `x=-420.1&z=-5.9&yaw=-0.85&pitch=-0.08`, west junction `x=-128.2&z=-165.3&yaw=2.65&pitch=-0.08`.
+- **Birds** (`src/birds.js`, the user: "birds circling", then elk; `?off=birds`): 2 red-tailed hawks, a bald eagle,
+  a raven pair and 5 western gulls, one InstancedMesh per species (+4 draws, ~2.9k tris; frustumCulled off). Geometry is
+  built in JS (no Blender), life-size shapes × `size` 1.25–1.4 (life size was a 6 px speck at 70 m): wings from a planform
+  (leading/trailing edge z at span stations, 4 rows across the chord, slotted primaries as tapered strips), a fan tail,
+  a 6-sided spindle body; wings/tail are two layers (top, underside, coloured apart by vertex colour: the hawk's patagial
+  bar and carpal commas, the gull's black tips). Flapping in the vertex shader (`aWing` = 1 on wings, per-instance
+  `aBird` = phase, amplitude, dihedral, wrist bend; shoulder + wrist rotations, the hand sweeping back on the upstroke).
+  Down-facing surfaces add hemisphere sky × 0.55 + sun × 0.22 (light through the feathers): lit only by the ground,
+  pale undersides were black. Flight on the CPU (no allocation): steer along a circle round a drifting thermal (pulled
+  onto it: from far away that's straight at it), yaw rate eased, **bank from the turn** (up = gravity + centripetal), height
+  = the thermal's base over the ground + a slow swell, never under `clear` (gulls 7 m over sand/sea, everyone 42 m over
+  forest), flap bursts (`burst`/`flaps`) and while climbing. Every 50–130 s a bird **replans**: of 10 spots 30–140 m from the
+  player inside its country (`home`: hawks below the snow, eagle by the lake/coast, ravens anywhere, gulls within 170 m of the
+  shoreline) it takes the most open (`canopyAt` + distance): under closed crowns you can't see them. At the first update every
+  bird is placed on a thermal near the player. Hidden at night (they roost). Views (sun): lake `x=110&z=470&yaw=-0.67&pitch=0.5`,
+  beach `x=50&z=962&yaw=3.14&pitch=0.3`. Test trick: free camera + `__pacnw.birds.update(0.05, t, camera, false)` in a loop,
+  then `birds.update = () => {}` to freeze them for a still.
 - **Night** (via the cave, or `?night`; `weather.setNight`): a clear night under a full moon low in the SSW over the sea
   (`MOON_DIR` (−0.22, 0.45, 0.87), `MOON_COLOR` silver-blue). The key-light direction is no longer baked into shaders:
   `shared.uKeyDir/uKeyColor/uKeyOff` (sun or moon) drive the dapple (`patchSunlight`), glitter (`uGlDir/uGlColor`), the
