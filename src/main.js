@@ -30,7 +30,7 @@ import { Post } from './post.js';
 import { planCabin, buildCabin, loadCabinAssets } from './cabin.js';
 import { loadWorld } from './world.js';
 import { planCave, buildCave, loadCaveAssets } from './cave.js';
-import { buildFalls, fallsBlocked } from './falls.js';
+import { buildFalls, fallsBlocked, cliffLedges } from './falls.js';
 import { LIP } from './fallsshape.js';
 import { planCoast, buildCoast, loadCoastAssets } from './coast.js';
 import { buildSeats } from './seat.js';
@@ -206,7 +206,7 @@ async function init() {
   };
   const exclude = (x, z, margin, tree) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin) || coastPlan.blocked(x, z, margin, tree)
     || fallsBlocked(x, z, margin, tree) || roadBlocked(x, z, margin, tree);
-  const prepared = await prepareVegetation(protos, trail, { exclude, placements: world?.placements });
+  const prepared = await prepareVegetation(protos, trail, { exclude, placements: world?.placements, extra: cliffLedges() });
   await sheet.setLand(prepared.canopyAt, (f) => loadTick(f));
   step('map');
 

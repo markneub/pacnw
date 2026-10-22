@@ -928,14 +928,23 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   the channel's last segment interpolated a notch down the face; applied everywhere it raised the whole east arm into
   fins). The plunge pool (`poolBowl`, after the carve, so it isn't "filled") is a pond at `POOL_LEVEL`; stream points
   from the lip to the pool's outflow are `drop` (no ribbon; the ribbon keeps `s` as `along` for the rock texture) and
-  the creek widens ×1.9 over its last 25 m (a 7.5 m sheet). **Cliff mesh** (`buildCliff`, terrain material, 248
-  columns 0.5 m apart × 73 vertices, ~36k tris): from under the alcove floor up its back wall, the ceiling out to the
+  the creek widens ×1.9 over its last 25 m (a 7.5 m sheet). **Cliff mesh** (`buildCliff`, terrain material, 497
+  columns 0.25 m apart × 117 vertices, ~115k tris): from under the alcove floor up its back wall, the ceiling out to the
   lip (8.5 m up), the face (basalt columns ~1.1 m set back by their own draw, a ledge, moss patches, wet and dark by the
   falls) to the rim, then back over the top until it dips under the terrain. Columns run back along the line's normals
   **smoothed over ±8 m** (`sx/sz`: the wobble crossed neighbouring columns and folded the top). `aHollow` −3 = rock
   photo over the vertex colours (rockyslope.js `keepCol`), −2.4 on the top band; **< −2.3 skips the trail cutout
   discard** (the terrain shader cut everything over the trail by xz: the whole ceiling and the arms' faces were
   missing). Debug trick: hide `terrain` or `falls cliff` in a free-camera render (`scene.getObjectByName`).
+  **Basalt flows** (the user: the face was "boring and unrealistic": a flat curtain wall with even bright moss blobs):
+  `basalt(φ, y)` stacks three lava flows (tops `FLOWS` = floor + 21 / + 34 m, level with a slight eastward dip; the
+  alcove is the soft layer under the first): each a **colonnade** (columns ~1.2 m, faceted ridges, cross-jointed into
+  0.6–1.5 m blocks, 13% fallen out) under an **entablature** (0.55 m crooked columns fanning from vertical, hackly, set
+  back, darker, iron-stained in places), and a recessed **interbed** above each flow (0.25–1.3 m deep by noise: an
+  unbroken shelf read as terraces) whose shelf gets moss and, via `cliffLedges()` (added after the clear-zone filter:
+  `prepareVegetation({ extra })`), ferns/salal in patches (none within 6 m of the water). Colour per column tone, joints
+  and missing blocks darker, seeps (dark mossy streaks down from the interbeds), lichen near the rim; the rim breaks
+  unevenly (column heads up to 1.2 m lower). Columns now every 0.25 m (was 0.5) × 88 face rows (was 44): ~36k → ~115k tris.
   **Shade:** `shared.uFallsShade` (RG half float, 1 m: occlusion, ceiling height) darkens everything under the overhang
   in `patchSunlight` (direct × (1 − occ), indirect × (1 − 0.7 occ)) and shelters rain/snow (weather.js `sheltered`).
   **Water:** three sheets on the free-fall parabola (2.2 m/s off the lip, ~3.1 s, ~7 m out; spreading 1.2 m/s): outer,

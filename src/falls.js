@@ -35,17 +35,103 @@ const hash = (n) => {
 };
 
 const C = (hex) => new THREE.Color(hex);
-const BASALT = C(0x3e3c37);
-const BASALT_DARK = C(0x2a2926);
-const MOSS = C(0x4a6129);
-const MOSS_LIGHT = C(0x6a7f34);
+const BASALT = [C(0x45413a), C(0x3a3b3a), C(0x4b4036), C(0x403d39)]; // grey-brown, bluish, warm, plain
+const BASALT_DARK = C(0x262523);
+const RUST = C(0x554334); // iron staining in the entablature
+const LICHEN = C(0x7d8270);
+const MOSS = C(0x3f5424);
+const MOSS_LIGHT = C(0x5a6b2c);
 
 const NB = 6; // alcove back wall (from under the floor)
 const NC = 9; // its ceiling, back to the lip
-const NF = 44; // the face
+const NF = 88; // the face
 const NT = 14; // the top, back to where it dips under the terrain
 const NV = NB + NC + NF + NT;
 const PHI_MAX = 62;
+
+/**
+ * The face's basalt, as at Silver Falls: three lava flows stacked up the cliff, each a colonnade
+ * (broad, regular columns, cross-jointed into blocks, some fallen out) under an entablature
+ * (narrow, crooked, fanning columns, hackly and set back), with a weathered interbed between flows
+ * recessed ~1 m, so the top of each flow's columns is a shelf (moss, ferns). The alcove under the
+ * overhang is the soft layer under the first flow. The flow tops are level (they dip a little east).
+ * How far the rock is set back into the cliff at (φ, y), and what's there, into `rk` (shared).
+ */
+const FLOWS = [FALLS.floor + 21, FALLS.floor + 34];
+const flowTop = (i, phi) => FLOWS[i] + 0.02 * phi + 0.7 * Math.sin(phi * 0.05 + i * 2.1) + 0.3 * Math.sin(phi * 0.17 + i);
+const rk = { depth: 0, joint: 0, ent: 0, unit: 0, t: 0, shelf: 0, band: 0, col: 0, thick: 0 };
+function basalt(phi, y, y0, rim) {
+  // which flow, and how far up it
+  let lo = y0;
+  let hi = rim;
+  let unit = 0;
+  for (let i = 0; i < FLOWS.length; i++) {
+    const b = flowTop(i, phi);
+    if (b < y0 + 3 || b > rim - 3) continue;
+    if (y < b) {
+      hi = b;
+      break;
+    }
+    lo = b;
+    unit = i + 1;
+  }
+  const t = (y - lo) / Math.max(1, hi - lo);
+  // colonnade below, entablature above (the boundary wavy, its share per flow)
+  const split = 0.38 + 0.18 * hash(unit * 17 + Math.floor(phi / 23)) + 0.06 * Math.sin(phi * 0.31 + unit);
+  const ent = smooth(split - 0.04, split + 0.04, t);
+  let depth;
+  let joint;
+  let col;
+  {
+    // colonnade: columns 0.9–1.6 m, faceted (a ridge down the middle), cross joints every 0.6–1.5 m
+    const q = phi + 0.35 * Math.sin(phi * 0.37 + unit * 3);
+    const c = Math.floor(q / 1.2);
+    const f = q / 1.2 - c;
+    const ridge = 1 - Math.abs(2 * f - 1);
+    const hb = 0.6 + 0.9 * hash(c * 7 + unit * 131);
+    const b = Math.floor((y - lo + hash(c * 3 + unit) * hb) / hb);
+    const gone = hash(c * 11 + b * 37 + unit * 71) < 0.13 ? 0.3 + 0.4 * hash(c + b * 5) : 0;
+    const fb = (y - lo + hash(c * 3 + unit) * hb) / hb - b;
+    const cross = smooth(0.08, 0, fb) * 0.1; // (the joint between blocks)
+    const dc = 0.1 + 0.55 * hash(c * 13 + unit * 29) - 0.2 * ridge + 0.14 * smooth(0.25, 0, ridge) + gone + cross;
+    // entablature: narrow (0.4–0.7 m), crooked columns fanning from the vertical, broken small
+    const tilt = 0.7 * Math.sin(phi * 0.09 + unit * 1.7) + 0.3 * Math.sin(phi * 0.27);
+    const qe = phi + (y - lo) * tilt + 0.25 * Math.sin(y * 0.9 + phi * 0.2);
+    const ce = Math.floor(qe / 0.55);
+    const fe = qe / 0.55 - ce;
+    const re = 1 - Math.abs(2 * fe - 1);
+    const de = 0.35 + 0.35 * hash(ce * 5 + unit * 19 + Math.floor(y / 1.1) * 3) - 0.1 * re + 0.08 * smooth(0.3, 0, re)
+      + 0.15 * (noise3(phi * 0.6, y * 0.6, unit) * 0.5 + 0.5);
+    depth = dc + (de - dc) * ent;
+    joint = (smooth(0.25, 0, ridge) + cross * 6 + (gone > 0 ? 1 : 0)) * (1 - ent) + smooth(0.3, 0, re) * ent;
+    col = c * (1 - ent) + ce * ent;
+  }
+  // the interbed above each flow: recessed ~1 m (the flow's column tops below it are a shelf)
+  let band = 0;
+  let shelf = 0;
+  for (let i = 0; i < FLOWS.length; i++) {
+    const b = flowTop(i, phi);
+    if (b < y0 + 3 || b > rim - 3) continue;
+    const w = 1.1 + 0.6 * Math.sin(phi * 0.13 + i);
+    band = Math.max(band, smooth(b - 0.25, b + 0.15, y) * (1 - smooth(b + w, b + w + 0.5, y)));
+    shelf = Math.max(shelf, smooth(b - 0.7, b - 0.1, y) * (1 - smooth(b + 0.1, b + 0.5, y)));
+  }
+  // (deep in places, almost closed in others: a shelf that never breaks reads as a terrace)
+  const thick = smooth(0.2, 0.75, noise3(phi * 0.045, unit * 3.3, 4.2) * 0.5 + 0.5);
+  depth += band * (0.25 + 1.05 * thick) * (0.85 + 0.3 * hash(Math.floor(phi / 3) + 300));
+  // the rim: weathered back and broken off unevenly
+  depth += 0.5 * smooth(rim - 2.5, rim - 0.2, y);
+  rk.depth = depth;
+  rk.joint = Math.min(1, joint);
+  rk.ent = ent;
+  rk.unit = unit;
+  rk.t = t;
+  rk.shelf = shelf * (0.3 + 0.7 * thick);
+  rk.thick = thick;
+  rk.band = band;
+  rk.col = col;
+  return rk;
+}
 
 /** The profile of one column: [d, y, part] (part 0 alcove, 1 face, 2 top), from the alcove's foot up over the rim. */
 function profile(p, out) {
@@ -87,11 +173,11 @@ function profile(p, out) {
     const y = i === NT - 1 ? rawGroundAt(x, z) - 0.4 : Math.max(fallsTopAt(x, z), rawGroundAt(x, z)) + 0.03;
     out[k++] = [d, y, 2];
   }
-  return { F, D, a };
+  return { F, D, a, y0, rim };
 }
 
 export function buildCliff() {
-  const cols = LINE.filter((p, i) => i % 2 === 0 && Math.abs(p.phi) <= PHI_MAX);
+  const cols = LINE.filter((p) => Math.abs(p.phi) <= PHI_MAX);
   const nc = cols.length;
   const pos = new Float32Array(nc * NV * 3);
   const col = new Float32Array(nc * NV * 3);
@@ -104,28 +190,26 @@ export function buildCliff() {
   const lw = [0, 0, 0, 0];
   for (let ci = 0; ci < nc; ci++) {
     const p = cols[ci];
-    const { F, D, a } = profile(p, prof);
-    // basalt columns ~1.1 m wide, each set out from the face by its own draw (sharper at the edges
-    // with the 0.5 m spacing they are drawn at), and a ledge or two across them
-    const cid = Math.floor((p.phi + 0.3 * Math.sin(p.phi * 0.37)) / 1.1);
-    const out = 0.15 + 0.55 * hash(cid) + 0.25 * hash(cid * 3 + 1) * hash(cid * 7 + 2);
-    const ledgeY = F + 14 + 6 * hash(Math.floor(p.phi / 9) + 40);
+    const { F, a, y0, rim } = profile(p, prof);
     const end = Math.min(1, (PHI_MAX - Math.abs(p.phi)) / 3); // (the last metres tuck under the ground)
     const k = cliffShare(sAt(p.x, p.z));
+    // the rim's broken edge: each column's head a little lower (blocks fallen off the top)
+    const cTop = Math.floor((p.phi + 0.35 * Math.sin(p.phi * 0.37 + 6)) / 1.2);
+    const drop = k * (0.2 + 1.0 * hash(cTop * 5 + 3) * hash(cTop * 9 + 1));
     for (let j = 0; j < NV; j++) {
       let [d, y, part] = prof[j];
       let x = p.x + p.sx * d;
       let z = p.z + p.sz * d;
+      let r = null;
       if (part !== 2) {
-        // rough rock: blocky lumps on the ceiling, columns on the face, a ledge set back
+        // rough rock: blocky lumps on the ceiling, the flows' columns on the face
         const n = noise3(x * 0.35, y * 0.35, z * 0.35) * 0.6 + noise3(x * 1.1, y * 1.1 + 5, z * 1.1) * 0.25;
-        let push = n * (part === 0 ? 0.45 : 0.3);
+        let push = n * (part === 0 ? 0.45 : 0.18);
         if (part === 1) {
-          const ledge = smooth(ledgeY - 0.6, ledgeY, y) * (1 - smooth(ledgeY + 1.5, ledgeY + 3, y));
+          y -= drop * smooth(rim - 3, rim - 0.25, y);
+          r = basalt(p.phi, y, y0, rim);
           const foot = 1 - smooth(F + 1, F + 4, y); // (columns stand on a broken plinth)
-          push -= out * (1 - foot * 0.6) * k - ledge * 0.6 * k;
-          // the columns' heads at the rim: a little lower or higher each
-          if (j === NB + NC + NF - 1) y += (hash(cid * 5 + 3) - 0.5) * 0.5;
+          push -= r.depth * (1 - foot * 0.6) * k;
         }
         if (part === 0 && j > 0) {
           // blocks hanging from the ceiling: coarse steps by a cellular-ish draw
@@ -139,7 +223,6 @@ export function buildCliff() {
       const v = ci * NV + j;
       pos.set([x, y, z], v * 3);
       // colour and shade
-      const up = j > 0 ? prof[j][1] - prof[j - 1][1] : 1;
       if (part === 2) {
         const slope = j > NB + NC + NF + 1 ? 0.25 : 0.6;
         groundColor(x, y, z, slope, c);
@@ -148,17 +231,40 @@ export function buildCliff() {
         shade[v] = horizonAO(x, z);
         hollow[v] = -2.4; // (terrain.js: not cut away over the trail; rockyslope.js: no outcrops)
       } else {
-        // dark basalt, wet and darker near the falls; moss in patches, on ledges and over the lip
         const m = noise3(x * 0.12 + 3, y * 0.18, z * 0.12) * 0.5 + 0.5;
-        c.copy(BASALT).lerp(BASALT_DARK, smooth(0.3, 0.8, noise3(x * 0.5, y * 0.08, z * 0.5) * 0.5 + 0.5));
         const wet = 1 - smooth(4, 14, Math.hypot(x - LIP.x, z - LIP.z));
-        c.multiplyScalar(1 - 0.35 * wet);
-        let moss = smooth(0.55, 0.72, m) * (part === 1 ? 0.9 : 0.5);
-        moss = Math.max(moss, part === 1 ? smooth(ledgeY - 0.2, ledgeY + 0.3, y) * (1 - smooth(ledgeY + 0.8, ledgeY + 1.6, y)) * 0.9 : 0);
-        if (part === 0 && j >= NB + NC - 2) moss = Math.max(moss, 0.8); // (the lip of the overhang)
-        if (part === 1 && y < F + 2.5) moss = Math.max(moss, 0.7 * (1 - smooth(F + 1, F + 2.5, y))); // (its foot, in the damp)
+        let moss = 0;
+        if (r) {
+          // each column its own tone; the entablature darker and iron-stained in places
+          c.copy(BASALT[Math.floor(hash(r.col * 3.7 + r.unit * 11) * 4)]);
+          c.multiplyScalar(0.88 + 0.24 * hash(r.col * 1.3 + r.unit * 5 + 0.5));
+          c.lerp(BASALT_DARK, 0.25 * r.ent);
+          c.lerp(RUST, r.ent * 0.4 * smooth(0.6, 0.85, noise3(x * 0.07, y * 0.1 + 20, z * 0.07) * 0.5 + 0.5));
+          // the joints and the gaps where blocks fell out in shadow; the interbed darker still
+          c.multiplyScalar((1 - 0.4 * r.joint) * (1 - 0.35 * r.band));
+          // seeps: water comes out along the interbeds and runs down the face below in dark streaks
+          let seep = 0;
+          for (let i = 0; i < FLOWS.length; i++) {
+            const b = flowTop(i, p.phi);
+            if (b < y0 + 3 || b > rim - 3 || y > b + 0.3) continue;
+            const run = smooth(0.55, 0.75, noise3(p.phi * 0.35, i * 7.3, 0.5) * 0.5 + 0.5);
+            seep = Math.max(seep, run * (1 - smooth(0, 5 + 6 * hash(Math.floor(p.phi) + i * 50), b - y)));
+          }
+          c.multiplyScalar(1 - 0.45 * Math.max(seep, wet));
+          // pale lichen up by the rim, out of the spray
+          c.lerp(LICHEN, (1 - wet) * smooth(rim - 6, rim - 1, y) * smooth(0.5, 0.75, m) * 0.5);
+          // moss: on the shelves and the interbeds, in the seeps, in small patches on the column tops
+          moss = Math.max(r.shelf * 0.95, r.band * 0.6, seep * 0.55, smooth(0.66, 0.8, m) * 0.5 * (1 - r.ent * 0.5));
+          if (y < F + 2.5) moss = Math.max(moss, 0.7 * (1 - smooth(F + 1, F + 2.5, y))); // (its foot, in the damp)
+        } else {
+          // the alcove: the soft layer under the first flow, darker, damp
+          c.copy(BASALT[3]).lerp(BASALT_DARK, smooth(0.3, 0.8, noise3(x * 0.5, y * 0.08, z * 0.5) * 0.5 + 0.5));
+          c.multiplyScalar(1 - 0.35 * wet);
+          moss = smooth(0.6, 0.75, m) * 0.5;
+          if (j >= NB + NC - 2) moss = Math.max(moss, 0.8); // (the lip of the overhang)
+        }
         tmp.copy(MOSS).lerp(MOSS_LIGHT, hash(Math.floor(x * 2) + Math.floor(y * 2) * 7) * 0.5);
-        c.lerp(tmp, moss * (1 - 0.6 * smooth(FALLS.floor + 30, FALLS.floor + 45, y)));
+        c.lerp(tmp, moss * (1 - 0.6 * smooth(FALLS.floor + 38, FALLS.floor + 48, y)));
         lay.set([0, 1, 0, 0], v * 4);
         // (the overhang's own shade comes from the shade map: materials.js uFallsShade)
         shade[v] = (part === 0 ? 0.8 : 0.9) * (0.85 + 0.15 * horizonAO(x, z));
@@ -193,6 +299,38 @@ export function buildCliff() {
   }
   g.computeBoundingSphere();
   return g;
+}
+
+/**
+ * Ferns and salal on the shelves where each flow's columns end under the recessed interbed (the
+ * cliff's own geometry: basalt()), in patches, clear of the falling water. Placed after the clear
+ * zones (fallsBlocked keeps everything else off the cliff).
+ */
+export function cliffLedges() {
+  const out = { fern_a: [], fern_b: [], salal: [] };
+  const prof = new Array(NV);
+  for (let i = 0; i < LINE.length; i += 3) {
+    const p = LINE[i];
+    if (Math.abs(p.phi) > PHI_MAX - 4 || Math.abs(p.phi) < 6) continue;
+    const k = cliffShare(sAt(p.x, p.z));
+    if (k < 0.6) continue;
+    const { y0, rim } = profile(p, prof);
+    for (let f = 0; f < FLOWS.length; f++) {
+      const b = flowTop(f, p.phi);
+      if (b < y0 + 3 || b > rim - 3) continue;
+      const patch = noise3(p.phi * 0.08, f * 5.1, 9.5) * 0.5 + 0.5;
+      const h = hash(p.phi * 3.1 + f * 17);
+      if (h > smooth(0.35, 0.7, patch) * 0.8) continue;
+      const r = basalt(p.phi, b - 0.35, y0, rim);
+      if (r.thick < 0.35) continue; // (no shelf to stand on)
+      const depth = r.depth * k + 0.25 + 0.3 * r.thick;
+      const q = { x: p.x + p.sx * depth, y: b - 0.2, z: p.z + p.sz * depth, rotY: hash(p.phi * 7.7 + f) * 6.28, tint: hash(p.phi * 1.9 + f * 3) };
+      const pick = hash(p.phi * 5.3 + f * 29);
+      if (pick < 0.7) out[pick < 0.35 ? 'fern_a' : 'fern_b'].push({ ...q, scale: 0.8 + 0.7 * hash(p.phi + f * 2) });
+      else out.salal.push({ ...q, scale: 0.7 + 0.4 * hash(p.phi + f * 2) });
+    }
+  }
+  return out;
 }
 
 /** The alcove's ceiling over a point at φ, d behind the face (the profile's back wall top to its lip, roughly). */

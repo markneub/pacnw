@@ -1254,7 +1254,7 @@ export async function placeVegetation(protos, trail) {
  * (`exclude`), and the canopy cover baked from them. Separate from buildVegetation so the loading
  * map can paint the forest before the instanced chunks are built.
  */
-export async function prepareVegetation(protos, trail, { exclude = null, placements: baked = null } = {}) {
+export async function prepareVegetation(protos, trail, { exclude = null, placements: baked = null, extra = null } = {}) {
   const placements = baked ?? await placeVegetation(protos, trail);
   // nothing where the cabin stands (filtered, so the scatter's rng sequence stays put; and after the
   // world bake, which doesn't know the cabin: every step before is per item, so the order doesn't matter)
@@ -1289,6 +1289,8 @@ export async function prepareVegetation(protos, trail, { exclude = null, placeme
       await loadTick(0.5); // (between types: the loading screen gets a frame)
     }
   }
+  // (placed after the clear zones: the ferns on the waterfall's cliff shelves)
+  if (extra) for (const [name, list] of Object.entries(extra)) (placements[name] ||= []).push(...list);
   addSteppingStones(placements, protos, trail);
   await loadTick(0.8);
   return { placements, canopyAt: bakeCanopy(placements) };
