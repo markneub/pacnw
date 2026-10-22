@@ -165,10 +165,13 @@ export function heightAt(x, z) {
  * (fallsshape.js: the terrain there is the bowl's floor; falls.js lays the cliff over it).
  */
 export function fallsTopAt(x, z) {
-  // (never below the creek's bed at the lip: its channel's last segment runs from there down to the
-  // pool, and the carve's interpolation along it cut a notch sloping down the face)
-  const h = streams().carve(x, z, topSurface(x, z, naturalHeight(x, z)));
-  return Math.hypot(x - LIP.x, z - LIP.z) < 9 ? Math.max(h, streams().lipBed) : h;
+  // (never cut below the creek's bed at the lip: its channel's last segment runs from there down to
+  // the pool, and the carve's interpolation along it cut a notch sloping down the face, its banks out to ~12 m from the lip: the user saw it as a rock
+  // in the way. Nor raised
+  // above the natural top: raising it all to the bed stood a slab up by the lip, the user)
+  const h0 = topSurface(x, z, naturalHeight(x, z));
+  const h = streams().carve(x, z, h0);
+  return Math.hypot(x - LIP.x, z - LIP.z) < 18 ? Math.max(h, Math.min(h0, streams().lipBed)) : h;
 }
 
 /**

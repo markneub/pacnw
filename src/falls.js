@@ -196,8 +196,10 @@ export function buildCliff() {
     // the rim's broken edge: each column's head a little lower (blocks fallen off the top)
     const cTop = Math.floor((p.phi + 0.35 * Math.sin(p.phi * 0.37 + 6)) / 1.2);
     const drop = k * (0.2 + 1.0 * hash(cTop * 5 + 3) * hash(cTop * 9 + 1));
+    let faceBack = -Infinity; // (how far back the face's top ended: the top starts behind it, or it overhangs)
     for (let j = 0; j < NV; j++) {
       let [d, y, part] = prof[j];
+      if (part === 2) d = Math.max(d, faceBack + 0.15 + 0.1 * (j - NB - NC - NF));
       let x = p.x + p.sx * d;
       let z = p.z + p.sz * d;
       let r = null;
@@ -209,7 +211,12 @@ export function buildCliff() {
           y -= drop * smooth(rim - 3, rim - 0.25, y);
           r = basalt(p.phi, y, y0, rim);
           const foot = 1 - smooth(F + 1, F + 4, y); // (columns stand on a broken plinth)
-          push -= r.depth * (1 - foot * 0.6) * k;
+          // behind the water: worn back a metre more and smoothed (the curtain's edges and inner sheet
+          // start a little inside the line of the lip, and the columns' dark joints and gaps showed
+          // through its glassy top as black shards)
+          const wb = 1 - smooth(5, 10, Math.abs(p.phi));
+          push -= r.depth * (1 - foot * 0.6) * k * (1 - 0.8 * wb) + 1.1 * wb;
+          r.joint *= 1 - wb;
         }
         if (part === 0 && j > 0) {
           // blocks hanging from the ceiling: coarse steps by a cellular-ish draw
@@ -218,6 +225,7 @@ export function buildCliff() {
         }
         x -= p.sx * push;
         z -= p.sz * push;
+        if (part === 1) faceBack = d - push;
       }
       if (end < 1) y = y * end + (rawGroundAt(x, z) - 1.0) * (1 - end);
       const v = ci * NV + j;
@@ -250,7 +258,7 @@ export function buildCliff() {
             const run = smooth(0.55, 0.75, noise3(p.phi * 0.35, i * 7.3, 0.5) * 0.5 + 0.5);
             seep = Math.max(seep, run * (1 - smooth(0, 5 + 6 * hash(Math.floor(p.phi) + i * 50), b - y)));
           }
-          c.multiplyScalar(1 - 0.45 * Math.max(seep, wet));
+          c.multiplyScalar(1 - 0.45 * Math.max(seep, wet * 0.6));
           // pale lichen up by the rim, out of the spray
           c.lerp(LICHEN, (1 - wet) * smooth(rim - 6, rim - 1, y) * smooth(0.5, 0.75, m) * 0.5);
           // moss: on the shelves and the interbeds, in the seeps, in small patches on the column tops
@@ -311,7 +319,7 @@ export function cliffLedges() {
   const prof = new Array(NV);
   for (let i = 0; i < LINE.length; i += 3) {
     const p = LINE[i];
-    if (Math.abs(p.phi) > PHI_MAX - 4 || Math.abs(p.phi) < 6) continue;
+    if (Math.abs(p.phi) > PHI_MAX - 4 || Math.abs(p.phi) < 14) continue; // (none behind the curtain or in its spray)
     const k = cliffShare(sAt(p.x, p.z));
     if (k < 0.6) continue;
     const { y0, rim } = profile(p, prof);
@@ -564,7 +572,12 @@ function curtainMaterial(phase, veil = false) {
 // ---- spray at the foot ------------------------------------------------------------------------
 
 /** Spray and mist boiling up where the water hits the pool: soft puffs, animated on the GPU. */
-function buildSpray(lip, count = 48) {
+/**
+ * The spray: puffs thrown up and out of the plunge (or, `mist`, a slow veil rising out of the bowl to
+ * above the lip: from the creek's bank by the lip it parts the falls from the far wall of the bowl,
+ * which without it read as a rock the creek ran into, the user).
+ */
+function buildSpray(lip, count = 48, mist = false) {
   const base = new THREE.PlaneGeometry(1, 1);
   const geo = new THREE.InstancedBufferGeometry();
   geo.index = base.index;
@@ -584,13 +597,16 @@ function buildSpray(lip, count = 48) {
       THREE.UniformsLib.fog,
       {
         uTime: { value: 0 }, uFoot: { value: foot }, uOut: { value: new THREE.Vector2(lip.out.x, lip.out.y) },
-        uSide: { value: new THREE.Vector2(lip.side.x, lip.side.y) }, uWidth: { value: lip.width + 2.5 }, uLight: { value: new THREE.Color(1, 1, 1) },
+        uSide: { value: new THREE.Vector2(lip.side.x, lip.side.y) }, uWidth: { value: lip.width + (mist ? 10 : 2.5) }, uLight: { value: new THREE.Color(1, 1, 1) },
+        uRise: { value: lip.y - POOL_LEVEL + 6 },
       },
     ]),
+    defines: mist ? { MIST: '' } : {},
     vertexShader: /* glsl */ `
       #include <fog_pars_vertex>
       attribute float aSeed;
       uniform float uTime;
+      uniform float uRise;
       uniform vec3 uFoot;
       uniform vec2 uOut;
       uniform vec2 uSide;
@@ -598,7 +614,11 @@ function buildSpray(lip, count = 48) {
       varying vec2 vUv;
       varying float vAlpha;
       varying float vSeed;
-      const float LIFE = 5.0;
+      #ifdef MIST
+        const float LIFE = 16.0;
+      #else
+        const float LIFE = 5.0;
+      #endif
       void main() {
         float age = fract(uTime / LIFE + aSeed) * LIFE;
         float s = aSeed * 61.3;
@@ -611,7 +631,17 @@ function buildSpray(lip, count = 48) {
         p.xz += uOut * drift;
         p.y += (1.5 + 4.5 * h2) * (1.0 - exp(-age * 1.1)) - 0.05 * age * age;
         p.xz += vec2(sin(age * 0.9 + s), cos(age * 0.7 + s * 1.3)) * 0.25 * age;
-        float size = 2.0 + age * 1.5 + 1.5 * h1;
+        #ifdef MIST
+          // (rising on the updraught the falls makes, spreading, drifting out over the bowl)
+          p = uFoot;
+          p.xz += uSide * (h1 - 0.5) * uWidth;
+          p.xz += uOut * (1.0 + 4.0 * h2 + age * 0.5);
+          p.y += uRise * (0.35 + 0.65 * h2) * pow(age / LIFE, 0.6);
+          p.xz += vec2(sin(age * 0.3 + s), cos(age * 0.25 + s * 1.3)) * 0.3 * age;
+          float size = 7.0 + age * 0.8 + 5.0 * h1;
+        #else
+          float size = 2.0 + age * 1.5 + 1.5 * h1;
+        #endif
         float rot = s + age * (h2 - 0.5) * 0.6;
         vec2 q = position.xy * size;
         q = vec2(q.x * cos(rot) - q.y * sin(rot), q.x * sin(rot) + q.y * cos(rot));
@@ -624,6 +654,9 @@ function buildSpray(lip, count = 48) {
         vSeed = s;
         // (fades in and out; and up close, so a puff never shows its edge in your face)
         vAlpha = smoothstep(0.0, 0.6, age) * (1.0 - smoothstep(LIFE * 0.35, LIFE, age)) * smoothstep(1.5, 5.0, -mvPosition.z);
+        #ifdef MIST
+          vAlpha = smoothstep(0.0, 3.0, age) * (1.0 - smoothstep(LIFE * 0.65, LIFE, age)) * smoothstep(4.0, 12.0, -mvPosition.z) * 0.8;
+        #endif
         #include <fog_vertex>
       }`,
     fragmentShader: /* glsl */ `
@@ -797,7 +830,11 @@ export function buildFalls() {
   outer.renderOrder = 11;
   inner.renderOrder = 10;
   const spray = buildSpray(lip);
-  group.add(outer, inner, veil, spray, buildPoolFoam(lip));
+  const mist = buildSpray(lip, 40, true);
+  mist.name = 'falls mist';
+  mist.material.uniforms.uTime = spray.material.uniforms.uTime;
+  mist.material.uniforms.uLight = spray.material.uniforms.uLight;
+  group.add(outer, inner, veil, spray, mist, buildPoolFoam(lip));
   const fence = buildFence();
   group.add(fence.mesh);
 

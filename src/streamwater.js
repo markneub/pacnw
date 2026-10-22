@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { roadAt, ROAD_FLAT } from './road.js';
 import { rawGroundAt, streams, fallsTopAt } from './terrain.js';
-import { underCap } from './fallsshape.js';
+import { underCap, fallsLocal, LIP } from './fallsshape.js';
 import { shared, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter } from './materials.js';
 
 /**
@@ -22,9 +22,12 @@ export function buildStreamWater(trail) {
   for (const [si, s] of streams().streams.entries()) {
     // (in runs: the waterfall, falls.js, draws the water from its lip to the plunge pool's outflow)
     const runs = [[]];
-    for (const p of s.points) {
+    for (const [i, p] of s.points.entries()) {
       if (p.drop) {
-        if (runs[runs.length - 1].length) runs.push([]);
+        const run = runs[runs.length - 1];
+        // (the water runs right out to the lip: the last point before the drop is up to ~5 m short of it)
+        if (run.length && run[run.length - 1] === s.points[i - 1]) run.push(toLip(s.points[i - 1], p));
+        if (run.length) runs.push([]);
       } else runs[runs.length - 1].push(p);
     }
     for (const run of runs) {
@@ -39,6 +42,19 @@ export function buildStreamWater(trail) {
     }
   }
   return group;
+}
+
+/** A point on the segment a → b (a on the cliff top, b past the waterfall's lip) a little over the edge. */
+function toLip(a, b) {
+  const dAt = (t) => fallsLocal(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)?.d ?? -1;
+  let lo = 0;
+  let hi = 1;
+  for (let k = 0; k < 24; k++) {
+    const t = (lo + hi) / 2;
+    if (dAt(t) > -0.15) lo = t;
+    else hi = t;
+  }
+  return { ...a, x: a.x + (b.x - a.x) * lo, z: a.z + (b.z - a.z) * lo, s: a.s + (b.s - a.s) * lo, lip: true };
 }
 
 const ACROSS = 9; // vertices across the ribbon (6 showed as long flat facets)
@@ -83,7 +99,7 @@ function ribbon(pts, si) {
   let prev = Infinity;
   for (let i = 0; i < n; i++) {
     // (over the waterfall's overhang the ground under the water is the cliff's top, not the terrain)
-    const g = underCap(pts[i].x, pts[i].z) ? fallsTopAt(pts[i].x, pts[i].z) : rawGroundAt(pts[i].x, pts[i].z);
+    const g = pts[i].lip || underCap(pts[i].x, pts[i].z) ? fallsTopAt(pts[i].x, pts[i].z) : rawGroundAt(pts[i].x, pts[i].z);
     const want = g + 0.12 + pts[i].width * 0.03;
     level[i] = Math.max(Math.min(want, prev), g + 0.06);
     prev = level[i];
@@ -118,7 +134,9 @@ function ribbon(pts, si) {
       pos.push(pts[i].x - dz * side * r, level[i], pts[i].z + dx * side * r);
       flow.push(dx, dz, speed);
       uvs.push(u, along);
-      info.push(reach[0], si, pts[i].rapid || 0);
+      // (white water rushing to the waterfall's brink, so from the bank it reads as going over)
+      const brink = 0.6 * THREE.MathUtils.smoothstep(14 - Math.hypot(pts[i].x - LIP.x, pts[i].z - LIP.z), 0, 11);
+      info.push(reach[0], si, Math.max(pts[i].rapid || 0, brink));
     }
     if (i > 0) {
       const r0 = (i - 1) * ACROSS;

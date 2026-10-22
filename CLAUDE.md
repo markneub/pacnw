@@ -942,9 +942,20 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   0.6–1.5 m blocks, 13% fallen out) under an **entablature** (0.55 m crooked columns fanning from vertical, hackly, set
   back, darker, iron-stained in places), and a recessed **interbed** above each flow (0.25–1.3 m deep by noise: an
   unbroken shelf read as terraces) whose shelf gets moss and, via `cliffLedges()` (added after the clear-zone filter:
-  `prepareVegetation({ extra })`), ferns/salal in patches (none within 6 m of the water). Colour per column tone, joints
+  `prepareVegetation({ extra })`), ferns/salal in patches (none within 14 m of the water). Colour per column tone, joints
   and missing blocks darker, seeps (dark mossy streaks down from the interbeds), lichen near the rim; the rim breaks
   unevenly (column heads up to 1.2 m lower). Columns now every 0.25 m (was 0.5) × 88 face rows (was 44): ~36k → ~115k tris.
+  **The lip** (the user, from the creek's east bank: "doesn't flow from creek to falls correctly, there's some weird
+  rock in the way"): (1) the creek's carve (its last segment runs down to the pool) cut the rim ~8 m down at φ −9…−11,
+  just outside the old 9 m clamp round the lip; `fallsTopAt` now clamps within 18 m but only to min(natural top,
+  `lipBed`) (raising everything to the bed stood a slab up by the lip). (2) The ribbon ended at the last stream point
+  ≥ 1.5 m short of the edge (points are 4 m apart): `toLip()` (streamwater.js) adds a point just over the edge, and
+  the last ~14 m whiten (`aInfo.z` rapids, ≤ 0.6) as the water rushes to the brink. (3) The face behind the water
+  (|φ| < 5…10) is worn back 1.1 m and smoothed: the curtain's edges/inner sheet start inside the lip line and the
+  columns' black joints showed through its glassy top as shards. (4) A slow **mist** (`buildSpray(lip, 40, true)`,
+  16 s puffs 7–15 m) rises out of the bowl. The "rock" in that view is the far (west) wall of the horseshoe seen
+  across the drop (raycast), the bank hiding the gap. Debug trick: `cam.mjs`-style free camera (`player.update = () => {}`,
+  set `camera.position/rotation`, `__pacnw.tick()`), and raycast a pixel against `falls cliff` to find which column/row it is.
   **Shade:** `shared.uFallsShade` (RG half float, 1 m: occlusion, ceiling height) darkens everything under the overhang
   in `patchSunlight` (direct × (1 − occ), indirect × (1 − 0.7 occ)) and shelters rain/snow (weather.js `sheltered`).
   **Water:** three sheets on the free-fall parabola (2.2 m/s off the lip, ~3.1 s, ~7 m out; spreading 1.2 m/s): outer,
