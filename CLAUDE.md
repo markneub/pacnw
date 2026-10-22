@@ -1043,6 +1043,40 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   bird is placed on a thermal near the player. Hidden at night (they roost). Views (sun): lake `x=110&z=470&yaw=-0.67&pitch=0.5`,
   beach `x=50&z=962&yaw=3.14&pitch=0.3`. Test trick: free camera + `__pacnw.birds.update(0.05, t, camera, false)` in a loop,
   then `birds.update = () => {}` to freeze them for a still.
+- **Roosevelt elk** (`src/elk.js`, the user: "birds and then elk", work it out from screenshots; `?off=elk`): three herds in
+  open meadows by the trail (`HERDS`: just west of the trailhead, bull + 3 cows + calf; between the dunes and the marsh, 3
+  cows + calf; the road clearings near the rapids, bull + 2 cows). **Model in JS** (no Blender): lofted tubes (`Builder.loft`:
+  rings with half width/up/down and superellipse squareness, `chainRings` carries the frame along a polyline) for the
+  body, a two-bone neck with the dark mane hanging under it, the head (eyes, ears as leaves), tail and four legs; bulls
+  get six-point antlers (beam + 5 tines) and a heavier mane. Vertex colours: `coat(p, below)` (tan body, darker belly,
+  dark chocolate cape over shoulders/neck/head, pale rump patch) is used by the body *and* the tops of the legs, or the
+  legs' tops showed as dark blotches where they leave the body. Cow 1.5k tris, bull 2.0k; skinned to 17 bones (cow and
+  bull geometry shared). **Rig** (`ElkRig`): every bone's bind frame is the elk's frame, so a bone matrix is just its pose
+  in the mesh's space (bones are the mesh's children, `matrixAutoUpdate` off). Body = a matrix; neck1/neck2/head = pitch
+  chains about their joints; legs by **two-bone IK** (`ik`: socket → upper joint → the top of the cannon; elbow behind
+  for the front, stifle ahead for the hind) with the cannon from the hoof leaning toward the socket and folding (hoof
+  tucked back) through the swing × `stride` (0.35 at a grazing shuffle .. 1 trotting: a full fold on a slow step flipped the
+  hoof up behind); `segmentMatrix` maps each bind segment onto its posed one keeping the side axis. **Gait** (`ElkBody`):
+  a clock (`GAITS`: walk = lateral sequence LH/LF/RH/RF a quarter apart, duty 0.68, stride 1.55 m; trot = diagonal
+  pairs, duty 0.42, 2.6 m); a foot in stance stays **planted** (its ground height cached at touchdown: `groundAt` is
+  ~3.6 µs); in swing it arcs from where it lifted to its rest spot under the body where the body will be half way through
+  the next stance (`home(i, ahead)`), so feet never slide. Standing, the clock runs only while some foot is out of place,
+  and a leg whose foot is home skips its swing. Body height = the feet's mean + 1.08, but never higher than the lowest
+  planted foot + 1.13 (downhill legs reach), pitched front/back, rolled a little uphill, bobbing with the steps. Grazing,
+  neck1 servos until the muzzle is 10 cm above the ground (≤ 1.75 rad) and the head is held ~65° nose down whatever the
+  neck does (a tucked head laid the bull's antlers along the ground). **Behaviour** (`Elk`): graze (head down, a few
+  steps to fresh grass now and then, sometimes a look round), walk back to the herd's middle when > 16 m out, **alert**
+  within 48 m (heads up, the head turns to you, the body comes round past ~70°), and the whole herd **trots off** (4.5 m/s)
+  55–80 m away from you when anyone is within 21 m, then watches, then grazes there. Trees push them round like the
+  player (`veg.collide`); a step onto water/steep/sand/snow is undone (`walkable`); members keep apart. The herd's middle
+  drifts within 70 m of home every 70–160 s. Herds > 320 m from the player don't update; elk > 260 m aren't drawn; legs
+  and pose update every 2nd/3rd frame past 70/140 m. **Contact shadows**: one InstancedMesh of soft dark ovals (canvas
+  radial gradient), on the plane through the hooves. Material: vertex colours, `patchSunlight` (dapple), `wetChunks(0.6)`
+  (darker coat in rain). The player can't walk through them (two circles per elk). Budget (container, phone profile, a herd
+  in view): +6 draws, +8k tris; update ~0.25 ms/frame with a herd near. Views: walk west down the trail from the
+  trailhead (they're across the meadow on the left ~60 m on, and leave as you get close). Test tricks: free camera + run
+  `__pacnw.elk.update(1 / 30, observer)` with an observer object 150 m off (herds further than SIM_R from it don't update
+  and are hidden), then `elk.update = () => {}` and set every `body.mesh.visible` before a still.
 - **Night** (via the cave, or `?night`; `weather.setNight`): a clear night under a full moon low in the SSW over the sea
   (`MOON_DIR` (−0.22, 0.45, 0.87), `MOON_COLOR` silver-blue). The key-light direction is no longer baked into shaders:
   `shared.uKeyDir/uKeyColor/uKeyOff` (sun or moon) drive the dapple (`patchSunlight`), glitter (`uGlDir/uGlColor`), the
