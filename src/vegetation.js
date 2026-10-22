@@ -243,7 +243,7 @@ function convertMaterial(src, assetName, lod, cache) {
     metalness: 0,
     // bark is smooth so trunks read as round; scans have real smooth surfaces;
     // foliage cards carry their own (outward-pointing) normals
-    flatShading: !src.name.endsWith('Bark') && !src.name.endsWith('Soil') && !scan && !cards,
+    flatShading: !src.name.endsWith('Bark') && !src.name.endsWith('Soil') && !src.name.endsWith('Berry') && !scan && !cards,
     // logs: their ragged broken ends twist splinters and torn wood every which way, and a face
     // turned inward got culled, opening a window into the hollow trunk (the user saw the ground
     // and grass inside nurse logs), so log materials draw both sides

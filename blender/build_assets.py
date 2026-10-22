@@ -140,7 +140,7 @@ class MeshBuilder:
                 poly.material_index = mi
                 # bark is smooth-shaded so the close-up bark texture reads as a
                 # round trunk; everything else keeps the faceted low-poly look
-                poly.use_smooth = (self.mats[mi].name.endswith(("Bark", "Soil")) or is_cards(self.mats[mi])) and not flat
+                poly.use_smooth = (self.mats[mi].name.endswith(("Bark", "Soil", "Berry")) or is_cards(self.mats[mi])) and not flat
         if any(self.face_uvs):
             uv = mesh.uv_layers.new(name="UVMap")
             for poly, uvs in zip(mesh.polygons, self.face_uvs):
@@ -195,6 +195,11 @@ def mats():
         "huckleberry_cards": card_material("HuckleberryCards", os.path.join(ROOT, "public", "textures", "foliage", "huckleberry_spray.png")),
         "cane": material("Cane", (0.45, 0.36, 0.27)),  # salmonberry canes: pale, peeling tan-brown
         "huck_stem": material("HuckStem", (0.3, 0.44, 0.2)),  # red huckleberry: bright green, angular twigs
+        # berries (3D: painted on the cards they read flat). Salmonberries are faceted (flat-shaded: the
+        # facets read as drupelets), golden or salmon red; red huckleberries smooth and glossy.
+        "salmon_gold": material("SalmonDrupesGold", (0.93, 0.56, 0.12), 0.45),
+        "salmon_red": material("SalmonDrupesRed", (0.86, 0.3, 0.14), 0.45),
+        "huck_berry": material("HuckBerry", (0.85, 0.1, 0.1), 0.3),
         "fern_cards": card_material("FernCards", os.path.join(ROOT, "public", "textures", "foliage", "fern_frond.png")),
         "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
     }
@@ -837,6 +842,23 @@ def salal(M, name, seed, shoots=16):
     return b.build(name)
 
 
+def _berry(b, mat, centre, r, elong=1.0, segs=6, rings=4):
+    """A berry: a small closed lat-long ball, `elong` × taller than wide."""
+    top = b.v(centre + Vector((0.0, 0.0, r * elong)))
+    bottom = b.v(centre - Vector((0.0, 0.0, r * elong)))
+    loops = []
+    for k in range(1, rings):
+        a = math.pi * k / rings
+        z, rr = math.cos(a) * r * elong, math.sin(a) * r
+        loops.append([b.v(centre + Vector((math.cos(TAU * i / segs + k * 0.5) * rr, math.sin(TAU * i / segs + k * 0.5) * rr, z))) for i in range(segs)])
+    for i in range(segs):
+        j = (i + 1) % segs
+        b.face((top, loops[0][i], loops[0][j]), mat)
+        b.face((bottom, loops[-1][j], loops[-1][i]), mat)
+        for k in range(len(loops) - 1):
+            b.face((loops[k][i], loops[k + 1][i], loops[k + 1][j], loops[k][j]), mat)
+
+
 def salmonberry(M, name, seed, canes=13):
     """
     Salmonberry (Rubus spectabilis): a clump of pale brown canes 1.4-2.4 m, upright in the middle
@@ -845,6 +867,7 @@ def salmonberry(M, name, seed, canes=13):
     shoot so they don't vanish edge-on). Shading normals point out of the clump and up.
     """
     rng = random.Random(seed)
+    brng = random.Random(seed + 7)  # the berries' own draws: the canes and leaves don't move
     b = MeshBuilder()
     cane, leaves = M["cane"], M["salmonberry_cards"]
     for k in range(canes):
@@ -876,6 +899,13 @@ def salmonberry(M, name, seed, canes=13):
             cl = rng.uniform(0.6, 0.85)
             sd = Vector((-d.y, d.x, 0.0)).normalized()
             _card(b, leaves, p + d * (0.5 * cl), d, sd, cl, cl * 0.5, rng.uniform(0.06, 0.16), (0.0, 0.0), fold=0.3)
+            if brng.random() < 0.4:
+                # a berry on a short stalk from the leaf's axil, hanging below the cane (the facets of a
+                # coarse ball read as drupelets; ~2x life size, or they vanish a few metres off)
+                hang = p + (side * -sgn * 0.6 + out * 0.4).normalized() * 0.03 - Vector((0.0, 0.0, 0.06))
+                _stick(b, M["huck_stem"], p, hang + Vector((0.0, 0.0, 0.015)), 0.003, sides=3)
+                _berry(b, M["salmon_gold"] if brng.random() < 0.5 else M["salmon_red"], hang - Vector((0.0, 0.0, 0.01)),
+                       brng.uniform(0.018, 0.022), elong=1.15, segs=6, rings=4)
             t += rng.uniform(0.08, 0.12)
         tip = at(1.0)
         d = (at(1.0) - at(0.9)).normalized()
@@ -892,6 +922,7 @@ def red_huckleberry(M, name, seed, stems=6):
     a stump or a nurse log (vegetation.js), so its base is narrow.
     """
     rng = random.Random(seed)
+    brng = random.Random(seed + 7)  # the berries' own draws: the stems and sprays don't move
     b = MeshBuilder()
     stem, leaves = M["huck_stem"], M["huckleberry_cards"]
     for k in range(stems):
@@ -913,6 +944,13 @@ def red_huckleberry(M, name, seed, stems=6):
                 twig = [p, p + d * (cl * 0.45), p + d * (cl * 0.85) - Vector((0, 0, 0.02))]
                 _limb(b, stem, twig, [0.006, 0.004, 0.003], sides=3)
                 _card(b, leaves, p + d * (0.5 * cl), d, sd, cl, cl * 0.5, rng.uniform(0.02, 0.06), (0.0, 0.0), fold=0.25)
+                # round red berries hanging on thin stalks under the spray (~2x life size)
+                for _ in range(brng.randint(2, 5)):
+                    u = brng.uniform(0.2, 0.95)
+                    at = p + d * (u * cl * 0.95) + sd * brng.uniform(-0.12, 0.12) * cl
+                    drop = brng.uniform(0.03, 0.055)
+                    _stick(b, stem, at, at - Vector((0.0, 0.0, drop)), 0.002, sides=3)
+                    _berry(b, M["huck_berry"], at - Vector((0.0, 0.0, drop + 0.009)), brng.uniform(0.009, 0.011), segs=5, rings=3)
     return b.build(name)
 
 
