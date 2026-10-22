@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
 import { loadTick } from './loadprogress.js';
 import { fallsPassage, fallsLocal, underCap } from './fallsshape.js';
-import { roadAt, ROAD_NAME, ROAD_FLAT } from './road.js';
+import { road, roadAt, ROAD_NAME, ROAD_FLAT, ROAD_SURFACE } from './road.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
   streams, setWalkModifier, streamBed, marshAt, waterLevelAt, sandAt,
@@ -358,22 +358,46 @@ export async function buildTrail({ route: baked = null } = {}) {
     if (j - i >= 10) shared.push({ a: i, b: j });
     i = j;
   }
+  const R = road();
   for (const { a, b } of shared) {
     for (const index of [a, b]) {
       if (index === 0 || index === points.length - 1) continue;
       const leaves = index === b ? 1 : -1;
-      // its sign stands on the leg off the road, just clear of the shoulder, on the side away from the
-      // road (side −1: the far side from the usual, turned round to face the trail: vegetation.js, signs.js)
+      // Its sign stands where a hiker on the road meets the turn: on the road's shoulder beside the
+      // trail's mouth, on the side the shared stretch comes from (so you read it before you reach the
+      // turn), facing the road. Stops reached by leaving the road are straight on (↑, past the sign);
+      // those along the road ← or → as you face the sign (signs.js).
       let at = index;
-      while (at > 2 && at < points.length - 3 && roadAt(points[at].x, points[at].y).d < ROAD_FLAT + 1.2) at += leaves;
-      const p = points[at];
-      const q = points[at + 2];
-      const o = points[at - 2];
-      const l = Math.hypot(q.x - o.x, q.y - o.y);
-      const nx = -(q.y - o.y) / l;
-      const nz = (q.x - o.x) / l;
-      const side = roadAt(p.x - nx * 2, p.y - nz * 2).d > roadAt(p.x + nx * 2, p.y + nz * 2).d ? -1 : 1;
-      stops.push({ name: 'junction', label: ROAD_NAME, junction: true, index, signAt: at, side, x: points[index].x, z: points[index].y, leaves });
+      while (at > 2 && at < points.length - 3 && roadAt(points[at].x, points[at].y).d < ROAD_FLAT + 0.5) at += leaves;
+      const r = roadAt(points[at].x, points[at].y);
+      const [ax, az] = R.pts[r.i];
+      const [bx, bz] = R.pts[r.i + 1];
+      const tl = Math.hypot(bx - ax, bz - az);
+      let tx = (bx - ax) / tl;
+      let tz = (bz - az) / tl;
+      const t0 = (points[at].x - ax) * tx + (points[at].y - az) * tz;
+      const rx = ax + tx * t0; // the nearest point of the road's line
+      const rz = az + tz * t0;
+      const ox = (points[at].x - rx) / r.d; // out from the road, on the trail's side
+      const oz = (points[at].y - rz) / r.d;
+      const back = points[Math.max(0, Math.min(points.length - 1, index - leaves * 20))]; // along the shared stretch
+      if ((back.x - rx) * tx + (back.y - rz) * tz < 0) {
+        tx = -tx;
+        tz = -tz;
+      }
+      // clear of the trail's tread (and the board's half-width) along the shoulder
+      const clear = (x, z) => {
+        let m = Infinity;
+        for (let k = Math.max(0, index - 80); k < Math.min(points.length, index + 80); k++) m = Math.min(m, Math.hypot(points[k].x - x, points[k].y - z));
+        return m - treadHalf(x, z);
+      };
+      const D = ROAD_SURFACE + 1.1;
+      let along = 2.2;
+      while (along < 8 && clear(rx + ox * D + tx * along, rz + oz * D + tz * along) < 1.1) along += 0.25;
+      const sign = { x: rx + ox * D + tx * along, z: rz + oz * D + tz * along, rotY: Math.atan2(ox, oz) };
+      // facing the sign (looking out from the road), the shared stretch lies to the right (+1) or left
+      const roadDir = tx * -oz + tz * ox > 0 ? 1 : -1;
+      stops.push({ name: 'junction', label: ROAD_NAME, junction: true, index, sign, roadDir, x: points[index].x, z: points[index].y, leaves });
     }
   }
 

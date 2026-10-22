@@ -48,7 +48,10 @@ export function signTexts(trail) {
     rows: stops.filter((s, j) => j !== k && !s.junction) // (a road junction is signed, not a destination)
       .map((s) => ({ s, m: along(points, stop.index, s.index) }))
       .sort((p, q) => p.m - q.m).slice(0, MAX_ROWS).sort((p, q) => p.s.index - q.s.index)
-      .map(({ s, m }) => [label(s), miles(m), (s.index > stop.index ? -1 : 1) * (stop.side ?? (stop.name === 'falls' ? -1 : 1))]), // (some stand on the far side: vegetation.js)
+      .map(({ s, m }) => [label(s), miles(m), stop.junction
+        // (at a road junction, facing the road's shoulder: straight on up the trail, or along the road: trail.js)
+        ? ((s.index - stop.index) * stop.leaves > 0 ? 0 : stop.roadDir)
+        : (s.index > stop.index ? -1 : 1) * (stop.name === 'falls' ? -1 : 1)]), // (that one stands on the far side: vegetation.js)
   }));
 }
 
@@ -165,7 +168,14 @@ function paintFace(ctx, oy, { title, rows }, seed) {
         ctx.fillText(l.text, TW / 2 + dx, y);
       } else {
         // arrows pointing left stand before the name, those pointing right after the distance
-        if (l.dir < 0) arrow(TW * 0.085 + dx, y, -1);
+        if (l.dir === 0) {
+          // straight on: pointing up, before the name
+          ctx.save();
+          ctx.translate(TW * 0.085 + dx, y);
+          ctx.rotate(-Math.PI / 2);
+          arrow(0, 0, 1);
+          ctx.restore();
+        } else if (l.dir < 0) arrow(TW * 0.085 + dx, y, -1);
         else arrow(TW * 0.915 + dx, y, 1);
         ctx.textAlign = 'left';
         ctx.fillText(l.text, TW * 0.145 + dx, y);
@@ -278,12 +288,16 @@ export function buildRoadPlates(gates = [], posts = []) {
   ctx.strokeRect(14, 14, 612, 292);
   ctx.fillStyle = '#1d1c1a';
   ctx.textAlign = 'center';
-  ctx.font = 'bold 92px "Arial Narrow", Arial, sans-serif';
-  ctx.fillText('ROAD CLOSED', 320, 128);
-  ctx.font = 'bold 50px "Arial Narrow", Arial, sans-serif';
-  ctx.fillText('TO MOTOR VEHICLES', 320, 206);
-  ctx.font = 'bold 30px Arial, sans-serif';
-  ctx.fillText('U.S. FOREST SERVICE', 320, 270);
+  // each line at its size, or smaller to fit inside the border (phones have no Arial Narrow)
+  const line = (text, px, y) => {
+    ctx.font = `bold ${px}px Arial, Helvetica, sans-serif`;
+    const w = ctx.measureText(text).width;
+    if (w > 540) ctx.font = `bold ${Math.floor((px * 540) / w)}px Arial, Helvetica, sans-serif`;
+    ctx.fillText(text, 320, y);
+  };
+  line('ROAD CLOSED', 84, 124);
+  line('TO MOTOR VEHICLES', 48, 202);
+  line('U.S. FOREST SERVICE', 28, 266);
   for (let k = 0; k < 160; k++) {
     ctx.fillStyle = `rgba(${110 + r() * 50},${60 + r() * 30},${30 + r() * 20},${0.1 + r() * 0.35})`;
     const x = r() * 640;

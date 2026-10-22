@@ -994,11 +994,16 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   hash, after the clear-zone filter) lays a line of small flat scans (boulder_g/i, r 0.27–0.35 m, tops a few cm out of the
   water) along the road's downstream edge where it's wet. On the road the trail strip drops its
   triangles (`keepTri`: all three < 1.8 m from the road's line) and its bench cut fades out (`offRoad`); where the trail's
-  tread runs off the road surface the road shader discards, so the trail strip below shows (the junctions). **How you know** (the user asked): junction signposts ("Forest Road 2840" header, the usual stop list) off the
-  road where the trail joins and leaves it; brown fibreglass **hiker marker posts** (`trail_marker`) at both junctions and
+  tread runs off the road surface the road shader discards, so the trail strip below shows (the junctions). **How you know** (the user asked): junction signposts ("Forest Road 2840" header, the usual stop list) where the
+  trail joins and leaves it. They stand **on the road's shoulder** (d = ROAD_SURFACE + 1.1) beside the trail's mouth, on the
+  side the shared stretch comes from, **facing the road** (`stop.sign` {x, z, rotY} from trail.js): a hiker on the road reads
+  it before reaching the turn. Arrows: stops reached by leaving the road get ↑ (straight on, past the sign: dir 0), those
+  along the road ← or → (`stop.roadDir`). (First they stood on the trail leg facing across it, then turned round: only
+  readable side-on and invisible from the road, the user.) brown fibreglass **hiker marker posts** (`trail_marker`) at both junctions and
   every 60 m along the shared stretch; a steel **gate** (`road_gate`, "ROAD CLOSED / TO MOTOR VEHICLES" plate) 45 m west of
   the east junction with a brown **road-number post** (`road_post`, "2840" stacked) beside it (`buildRoadPlates` in
-  signs.js). On the paper map the road is a cased line (brown/cream) under the trail's red dashes. Views (sun): east
+  signs.js; the plate's lines shrink to fit its border: "Arial Narrow" isn't on phones, so "ROAD CLOSED" in Arial overran
+  it, the user). On the paper map the road is a cased line (brown/cream) under the trail's red dashes. Views (sun): east
   junction `x=112.1&z=-181.7&yaw=0.57&pitch=-0.1`, ford `x=-1&z=-222.5&yaw=-1.42&pitch=-0.2`, forest stretch
   `x=-420.1&z=-5.9&yaw=-0.85&pitch=-0.08`, west junction `x=-128.2&z=-165.3&yaw=2.65&pitch=-0.08`.
 - **Night** (via the cave, or `?night`; `weather.setNight`): a clear night under a full moon low in the SSW over the sea

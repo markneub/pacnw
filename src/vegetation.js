@@ -584,10 +584,13 @@ function placeTrailFurniture(trail, add) {
 
   for (const stop of stops) {
     // boards point along local +X; rotate that onto the trail direction
-    const i = stop.signAt ?? Math.min(stop.index + 3, points.length - 3);
-    // (behind the waterfall, and at a road junction when the road's on that side, it stands on the far
-    // side, turned round: signs.js flips its arrows)
-    const flip = stop.side ?? (stop.name === 'falls' ? -1 : 1);
+    if (stop.sign) {
+      put('signpost', stop.sign.x, stop.sign.z, stop.sign.rotY); // (a road junction's: trail.js)
+      continue;
+    }
+    const i = Math.min(stop.index + 3, points.length - 3);
+    // (behind the waterfall, on the rock's side, turned round: the fence runs along the other; signs.js flips its arrows)
+    const flip = stop.name === 'falls' ? -1 : 1;
     const off = (TRAIL_WIDTH + 0.6) * flip;
     const { x, z, t } = beside(i, off);
     put('signpost', x, z, Math.atan2(-t.y, t.x) + (flip < 0 ? Math.PI : 0));
