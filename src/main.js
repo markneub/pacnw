@@ -36,7 +36,6 @@ import { planCoast, buildCoast, loadCoastAssets } from './coast.js';
 import { buildSeats } from './seat.js';
 import { createHint } from './hint.js';
 import { buildBirds } from './birds.js';
-import { buildElk } from './elk.js';
 
 installHeightFog(); // must run before any material compiles
 import './style.css';
@@ -268,9 +267,6 @@ async function init() {
   // hawks, an eagle, ravens and gulls overhead (birds.js)
   const birds = off.has('birds') ? null : buildBirds({ canopyAt: veg.canopyAt });
   if (birds) scene.add(birds.group);
-  // herds of Roosevelt elk in the meadows by the trail (elk.js)
-  const elk = off.has('elk') ? null : buildElk({ collide: (p, r) => veg.collide(p, r) });
-  if (elk) scene.add(elk.group);
   const player = new Player(camera, renderer.domElement, (pos, r) => {
     if (cave.state.inside) {
       cave.collide(pos, r); // (in the tunnel the trees overhead don't count)
@@ -281,7 +277,6 @@ async function init() {
     cave.collide(pos, r);
     coast.collide(pos, r);
     falls.collide(pos, r);
-    elk?.collide(pos, r);
   });
 
   if (touch) player.addGaze(cabin.gaze); // (phones only: with a mouse, looking down is easy, and the view moving by itself fights the hand)
@@ -622,7 +617,6 @@ async function init() {
     falls.update(dt, t, weather, camera);
     weather.update(dt, t, camera);
     birds?.update(dt, t, camera, weather.night);
-    elk?.update(dt, camera);
     updateGroundDetail(camera, camera.position.z > 650); // (snow's detail slot shows sand at the coast)
 
     // deep in the cave with only the far end in view, the world's detail follows the view out of it
@@ -653,7 +647,7 @@ async function init() {
   });
 
   // (scripted screenshots: one frame of the loop, also after ?still has stopped it)
-  window.__pacnw = { tick: () => tick(), cave, scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, coast, birds, elk, paperMap, worldSize: WORLD_SIZE };
+  window.__pacnw = { tick: () => tick(), cave, scene, camera, player, weather, heightAt, groundAt, renderer, trail, veg, grass, post, cabin, coast, birds, paperMap, worldSize: WORLD_SIZE };
 }
 
 /**
