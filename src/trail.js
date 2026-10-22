@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WATER_LEVEL } from './config.js';
 import { loadTick } from './loadprogress.js';
 import { fallsPassage, fallsLocal, underCap } from './fallsshape.js';
+import { roadAt, ROAD_NAME, ROAD_FLAT } from './road.js';
 import {
   heightAt, rawGroundAt, groundAt, groundColor, groundLayers, snowAmount, slopeAt, setGroundModifier, setTerrainCutout,
   streams, setWalkModifier, streamBed, marshAt, waterLevelAt, sandAt,
@@ -23,9 +24,12 @@ export const TRAIL_STOPS = [
   { name: 'lake', label: 'Lake viewpoint', x: 55, z: 385 },
   // (a waypoint, no sign: over the rapids' footbridge and up the creek's east bank)
   { name: 'rapids', x: 95, z: -40, hidden: true },
-  // (another: back over the creek and round to the west, up the ledge onto the bowl's floor (terrain.js
-  // RAMPS); in and out by the same side, the trail ran back alongside itself, the user)
-  { name: 'westbank', x: -165, z: -245, hidden: true },
+  // (two more on Forest Road 2840 (road.js): the trail meets it east of the main creek's ford, follows
+  // it west over the creek (on a footbridge beside the ford) and leaves it to climb the ledge onto the
+  // waterfall's bowl (terrain.js RAMPS): in and out of the bowl by the same side, the trail ran back
+  // alongside itself, the user)
+  { name: 'roadeast', x: 75, z: -202, hidden: true },
+  { name: 'roadwest', x: -150, z: -146, hidden: true },
   // behind the waterfall (fallsshape.js): the trail takes a fixed way through the alcove (passage),
   // west to east, then up the east ledge onto the snow bench
   { name: 'falls', label: 'Waterfall', ...fallsPassage()[26], passage: fallsPassage().reverse() },
@@ -57,7 +61,7 @@ function vnoise(x, z) {
  * (a ~25 m swell, ~7 m bulges, an odd worn-out spot), and, sampled where each edge lies, the
  * two sides wander independently. (A constant width with a gentle wobble read as a laid path, the user.)
  */
-function treadHalf(x, z) {
+export function treadHalf(x, z) {
   const k = 0.27 * vnoise(x / 25 + 31.7, z / 25 - 12.3) + 0.21 * vnoise(x / 7 - 4.1, z / 7 + 8.9);
   const wide = Math.max(0, vnoise(x / 40 + 7.3, z / 40 + 2.2) - 0.4) * 0.6; // here and there a broad, trampled patch
   return TRAIL_WIDTH * Math.min(1.45, Math.max(0.6, 1 + k + wide));
@@ -104,7 +108,7 @@ for (let dz = -2; dz <= 2; dz++) {
  */
 const TURN_COST = 40;
 const WET_COST = 60; // m per 6 m cell in or beside a creek
-function route(heights, side, wet, marsh, level, sand, rock, a, b) {
+function route(heights, side, wet, marsh, level, sand, rock, onRoad, a, b) {
   const D = MOVES.length;
   const idx = (ix, iz) => iz * NX + ix;
   const toCell = (p) => [Math.round((p.x - MIN_X) / CELL), Math.round((p.z - MIN_Z) / CELL)];
@@ -162,7 +166,8 @@ function route(heights, side, wet, marsh, level, sand, rock, a, b) {
       // tread hard to cut, so avoid traversing cliffs too
       // (on the dunes a path just goes up the sand, as in the reference photos: grades cost less)
       const steep = Math.max(0, Math.abs(grade) - 0.18 - 0.1 * sand[n]);
-      const cost = dist * (1 + 40 * (1 - 0.6 * sand[n]) * grade * grade + 2500 * steep * steep + 6 * side[n] * side[n]) + (cur === start ? 0 : turn[dir * D + k]) + wet[n] * WET_COST;
+      // (on the road a walk is easy: the trail follows it where it goes its way)
+      const cost = dist * (onRoad[n] ? 0.55 : 1) * (1 + 40 * (1 - 0.6 * sand[n]) * grade * grade + 2500 * steep * steep + 6 * side[n] * side[n]) + (cur === start ? 0 : turn[dir * D + k]) + wet[n] * WET_COST;
       const ng = g[st] + cost;
       if (ng < g[ns]) {
         g[ns] = ng;
@@ -341,6 +346,25 @@ export async function buildTrail({ route: baked = null } = {}) {
     return { ...stop, index };
   });
 
+  // Forest Road 2840 (road.js): where the trail runs on it, no tread or bench cut of its own (the
+  // road is the walking surface), and a junction (a signed stop) where it joins and where it leaves
+  // (a short step off it, onto the footbridge beside a ford, is still the same stretch)
+  const onRoad = points.map((p) => roadAt(p.x, p.y).d < 1.5);
+  const shared = [];
+  for (let i = 0; i < points.length; i++) {
+    if (!onRoad[i]) continue;
+    let j = i;
+    while (j + 1 < points.length && (onRoad[j + 1] || onRoad.slice(j + 1, j + 50).some(Boolean))) j++;
+    if (j - i >= 10) shared.push({ a: i, b: j });
+    i = j;
+  }
+  for (const { a, b } of shared) {
+    for (const index of [a, b]) {
+      if (index === 0 || index === points.length - 1) continue;
+      stops.push({ name: 'junction', label: ROAD_NAME, junction: true, index, x: points[index].x, z: points[index].y, leaves: index === b ? 1 : -1 });
+    }
+  }
+
   /**
    * Where the walker is relative to the trail, given their facing direction:
    * the next stop ahead and how far along the trail it is (metres), or null
@@ -413,7 +437,8 @@ export async function buildTrail({ route: baked = null } = {}) {
   const crossings = [];
   for (let i = 0, wet = false; i < points.length; i++) {
     const c = streams().nearest(points[i].x, points[i].y);
-    const now = !!c.seg && c.d < c.half + 0.5 && !underCap(points[i].x, points[i].y); // (behind the falls the creek is overhead)
+    // (behind the falls the creek is overhead; on the road the trail wades its ford)
+    const now = !!c.seg && c.d < c.half + 0.5 && !underCap(points[i].x, points[i].y) && roadAt(points[i].x, points[i].y).d > 3;
     if (now && !wet) {
       // the middle of the wet run
       let j = i;
@@ -473,6 +498,8 @@ export async function buildTrail({ route: baked = null } = {}) {
   function benchHeight(x, z, g) {
     const list = segs.get(cellKey(Math.floor(x / HASH), Math.floor(z / HASH)));
     if (!list) return g;
+    // (no bench of its own on or right by the road: the road's shelf is the ground there)
+    const offRoad = THREE.MathUtils.smoothstep(roadAt(x, z).d, ROAD_FLAT, ROAD_FLAT + 3);
     let acc = 0;
     let wsum = 0;
     let dMin = Infinity;
@@ -488,7 +515,7 @@ export async function buildTrail({ route: baked = null } = {}) {
         dMin = d;
         sMin = arc[i] + (arc[i + 1] - arc[i]) * t;
       }
-      if (d >= BANK_OUTER) continue;
+      if (d >= BANK_OUTER || onRoad[i] || onRoad[i + 1]) continue;
       const keep = THREE.MathUtils.smoothstep(d, BENCH_HALF, BANK_OUTER); // 0 on the tread, 1 outside
       // inverse distance from the tread's edge: each leg owns its own tread, and between two
       // close legs the hand-over spreads across the whole gap between their treads, a bank, not
@@ -496,7 +523,7 @@ export async function buildTrail({ route: baked = null } = {}) {
       const de = Math.max(d - BENCH_HALF, 0.02);
       const w = 1 / (de * de * de);
       const hc = tread[i] + (tread[i + 1] - tread[i]) * t;
-      acc += w * (hc - g) * (1 - keep);
+      acc += w * (hc - g) * (1 - keep) * offRoad;
       wsum += w;
     }
     const h = wsum > 0 ? g + acc / wsum : g;
@@ -573,7 +600,7 @@ export async function buildTrail({ route: baked = null } = {}) {
     return g;
   });
 
-  return { points, stops, distanceTo, guide, mesh, crossings, boardwalk, route: coarse };
+  return { points, stops, distanceTo, guide, mesh, crossings, boardwalk, shared, route: coarse };
 }
 
 /** The A* route between the stops over a grid of the terrain (the slow part of the trail). */
@@ -585,6 +612,7 @@ async function searchRoute() {
   const level = new Float32Array(NX * NZ); // the water level there (the lake's, or the sea's at the coast)
   const sand = new Float32Array(NX * NZ);
   const rock = new Uint8Array(NX * NZ);
+  const onRoad = new Uint8Array(NX * NZ);
   for (let iz = 0; iz < NZ; iz++) {
     for (let ix = 0; ix < NX; ix++) {
       const x = MIN_X + ix * CELL;
@@ -597,11 +625,15 @@ async function searchRoute() {
       // the waterfall's cliff and the alcove under it (only the fixed passage goes in there)
       const f = fallsLocal(x, z);
       rock[iz * NX + ix] = f && f.d > -1.5 && underCap(x, z) ? 1 : 0;
+      // the road (road.js): easy walking, its fords included (the trail wades them with the road, on
+      // stepping stones along the edge: vegetation.js addSteppingStones)
+      const rd = roadAt(x, z).d;
+      onRoad[iz * NX + ix] = rd < 2.2 ? 1 : 0;
       // creeks: stepping into one costs a lot, so the trail crosses once, squarely, rather than
       // following a channel (it once crossed the same creek twice at a hairpin)
       const c = streams().nearest(x, z);
       // (the rapids, streams.js, are where the trail is meant to cross the main creek: cheap there)
-      if (c.seg && c.d < c.half + 4 && !underCap(x, z)) wet[iz * NX + ix] = c.seg.a.rapid > 0.3 ? 0.1 : 1;
+      if (c.seg && c.d < c.half + 4 && !underCap(x, z)) wet[iz * NX + ix] = c.seg.a.rapid > 0.3 || rd < 2.2 ? 0.1 : 1;
     }
     await loadTick((0.25 * iz) / NZ);
   }
@@ -611,7 +643,7 @@ async function searchRoute() {
   for (let i = 0; i < TRAIL_STOPS.length - 1; i++) {
     const a = TRAIL_STOPS[i].passage?.at(-1) ?? TRAIL_STOPS[i];
     const b = TRAIL_STOPS[i + 1].passage?.[0] ?? TRAIL_STOPS[i + 1];
-    const leg = route(heights, side, wet, marsh, level, sand, rock, a, b);
+    const leg = route(heights, side, wet, marsh, level, sand, rock, onRoad, a, b);
     coarse = coarse.concat(i === 0 ? leg : leg.slice(1));
     if (TRAIL_STOPS[i + 1].passage) coarse = coarse.concat(TRAIL_STOPS[i + 1].passage.slice(1).map((p) => new THREE.Vector2(p.x, p.z)));
     await loadTick(0.25 + (0.4 * (i + 1)) / (TRAIL_STOPS.length - 1));
@@ -693,6 +725,142 @@ function buildCutoutMask(cover) {
   return [tex, minX, minZ, w, h];
 }
 
+// the trail's tread, edged per pixel: worn ragged, grass and duff nibbling in, scuffs out past it
+const TRAIL_TREAD = `
+        // the tread, edged per pixel: worn ragged, grass and duff nibbling in, scuffs out past it
+        float rag = (gNoise(vGroundPos.xz * 1.1 + 5.1) - 0.5) * 0.8 + (gNoise(vGroundPos.xz * 3.7 - 2.3) - 0.5) * 0.42
+          + (gNoise(vGroundPos.xz * 11.0) - 0.5) * 0.2;
+        float treadIn = smoothstep(-vEdge.y, vEdge.y, vEdge.x + rag);
+        // scuffed, half-worn patches out past the edge (and tufts left standing just inside it)
+        float scuff = smoothstep(0.58, 0.74, gNoise(vGroundPos.xz * 0.8 - 9.3) * 0.6 + gNoise(vGroundPos.xz * 2.9 + 1.7) * 0.4);
+        treadIn = max(treadIn, scuff * 0.75 * smoothstep(-1.2, -0.1, vEdge.x + rag * 0.5));
+        treadIn *= vEdge.z;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vTreadCol * diffuse, treadIn);
+        vTread = treadIn * vTreadK;`;
+
+/**
+ * The road's surface (roadmesh.js), per pixel from u (m across, aEdge.x), s (m along, aEdge.y) and
+ * the surface's half-width (aPrint.y): two packed wheel ruts that wander a little along the road,
+ * a crown between them where grass and moss grow back, gravelly dirt out to a ragged edge, the
+ * ground beyond. The ruts are the tread (grit, puddles). Where the trail's own tread leaves the road
+ * (aPrint.x: m inside the trail's tread), the road gives way to the trail's strip beneath it.
+ */
+const ROAD_TREAD = `
+        float rag = (gNoise(vGroundPos.xz * 1.3 + 5.1) - 0.5) * 0.55 + (gNoise(vGroundPos.xz * 4.3 - 2.3) - 0.5) * 0.25
+          + (gNoise(vGroundPos.xz * 12.0) - 0.5) * 0.1;
+        float roadU = vEdge.x;
+        if (vPrint.x + rag * 0.5 > 0.0 && abs(roadU) > vPrint.y - 0.2) discard;
+        float wob = (gNoise(vec2(vEdge.y * 0.05, 1.7)) - 0.5) * 0.5;
+        float ru = abs(roadU - wob);
+        float onRoad = smoothstep(-0.15, 0.15, vPrint.y - abs(roadU) + rag);
+        float rut = (1.0 - smoothstep(0.15, 0.3, abs(ru - 0.78) + rag * 0.14)) * onRoad;
+        float crown = (1.0 - smoothstep(0.18, 0.45, ru + rag * 0.2))
+          * smoothstep(0.38, 0.62, gNoise(vGroundPos.xz * 0.9 + 2.0) * 0.7 + gNoise(vGroundPos.xz * 3.0) * 0.3) * onRoad;
+        float gravel = gNoise(vGroundPos.xz * 9.0) * 0.6 + gNoise(vGroundPos.xz * 23.0) * 0.4;
+        vec3 roadGround = diffuseColor.rgb;
+        vec3 surf = vTreadCol * diffuse * (0.86 + gravel * 0.28);
+        vec3 rc = mix(roadGround, surf, onRoad);
+        rc = mix(rc, surf * vec3(0.7, 0.66, 0.62), rut);
+        rc = mix(rc, roadGround * vec3(0.92, 1.06, 0.84), crown);
+        diffuseColor.rgb = mix(roadGround, rc, vEdge.z);
+        vTread = rut * vEdge.z * vTreadK;`;
+
+/** The corridor strips' materials (the trail's, or the road's: roadmesh.js): [opaque interior, faded fringe]. */
+export function corridorMaterials(road = false) {
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.97,
+    metalness: 0,
+    transparent: false, // the opaque interior; the faded fringe uses fringeMat (below)
+    polygonOffset: true,
+    // (the road's strip wins where it overlaps the trail's, at the junctions)
+    polygonOffsetFactor: road ? -2 : -1,
+    polygonOffsetUnits: road ? -4 : -2,
+  });
+  // Same mottling as the terrain shader so the two match, plus grit on the tread.
+  const wet = wetChunks(0.9);
+  mat.onBeforeCompile = (shader) => {
+    patchSunlight(shader);
+    shader.uniforms.uWet = shared.uWet;
+    shader.uniforms.uPuddle = shared.uPuddle;
+    shader.uniforms.uSnowline = shared.uSnowline;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aTread;\nattribute vec3 aTreadCol;\nattribute vec3 aEdge;\nattribute vec3 aPrint;\nvarying float vTreadK;\nvarying vec3 vTreadCol;\nvarying vec3 vEdge;\nvarying vec3 vPrint;\nvarying vec3 vGroundPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTreadK = aTread;\nvTreadCol = aTreadCol;\nvEdge = aEdge;\nvPrint = aPrint;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying float vTreadK;
+        varying vec3 vTreadCol;
+        varying vec3 vEdge;
+        float vTread;
+        varying vec3 vPrint;
+        varying vec3 vGroundPos;
+        uniform float uWet;
+        uniform float uPuddle;
+        uniform float uSnowline;
+        float puddle;
+        float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float gNoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(gHash(i), gHash(i + vec2(1, 0)), f.x),
+                     mix(gHash(i + vec2(0, 1)), gHash(i + vec2(1, 1)), f.x), f.y);
+        }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
+        diffuseColor.rgb *= 0.78 + gn * 0.44;
+        float grit = gNoise(vGroundPos.xz * 7.0) * 0.6 + gNoise(vGroundPos.xz * 2.2) * 0.4;
+        diffuseColor.rgb *= mix(1.0, 0.82 + grit * 0.36, vTread);
+        // on sand: lines of footprints, three walkers' worth, each wandering a little across the
+        // tread (a shadowed hollow with a lit lip on the far side)
+        if (vPrint.z > 0.05 && abs(vPrint.y) < 1.6) {
+          float hollow = 0.0;
+          float lip = 0.0;
+          for (int w = 0; w < 3; w++) {
+            float fw = float(w);
+            float stride = 0.7 + 0.07 * fw;
+            float lane = (fw - 1.0) * 0.5 + 0.18 * sin(vPrint.x * 0.045 + fw * 2.1);
+            float sk = vPrint.x / stride + fw * 0.37;
+            float k = floor(sk + 0.5);
+            float side = mod(k, 2.0) * 2.0 - 1.0;
+            vec2 e = vec2((sk - k) * stride / 0.14, (vPrint.y - lane - side * 0.11) / 0.06);
+            float r = dot(e, e);
+            float keep = step(gHash(vec2(k, fw * 7.0 + 1.0)), 0.85); // some are scuffed out
+            hollow = max(hollow, (1.0 - smoothstep(0.5, 1.0, r)) * keep);
+            lip = max(lip, smoothstep(0.8, 1.05, r) * (1.0 - smoothstep(1.05, 1.8, r)) * step(0.0, e.x) * keep);
+          }
+          float pv = vPrint.z * (1.0 - smoothstep(25.0, 60.0, distance(cameraPosition, vGroundPos)) * 0.5);
+          diffuseColor.rgb *= mix(1.0, 0.72, hollow * pv) * (1.0 + 0.1 * lip * pv);
+        }
+        ${wet.color}
+        // puddles collect in low spots of the tread in rain, growing as they fill (not up in the snow)
+        float pt = 0.76 - 0.16 * uPuddle;
+        puddle = smoothstep(pt, pt + 0.05, gNoise(vGroundPos.xz * 0.45 + 3.7) * 0.7 + gNoise(vGroundPos.xz * 1.7) * 0.3)
+          * smoothstep(0.55, 0.9, vTread) * smoothstep(0.03, 0.25, uPuddle) * (1.0 - smoothstep(uSnowline - 35.0, uSnowline - 15.0, vGroundPos.y));
+        diffuseColor.rgb *= mix(1.0, 0.5, puddle);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        ${wet.roughness}
+        roughnessFactor = mix(roughnessFactor, 0.04, puddle);`);
+    patchGroundDetail(shader);
+    patchRocky(shader, { tread: true });
+    patchPuddles(shader);
+    // (last, so it lands first after the chunk: the detail, rock and grit patches all see the tread)
+    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        ${road ? ROAD_TREAD : TRAIL_TREAD}`);
+  };
+  mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}|${road}`;
+  // The faded outer fringe blends over the terrain, so it's transparent, and it must not write
+  // depth: where switchback legs overlap, a fringe drawn first used to hide the leg beneath it,
+  // and with the terrain cut away there the sky showed through (tools/holecheck.mjs).
+  const fringeMat = mat.clone();
+  fringeMat.transparent = true;
+  fringeMat.depthWrite = false;
+  fringeMat.onBeforeCompile = mat.onBeforeCompile;
+  fringeMat.customProgramCacheKey = mat.customProgramCacheKey;
+  return [mat, fringeMat];
+}
+
 /**
  * The trail corridor: a fine strip of ground that replaces the terrain mesh
  * along the trail, carrying the level tread, the cut banks and fill slopes,
@@ -707,6 +875,7 @@ function buildCorridorMesh(points, distanceTo) {
   const edgeAttr = []; // m inside the tread's edge (< 0 outside), its softness, the marsh mask
   const printAttr = []; // footprints in the sand: arc length, offset across, how sandy
   const layers = [];
+  const roadD = []; // m from the road's centreline (road.js)
   const lw = [0, 0, 0, 0];
   const indices = [];
   const dirt = new THREE.Color(0x6b5034);
@@ -750,6 +919,7 @@ function buildCorridorMesh(points, distanceTo) {
       const g = rawGroundAt(x, z);
       const y = groundAt(x, z);
       positions.push(x, y + 0.02, z);
+      roadD.push(roadAt(x, z).d);
 
       // colour: the ground as it would be, then exposed soil where the bank is
       // cut or filled, then the tread itself (all from world position, so
@@ -833,105 +1003,7 @@ function buildCorridorMesh(points, distanceTo) {
     geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   }
 
-  const mat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.97,
-    metalness: 0,
-    transparent: false, // the opaque interior; the faded fringe uses fringeMat (below)
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -2,
-  });
-  // Same mottling as the terrain shader so the two match, plus grit on the tread.
-  const wet = wetChunks(0.9);
-  mat.onBeforeCompile = (shader) => {
-    patchSunlight(shader);
-    shader.uniforms.uWet = shared.uWet;
-    shader.uniforms.uPuddle = shared.uPuddle;
-    shader.uniforms.uSnowline = shared.uSnowline;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aTread;\nattribute vec3 aTreadCol;\nattribute vec3 aEdge;\nattribute vec3 aPrint;\nvarying float vTreadK;\nvarying vec3 vTreadCol;\nvarying vec3 vEdge;\nvarying vec3 vPrint;\nvarying vec3 vGroundPos;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTreadK = aTread;\nvTreadCol = aTreadCol;\nvEdge = aEdge;\nvPrint = aPrint;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
-        varying float vTreadK;
-        varying vec3 vTreadCol;
-        varying vec3 vEdge;
-        float vTread;
-        varying vec3 vPrint;
-        varying vec3 vGroundPos;
-        uniform float uWet;
-        uniform float uPuddle;
-        uniform float uSnowline;
-        float puddle;
-        float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-        float gNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          return mix(mix(gHash(i), gHash(i + vec2(1, 0)), f.x),
-                     mix(gHash(i + vec2(0, 1)), gHash(i + vec2(1, 1)), f.x), f.y);
-        }`)
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        float gn = gNoise(vGroundPos.xz * 0.9) * 0.5 + gNoise(vGroundPos.xz * 0.23) * 0.35 + gNoise(vGroundPos.xz * 3.1) * 0.15;
-        diffuseColor.rgb *= 0.78 + gn * 0.44;
-        float grit = gNoise(vGroundPos.xz * 7.0) * 0.6 + gNoise(vGroundPos.xz * 2.2) * 0.4;
-        diffuseColor.rgb *= mix(1.0, 0.82 + grit * 0.36, vTread);
-        // on sand: lines of footprints, three walkers' worth, each wandering a little across the
-        // tread (a shadowed hollow with a lit lip on the far side)
-        if (vPrint.z > 0.05 && abs(vPrint.y) < 1.6) {
-          float hollow = 0.0;
-          float lip = 0.0;
-          for (int w = 0; w < 3; w++) {
-            float fw = float(w);
-            float stride = 0.7 + 0.07 * fw;
-            float lane = (fw - 1.0) * 0.5 + 0.18 * sin(vPrint.x * 0.045 + fw * 2.1);
-            float sk = vPrint.x / stride + fw * 0.37;
-            float k = floor(sk + 0.5);
-            float side = mod(k, 2.0) * 2.0 - 1.0;
-            vec2 e = vec2((sk - k) * stride / 0.14, (vPrint.y - lane - side * 0.11) / 0.06);
-            float r = dot(e, e);
-            float keep = step(gHash(vec2(k, fw * 7.0 + 1.0)), 0.85); // some are scuffed out
-            hollow = max(hollow, (1.0 - smoothstep(0.5, 1.0, r)) * keep);
-            lip = max(lip, smoothstep(0.8, 1.05, r) * (1.0 - smoothstep(1.05, 1.8, r)) * step(0.0, e.x) * keep);
-          }
-          float pv = vPrint.z * (1.0 - smoothstep(25.0, 60.0, distance(cameraPosition, vGroundPos)) * 0.5);
-          diffuseColor.rgb *= mix(1.0, 0.72, hollow * pv) * (1.0 + 0.1 * lip * pv);
-        }
-        ${wet.color}
-        // puddles collect in low spots of the tread in rain, growing as they fill (not up in the snow)
-        float pt = 0.76 - 0.16 * uPuddle;
-        puddle = smoothstep(pt, pt + 0.05, gNoise(vGroundPos.xz * 0.45 + 3.7) * 0.7 + gNoise(vGroundPos.xz * 1.7) * 0.3)
-          * smoothstep(0.55, 0.9, vTread) * smoothstep(0.03, 0.25, uPuddle) * (1.0 - smoothstep(uSnowline - 35.0, uSnowline - 15.0, vGroundPos.y));
-        diffuseColor.rgb *= mix(1.0, 0.5, puddle);`)
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        ${wet.roughness}
-        roughnessFactor = mix(roughnessFactor, 0.04, puddle);`);
-    patchGroundDetail(shader);
-    patchRocky(shader, { tread: true });
-    patchPuddles(shader);
-    // (last, so it lands first after the chunk: the detail, rock and grit patches all see the tread)
-    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        // the tread, edged per pixel: worn ragged, grass and duff nibbling in, scuffs out past it
-        float rag = (gNoise(vGroundPos.xz * 1.1 + 5.1) - 0.5) * 0.8 + (gNoise(vGroundPos.xz * 3.7 - 2.3) - 0.5) * 0.42
-          + (gNoise(vGroundPos.xz * 11.0) - 0.5) * 0.2;
-        float treadIn = smoothstep(-vEdge.y, vEdge.y, vEdge.x + rag);
-        // scuffed, half-worn patches out past the edge (and tufts left standing just inside it)
-        float scuff = smoothstep(0.58, 0.74, gNoise(vGroundPos.xz * 0.8 - 9.3) * 0.6 + gNoise(vGroundPos.xz * 2.9 + 1.7) * 0.4);
-        treadIn = max(treadIn, scuff * 0.75 * smoothstep(-1.2, -0.1, vEdge.x + rag * 0.5));
-        treadIn *= vEdge.z;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vTreadCol * diffuse, treadIn);
-        vTread = treadIn * vTreadK;`);
-  };
-  mat.customProgramCacheKey = () => `${groundDetailCacheKey()}|${sunKey()}`;
-  // The faded outer fringe blends over the terrain, so it's transparent, and it must not write
-  // depth: where switchback legs overlap, a fringe drawn first used to hide the leg beneath it,
-  // and with the terrain cut away there the sky showed through (tools/holecheck.mjs).
-  const fringeMat = mat.clone();
-  fringeMat.transparent = true;
-  fringeMat.depthWrite = false;
-  fringeMat.onBeforeCompile = mat.onBeforeCompile;
-  fringeMat.customProgramCacheKey = mat.customProgramCacheKey;
+  const [mat, fringeMat] = corridorMaterials();
   const opaqueTri = (alpha, a, b, c) => alpha[a] > 0.999 && alpha[b] > 0.999 && alpha[c] > 0.999;
   // No triangles that are flipped over: on the inside of a turn tighter than the strip's
   // half-width the strip folds over itself, and its triangles there face down (seen from above,
@@ -945,7 +1017,11 @@ function buildCorridorMesh(points, distanceTo) {
     const vz = PA[c * 3 + 2] - PA[a * 3 + 2];
     return (uz * vx - ux * vz) > 1e-4; // the y of (b − a) × (c − a)
   };
-  const keepTri = facesUp;
+  // and none on the road's surface: where the trail runs on the road (or crosses onto it) the
+  // road's strip is the ground (roadmesh.js; it shows this strip through where the trail's tread
+  // leaves it), and the terrain isn't cut away there
+  const onRoadSurface = (a, b, c) => roadD[a] < 1.8 && roadD[b] < 1.8 && roadD[c] < 1.8;
+  const keepTri = (a, b, c) => facesUp(a, b, c) && !onRoadSurface(a, b, c);
   {
     const src = geo.index.array;
     const kept = [];

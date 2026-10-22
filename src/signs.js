@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TRAIL_STOPS } from './trail.js';
+import { ROAD_NUMBER } from './road.js';
 import { patchSunlight, sunKey } from './materials.js';
 
 /**
@@ -31,7 +32,7 @@ function along(points, i0, i1) {
 
 const MAX_ROWS = 5;
 const miles = (m) => `${Math.max(0.1, m / 1609.34).toFixed(1)} MI.`;
-const label = (s) => TRAIL_STOPS.find((t) => t.name === s.name)?.label ?? s.name;
+const label = (s) => s.label ?? TRAIL_STOPS.find((t) => t.name === s.name)?.label ?? s.name;
 
 /**
  * Each stop's sign: a title and [name, distance, dir] rows for the other stops, in trail order.
@@ -44,7 +45,7 @@ export function signTexts(trail) {
     title: k === 0 ? 'Cascadia Woods Trail' : label(stop),
     // the nearest MAX_ROWS stops by trail distance, listed in trail order (a real junction sign
     // names what's near, and the board only fits so many lines)
-    rows: stops.filter((_, j) => j !== k)
+    rows: stops.filter((s, j) => j !== k && !s.junction) // (a road junction is signed, not a destination)
       .map((s) => ({ s, m: along(points, stop.index, s.index) }))
       .sort((p, q) => p.m - q.m).slice(0, MAX_ROWS).sort((p, q) => p.s.index - q.s.index)
       .map(({ s, m }) => [label(s), miles(m), (s.index > stop.index ? -1 : 1) * (stop.name === 'falls' ? -1 : 1)]), // (that one stands on the far side: vegetation.js)
@@ -253,5 +254,90 @@ export function buildSigns(trail, signposts) {
   mat.customProgramCacheKey = () => `signs|${sunKey()}`;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'sign faces';
+  return mesh;
+}
+
+/**
+ * Forest Road 2840's lettering (road.js, vegetation.js placeTrailFurniture): the white plate on the
+ * gate's arm and the brown route-number board, painted into one small atlas and laid as quads just in
+ * front of their faces (local +Z; the boxes in blender/build_assets.py road_gate / road_post).
+ */
+export function buildRoadPlates(gates = [], posts = []) {
+  const W = 1024;
+  const H = 640;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const r = rng(2840);
+  // the gate's plate (640 × 320): white, a black border, black capitals, a little rust and grime
+  ctx.fillStyle = '#ecebe4';
+  ctx.fillRect(0, 0, 640, 320);
+  ctx.strokeStyle = '#1d1c1a';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(14, 14, 612, 292);
+  ctx.fillStyle = '#1d1c1a';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 92px "Arial Narrow", Arial, sans-serif';
+  ctx.fillText('ROAD CLOSED', 320, 128);
+  ctx.font = 'bold 50px "Arial Narrow", Arial, sans-serif';
+  ctx.fillText('TO MOTOR VEHICLES', 320, 206);
+  ctx.font = 'bold 30px Arial, sans-serif';
+  ctx.fillText('U.S. FOREST SERVICE', 320, 270);
+  for (let k = 0; k < 160; k++) {
+    ctx.fillStyle = `rgba(${110 + r() * 50},${60 + r() * 30},${30 + r() * 20},${0.1 + r() * 0.35})`;
+    const x = r() * 640;
+    const y = r() < 0.5 ? r() * 40 : 320 - r() * 40;
+    ctx.fillRect(x, y, 2 + r() * 8, 2 + r() * 10);
+  }
+  // the route number (160 × 620 at x 700): brown, the digits stacked in white
+  ctx.fillStyle = '#4a3020';
+  ctx.fillRect(700, 0, 160, 620);
+  for (let k = 0; k < 90; k++) {
+    ctx.fillStyle = `rgba(${130 + r() * 40},${120 + r() * 30},${100 + r() * 30},${0.08 + r() * 0.12})`;
+    ctx.fillRect(700 + r() * 160, r() * 620, 1 + r() * 3, 20 + r() * 80);
+  }
+  ctx.fillStyle = '#e9e5da';
+  ctx.font = 'bold 118px Arial, sans-serif';
+  [...ROAD_NUMBER].forEach((d, k) => ctx.fillText(d, 780, 140 + k * 140));
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+
+  const pos = [];
+  const nrm = [];
+  const uv = [];
+  const idx = [];
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  const v = new THREE.Vector3();
+  const nv = new THREE.Vector3();
+  const quad = (p, [x0, x1, y0, y1, z], [u0, u1, v0, v1]) => {
+    m.compose(new THREE.Vector3(p.x, p.y, p.z), q.setFromAxisAngle(up, p.rotY), new THREE.Vector3(1, 1, 1));
+    nv.set(0, 0, 1).applyQuaternion(q);
+    const base = pos.length / 3;
+    for (const [x, y, uu, vv] of [[x0, y0, u0, v0], [x1, y0, u1, v0], [x1, y1, u1, v1], [x0, y1, u0, v1]]) {
+      v.set(x, y, z).applyMatrix4(m);
+      pos.push(v.x, v.y, v.z);
+      nrm.push(nv.x, nv.y, nv.z);
+      uv.push(uu, vv);
+    }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  // (texture v runs up from the canvas's bottom)
+  for (const g of gates) quad(g, [-0.3, 0.3, 0.8, 1.1, 0.057], [0, 640 / W, 1 - 320 / H, 1]);
+  for (const p of posts) quad(p, [-0.08, 0.08, 0.85, 1.47, 0.073], [700 / W, 860 / W, 1 - 620 / H, 1]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeBoundingSphere();
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 });
+  mat.onBeforeCompile = (shader) => patchSunlight(shader);
+  mat.customProgramCacheKey = () => `roadplates|${sunKey()}`;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'road plates';
   return mesh;
 }

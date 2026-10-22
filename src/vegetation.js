@@ -7,6 +7,7 @@ import {
   heightAt, groundAt, slopeAt, snowAmount, snowlineAt, nForest, mulberry32, streams, streamBed, waterLevelAt, marshAt, MARSH, sandAt, coastZ, SEA_LEVEL, LAKE,
 } from './terrain.js';
 import { TRAIL_WIDTH } from './trail.js';
+import { road, roadAt, ROAD_SURFACE, ROAD_FLAT } from './road.js';
 import { FALLS, fallsLocal, alcoveDepth, cliffShare } from './fallsshape.js';
 import { addWindSway, addGroundCover, addTrunkMoss, shared } from './materials.js';
 import { bakePrototypeAO, bakeCanopy } from './bake.js';
@@ -18,7 +19,7 @@ import { rockFieldAt, valueNoise } from './rockyslope.js';
 import { loadTick } from './loadprogress.js';
 
 const KIND = (name) => (/^(fern|salal|salmonberry|huckleberry|pebbles)/.test(name) ? 'ferns'
-  : /^(boulder|log|stump|signpost|cairn|bench|footbridge|boardwalk)/.test(name) ? 'rocks' : 'trees');
+  : /^(boulder|log|stump|signpost|cairn|bench|footbridge|boardwalk|trail_marker|road_gate|road_post)/.test(name) ? 'rocks' : 'trees');
 
 /** Metres from the edge of the nearest stream's water (negative in it). */
 const offStream = (x, z) => {
@@ -65,7 +66,7 @@ const COLLIDE = {
   fir: 0.75, fir_snow: 0.75, hemlock: 0.6, hemlock_snow: 0.6, cedar: 1.1,
   sapling: 0.25, sapling_snow: 0.25, snag: 0.65, vine_maple: 0.3, shore_pine: 0.3,
   stump: 1.0, // boulders: from their footprint (buildVegetation)
-  signpost: 0.25, cairn: 0.6, bench: 0.9,
+  signpost: 0.25, cairn: 0.6, bench: 0.9, trail_marker: 0.08, road_post: 0.1,
 };
 
 /**
@@ -264,7 +265,7 @@ function convertMaterial(src, assetName, lod, cache) {
   if (kind === 'trees') addWindSway(mat, undefined, undefined, lod);
   else if (kind === 'ferns' && !pebble) addWindSway(mat, BERRY.test(assetName) ? 0.4 : 2.5, undefined, 'fade'); // (the berry shrubs are 2 m tall: sway goes with height²)
   // scans have their own moss; pebbles are never placed on snow (and the shader's global snowline frosted them white)
-  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : seat ? 0 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : /BrokenWood|RotWood/.test(src.name) ? 0.1 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0, bleach: /Bark|Wood/.test(src.name) });
+  else addGroundCover(mat, { lod: pebble ? 'fade' : lod, moss: scan ? 0.35 : pebble ? 0.6 : seat || /^(trail_marker|road_gate|road_post)$/.test(assetName) ? 0 : assetName === 'footbridge' || assetName === 'boardwalk' ? 0.2 : src.name === 'RootSoil' ? 0.25 : /BrokenWood|RotWood/.test(src.name) ? 0.1 : 1, snow: pebble ? 0 : 1, film: scan || pebble || src.name === 'Rock' ? 1 : 0, bleach: /Bark|Wood/.test(src.name) });
   if (cards) patchCards(mat);
   // moss sleeves on valley trunks (near tier; impostors bake the plain bark colour)
   if (kind === 'trees' && lod !== 'far' && (src.name === 'Bark' || src.name === 'CedarBark')) addTrunkMoss(mat);
@@ -322,6 +323,51 @@ function addStreamRocks(placements, protos, trail) {
     let y = groundAt(r.x, r.z);
     for (let k = 0; k < 6; k++) y = Math.min(y, groundAt(r.x + Math.cos(k * 1.047) * r.r * 0.7, r.z + Math.sin(k * 1.047) * r.r * 0.7));
     (placements[name] ||= []).push({ x: r.x, y, z: r.z, rotY: r.rotY, scale, tint: r.pick });
+  }
+}
+
+/**
+ * Stepping stones where the trail wades a ford of Forest Road 2840 with it (road.js): a line of small
+ * flat stones along the road's downstream edge, just clear of the travelled surface, their tops a few
+ * cm out of the water. Added after the clear-zone filter (which keeps everything else off the road)
+ * and seated here (seatStones has run). Hash, no rng.
+ */
+function addSteppingStones(placements, protos, trail) {
+  const R = road();
+  if (!R) return;
+  const kinds = ['boulder_g', 'boulder_i'].filter((b) => protos[b]);
+  if (!kinds.length) return;
+  const half = Object.fromEntries(kinds.map((b) => {
+    const box = new THREE.Box3();
+    for (const { geometry } of protos[b]) {
+      geometry.computeBoundingBox();
+      box.union(geometry.boundingBox);
+    }
+    return [b, 0.25 * (box.max.x - box.min.x + box.max.z - box.min.z)];
+  }));
+  for (const f of R.fords) {
+    if (trail.distanceTo(f.x, f.z) > 3) continue;
+    const [ax, az] = R.pts[Math.max(0, f.i - 2)];
+    const [bx, bz] = R.pts[Math.min(R.n - 1, f.i + 2)];
+    const l = Math.hypot(bx - ax, bz - az);
+    const tx = (bx - ax) / l;
+    const tz = (bz - az) / l;
+    // the downstream side: where the creek goes on to
+    const c = streams().nearest(f.x, f.z);
+    const side = (c.seg.b.x - c.seg.a.x) * -tz + (c.seg.b.z - c.seg.a.z) * tx > 0 ? 1 : -1;
+    for (let k = -12; k <= 12; k++) {
+      const h = hash2(f.x + k, f.z - k);
+      const along = k * 0.72 + (h - 0.5) * 0.2;
+      const u = side * (ROAD_SURFACE + 0.3 + (hash2(f.z + k, f.x) - 0.5) * 0.3);
+      const x = f.x + tx * along - tz * u;
+      const z = f.z + tz * along + tx * u;
+      if (offStream(x, z) > 0.2) continue;
+      const name = kinds[h < 0.6 ? 0 : kinds.length - 1];
+      const r = 0.27 + 0.08 * hash2(z, x);
+      let y = groundAt(x, z);
+      for (let j = 0; j < 4; j++) y = Math.min(y, groundAt(x + Math.cos(j * 1.571) * r * 0.7, z + Math.sin(j * 1.571) * r * 0.7));
+      (placements[name] ||= []).push({ x, y: y + 0.02, z, rotY: h * 6.283, scale: r / half[name], tint: h });
+    }
   }
 }
 
@@ -538,11 +584,62 @@ function placeTrailFurniture(trail, add) {
 
   for (const stop of stops) {
     // boards point along local +X; rotate that onto the trail direction
-    const i = Math.min(stop.index + 3, points.length - 3);
+    let i = Math.min(stop.index + 3, points.length - 3);
     // (behind the waterfall, on the rock's side, turned round: the fence runs along the other; signs.js flips its arrows)
     const flip = stop.name === 'falls' ? -1 : 1;
-    const { x, z, t } = beside(i, (TRAIL_WIDTH + 0.6) * flip);
+    let off = (TRAIL_WIDTH + 0.6) * flip;
+    if (stop.junction) {
+      // where the trail joins or leaves Forest Road 2840: on the leg off the road, just clear of its
+      // shoulder, on the side away from the road
+      i = stop.index;
+      while (i > 2 && i < points.length - 3 && roadAt(points[i].x, points[i].y).d < ROAD_FLAT + 1.2) i += stop.leaves;
+      const a = beside(i, off);
+      const b = beside(i, -off);
+      const da = roadAt(a.x, a.z).d;
+      if (roadAt(b.x, b.z).d > da) off = -off;
+    }
+    const { x, z, t } = beside(i, off);
     put('signpost', x, z, Math.atan2(-t.y, t.x) + (flip < 0 ? Math.PI : 0));
+  }
+
+  // Forest Road 2840 (road.js), where the trail runs on it: brown trail markers with a white hiker
+  // (as on a Forest Service road a trail follows) just off the road on the trail where it joins and
+  // where it leaves, and every ~60 m along the road's edge between, facing along the road
+  const R = road();
+  const roadDir = (s) => {
+    const k = Math.max(0, Math.min(R.n - 2, Math.round(s / 2)));
+    const [ax, az] = R.pts[k];
+    const [bx, bz] = R.pts[k + 1];
+    const l = Math.hypot(bx - ax, bz - az);
+    return { x: ax, z: az, tx: (bx - ax) / l, tz: (bz - az) / l };
+  };
+  for (const { a, b } of trail.shared ?? []) {
+    for (const [idx, dir] of [[a, -1], [b, 1]]) {
+      let i = idx;
+      while (i > 2 && i < points.length - 3 && roadAt(points[i].x, points[i].y).d < ROAD_SURFACE + 1.4) i += dir;
+      const t = tangent(i);
+      const da = roadAt(beside(i, 1).x, beside(i, 1).z).d;
+      const side = roadAt(beside(i, -1).x, beside(i, -1).z).d > da ? 1 : -1; // (the sign's on the other side)
+      const p = beside(i, side * (TRAIL_WIDTH + 0.5));
+      put('trail_marker', p.x, p.z, Math.atan2(t.x, t.y));
+    }
+    for (let i = a + 40; i < b - 20; i += 40) {
+      const r = roadAt(points[i].x, points[i].y);
+      const { x, z, tx, tz } = roadDir(r.s);
+      const k = ROAD_SURFACE + 0.8;
+      put('trail_marker', x - tz * k, z + tx * k, Math.atan2(tx, tz));
+    }
+  }
+  // a gate across the road a little east of where the trail joins it (closed to vehicles, plate toward
+  // the junction), and the road's route-number post beside it
+  const east = (trail.shared ?? [])[0];
+  if (east) {
+    const s0 = roadAt(points[east.a].x, points[east.a].y).s + 45;
+    const { x, z, tx, tz } = roadDir(s0);
+    const rotY = Math.atan2(-tx, -tz); // (local X across the road, +Z (the plate) facing west)
+    put('road_gate', x, z, rotY);
+    const p = roadDir(s0 - 1.5);
+    put('road_post', p.x - tz * 3.7, p.z + tx * 3.7, rotY);
   }
 
   // the marsh boardwalk, a 3 m section at each spot (sections overlap a little on bends)
@@ -1169,7 +1266,7 @@ export async function prepareVegetation(protos, trail, { exclude = null, placeme
   // world bake, which doesn't know the cabin: every step before is per item, so the order doesn't matter)
   if (exclude) {
     for (const name of Object.keys(placements)) {
-      if (name === 'signpost') continue;
+      if (/^(signpost|trail_marker|road_gate|road_post)$/.test(name)) continue; // (placed beside the trail and the road on purpose)
       const tree = KIND(name) === 'trees';
       const margin = tree ? 3.5 : 0.8;
       // logs lie along their local X: test points along their length (a nurse log centred just outside
@@ -1198,6 +1295,7 @@ export async function prepareVegetation(protos, trail, { exclude = null, placeme
       await loadTick(0.5); // (between types: the loading screen gets a frame)
     }
   }
+  addSteppingStones(placements, protos, trail);
   await loadTick(0.8);
   return { placements, canopyAt: bakeCanopy(placements) };
 }
@@ -1289,6 +1387,12 @@ export async function buildVegetation(protos, trail, { impostors = null, shrubIm
         colliders.get(ck).push({ x: cx, z: cz, r: cr });
       };
       if (r) addCollider(it.x, it.z, r * it.scale);
+      if (name === 'road_gate') {
+        // the posts and the arm between them, along local X (you walk round the posts)
+        const c = Math.cos(it.rotY);
+        const sn = Math.sin(it.rotY);
+        for (let t = -3; t <= 3.001; t += 0.5) addCollider(it.x + c * t, it.z - sn * t, t === -3 || t > 2.99 ? 0.12 : 0.25);
+      }
       if (name === 'log_nurse') {
         // a row of circles along the trunk, and the root plate at the -X end
         const [dx, dz] = it.axis;

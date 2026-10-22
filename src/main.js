@@ -12,7 +12,9 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { installHeightFog, createEnvironment } from './atmosphere.js';
 import { shadeGround, setBakedHorizonAO } from './bake.js';
 import { NearPool } from './detail.js';
-import { buildSigns } from './signs.js';
+import { buildSigns, buildRoadPlates } from './signs.js';
+import { buildRoadMesh } from './roadmesh.js';
+import { roadAt, landingAt, ROAD_SURFACE } from './road.js';
 import { PerfOverlay } from './perf.js';
 import { FramePacer } from './framepacer.js';
 import { loadGroundDetail, updateGroundDetail } from './grounddetail.js';
@@ -185,6 +187,8 @@ async function init() {
   const trail = await buildTrail({ route: world?.route });
   await loadTickNow(0.75);
   scene.add(trail.mesh);
+  const roadMesh = buildRoadMesh(trail); // Forest Road 2840 (road.js)
+  scene.add(roadMesh);
   if (!off.has('water')) scene.add(buildStreamWater(trail)); // (the rocks in it skip the footbridges)
   const cabinPlan = planCabin(trail); // (the scatter keeps clear of it, and of the cave's mouth)
   const cavePlan = planCave();
@@ -195,8 +199,13 @@ async function init() {
   // the placements (less the clear zones) and their canopy, which the map's land needs
   progress('map');
   const protos = await protosReady;
+  // (the road: nothing on its surface and shoulders, trees back past its banks)
+  const roadBlocked = (x, z, margin, tree) => {
+    const r = roadAt(x, z);
+    return r.d < ROAD_SURFACE + landingAt(r.s) + (tree ? margin + 0.5 : margin);
+  };
   const exclude = (x, z, margin, tree) => cabinPlan.blocked(x, z, margin) || cavePlan.blocked(x, z, margin) || coastPlan.blocked(x, z, margin, tree)
-    || fallsBlocked(x, z, margin, tree);
+    || fallsBlocked(x, z, margin, tree) || roadBlocked(x, z, margin, tree);
   const prepared = await prepareVegetation(protos, trail, { exclude, placements: world?.placements });
   await sheet.setLand(prepared.canopyAt, (f) => loadTick(f));
   step('map');
@@ -212,6 +221,7 @@ async function init() {
   const veg = await buildVegetation(protos, trail, { impostors, shrubImpostors, prepared });
   scene.add(veg.group);
   if (veg.placements.signpost) scene.add(buildSigns(trail, veg.placements.signpost));
+  if (veg.placements.road_gate || veg.placements.road_post) scene.add(buildRoadPlates(veg.placements.road_gate, veg.placements.road_post));
   step('vegetation');
 
   progress('shading'); // and grass
@@ -219,6 +229,7 @@ async function init() {
   shadeGround(terrain, veg.canopyAt);
   await loadTickNow(0.4);
   shadeGround(trail.mesh, veg.canopyAt);
+  shadeGround(roadMesh, veg.canopyAt);
   step('ground shading');
   await loadTickNow(0.55);
 

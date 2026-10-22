@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { roadAt, ROAD_SURFACE, ROAD_FLAT } from './road.js';
 import { WORLD_SIZE, WATER_LEVEL } from './config.js';
 import {
   terrainGrid, terrainSurface, cutUniforms, nForest, mulberry32, rawGroundAt, waterLevelAt, marshAt, MARSH, sandAt, SEA_LEVEL,
@@ -144,6 +145,7 @@ function bakeGrassMap(terrain, canopyAt) {
       const snowFree = 1 - smooth(layers[2], 0.03, 0.3);
       let density = layers[0] * snowFree * Math.min(1, 0.03 + 0.97 * open * open * (0.3 + 0.7 * meadow) + 0.8 * shore * open);
       density *= 1 - smooth(rockFieldAt(x, y, z, slope), 0.42, 0.56); // not on bare rock (rockyslope.js)
+      density *= smooth(roadAt(x, z).d, ROAD_SURFACE + 1, ROAD_FLAT + 2.5); // not on the road (road.js)
       // the marsh: tall sedge in clumps on the hummocks and out of the shallow water
       const m = marshAt(x, z);
       if (m > 0.05) density = Math.max(density, m * smooth(nForest(x * 0.08 + 5, z * 0.08) * 0.5 + 0.5, 0.25, 0.6) * (y > wl - 0.35 ? 1 : 0));

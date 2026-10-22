@@ -200,6 +200,14 @@ def mats():
         "salmon_gold": material("SalmonGoldBerry", (0.93, 0.56, 0.12), 0.45),
         "salmon_red": material("SalmonRedBerry", (0.86, 0.3, 0.14), 0.45),
         "huck_berry": material("HuckBerry", (0.85, 0.1, 0.1), 0.3),
+        # Forest Road 2840's furniture (src/road.js): a trail marker, the gate, the route-number post
+        "marker_post": material("MarkerPost", (0.34, 0.23, 0.15), 0.6),  # brown fibreglass
+        "marker_white": material("MarkerWhite", (0.9, 0.9, 0.86), 0.5),
+        "gate_steel": material("GateSteel", (0.74, 0.6, 0.2), 0.55),  # faded yellow paint
+        "gate_dark": material("GateDark", (0.16, 0.15, 0.14), 0.6),  # hinges, latch, chain
+        "reflector": material("Reflector", (0.75, 0.08, 0.06), 0.25),
+        "plate": material("RoadPlate", (0.85, 0.85, 0.82), 0.5),  # (the lettering is a texture: src/signs.js)
+        "route_post": material("RoutePost", (0.3, 0.2, 0.13), 0.8),
         "fern_cards": card_material("FernCards", os.path.join(ROOT, "public", "textures", "foliage", "fern_frond.png")),
         "snow_cards": card_material("SnowCards", os.path.join(ROOT, "public", "textures", "foliage", "snow_clumps.png")),
     }
@@ -1449,6 +1457,102 @@ def signpost(M, name):
     return recalc_normals(b.build(name))
 
 
+def _post(b, mat, x, y, z0, z1, r, sides=8):
+    """A closed upright cylinder (a pipe post with a flat cap)."""
+    lo = [b.v((x + math.cos(TAU * k / sides) * r, y + math.sin(TAU * k / sides) * r, z0)) for k in range(sides)]
+    hi = [b.v((x + math.cos(TAU * k / sides) * r, y + math.sin(TAU * k / sides) * r, z1)) for k in range(sides)]
+    for k in range(sides):
+        j = (k + 1) % sides
+        b.face((lo[k], lo[j], hi[j], hi[k]), mat, flat=True)
+    b.face(list(reversed(lo)), mat, flat=True)
+    b.face(hi, mat, flat=True)
+
+
+def _rail(b, mat, p0, p1, r, sides=6):
+    """A closed straight pipe between two points."""
+    p0, p1 = Vector(p0), Vector(p1)
+    axis = (p1 - p0).normalized()
+    side = axis.cross(Vector((0, 0, 1)))
+    if side.length < 1e-3:
+        side = Vector((1, 0, 0))
+    side.normalize()
+    up = side.cross(axis).normalized()
+    rings = [[b.v(p + (side * math.cos(TAU * k / sides) + up * math.sin(TAU * k / sides)) * r) for k in range(sides)] for p in (p0, p1)]
+    for k in range(sides):
+        j = (k + 1) % sides
+        b.face((rings[0][k], rings[0][j], rings[1][j], rings[1][k]), mat, flat=True)
+    b.face(list(reversed(rings[0])), mat, flat=True)
+    b.face(rings[1], mat, flat=True)
+
+
+# a hiker (walking right, a pack and a stick) as convex outlines, 1 unit tall, for the trail markers
+HIKER = [
+    [(0.05 + 0.085 * math.cos(TAU * k / 8), 0.9 + 0.085 * math.sin(TAU * k / 8)) for k in range(8)],  # head
+    [(-0.02, 0.45), (0.11, 0.45), (0.09, 0.78), (-0.02, 0.78)],  # body
+    [(-0.15, 0.5), (-0.03, 0.47), (-0.03, 0.76), (-0.17, 0.76)],  # pack
+    [(0.17, 0.0), (0.28, 0.02), (0.1, 0.47), (0.0, 0.47)],  # front leg
+    [(-0.19, 0.02), (-0.08, 0.0), (0.1, 0.45), (0.0, 0.47)],  # back leg
+    [(0.22, 0.51), (0.27, 0.55), (0.13, 0.72), (0.07, 0.74)],  # arm
+    [(0.29, 0.0), (0.33, 0.0), (0.29, 0.62), (0.25, 0.62)],  # stick
+]
+
+
+def trail_marker(M, name):
+    """
+    A US Forest Service trail marker: a flat brown fibreglass post (9 cm wide, 1.3 m out of the
+    ground), with a white band at the top and a white hiker on both faces (local +-Y in Blender, i.e.
+    along the road it stands beside: src/vegetation.js).
+    """
+    b = MeshBuilder()
+    t = 0.012
+    box(b, M["marker_post"], 0, 0, 0.4, 0.09, t, 1.8)  # from 0.5 m underground
+    box(b, M["marker_white"], 0, 0, 1.255, 0.092, t + 0.003, 0.05)
+    s, z0 = 0.13, 0.98
+    for sgn in (-1, 1):
+        y0, y1 = sgn * (t / 2), sgn * (t / 2 + 0.0015)
+        for shape in HIKER:
+            # (the back face sees the hiker mirrored, walking the other way: as on a real post)
+            prism(b, M["marker_white"], [((x - 0.07) * s, z0 + z * s) for x, z in shape], min(y0, y1), max(y0, y1))
+    return recalc_normals(b.build(name))
+
+
+def road_gate(M, name):
+    """
+    A steel pipe gate across the road (along local X, 6 m between its posts), painted yellow long ago:
+    two posts, a top arm and a lower rail with stays, a diagonal brace from the hinge, a red reflector at
+    the free end, a chain and padlock on the latch post, and a white plate on the arm (lettered by
+    src/signs.js, facing local -Y, i.e. +Z after export).
+    """
+    b = MeshBuilder()
+    st, dk = M["gate_steel"], M["gate_dark"]
+    for x in (-3.0, 3.0):
+        _post(b, st, x, 0, -0.5, 1.12, 0.075, 10)
+        _post(b, dk, x, 0, 1.12, 1.15, 0.085, 10)  # cap
+    _rail(b, st, (-2.92, 0, 0.95), (2.93, 0, 0.95), 0.045, 8)  # top arm
+    _rail(b, st, (-2.92, 0, 0.47), (2.88, 0, 0.47), 0.035, 6)  # lower rail
+    for x in (-1.4, 0.0, 1.4, 2.86):
+        _rail(b, st, (x, 0, 0.47), (x, 0, 0.95), 0.028, 6)  # stays
+    _rail(b, st, (-2.9, 0, 0.5), (-1.45, 0, 0.93), 0.03, 6)  # brace
+    for z in (0.47, 0.95):
+        _post(b, dk, -3.0, 0, z - 0.06, z + 0.06, 0.09, 8)  # hinge collars
+    box(b, dk, 2.96, 0, 0.88, 0.08, 0.11, 0.16)  # latch
+    for k in range(5):  # a short chain hanging from the latch, and the padlock
+        box(b, dk, 2.97, -0.06, 0.8 - k * 0.035, 0.012, 0.03, 0.03)
+    box(b, dk, 2.97, -0.06, 0.6, 0.05, 0.03, 0.06)
+    box(b, M["reflector"], 2.86, -0.05, 1.03, 0.08, 0.01, 0.08)
+    box(b, M["plate"], 0, -0.051, 0.95, 0.6, 0.006, 0.3)  # front at y = -0.054
+    return recalc_normals(b.build(name))
+
+
+def road_post(M, name):
+    """A Forest Service route marker: a narrow brown board on a square post, its number lettered
+    vertically down it by src/signs.js (front at local y = -0.07, i.e. +Z after export)."""
+    b = MeshBuilder()
+    box(b, M["route_post"], 0, 0, 0.55, 0.1, 0.1, 2.1)  # from 0.5 m underground
+    box(b, M["route_post"], 0, -0.06, 1.16, 0.16, 0.02, 0.62)
+    return recalc_normals(b.build(name))
+
+
 def cairn(M, name, seed=51):
     """A stack of flat stones marking the route above the treeline."""
     import bmesh
@@ -1565,6 +1669,9 @@ def main():
     cairn(M, "cairn")
     bench(M, "bench")
     footbridge(M, "footbridge")
+    trail_marker(M, "trail_marker")
+    road_gate(M, "road_gate")
+    road_post(M, "road_post")
     boardwalk(M, "boardwalk")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

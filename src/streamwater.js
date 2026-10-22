@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { roadAt, ROAD_FLAT } from './road.js';
 import { rawGroundAt, streams, fallsTopAt } from './terrain.js';
 import { underCap } from './fallsshape.js';
 import { shared, patchSunlight, sunKey, GLITTER_GLSL, patchGlitter } from './materials.js';
@@ -49,7 +50,8 @@ let rockList = null;
  * them and the water shader flows around them, so both take this same list.
  */
 export function streamRocks(trail) {
-  rockList ||= streams().rocks.filter((r) => trail.distanceTo(r.x, r.z) > 3.5 + r.r);
+  // (none under a footbridge, nor in a ford: road.js)
+  rockList ||= streams().rocks.filter((r) => trail.distanceTo(r.x, r.z) > 3.5 + r.r && roadAt(r.x, r.z).d > ROAD_FLAT + 1 + r.r);
   return rockList;
 }
 

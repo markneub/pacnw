@@ -2,6 +2,7 @@ import '@fontsource/im-fell-english-sc';
 import { WORLD_SIZE, SNOWLINE } from './config.js';
 import { terrainGrid, openWaterLevel, snowAmount, SEA_LEVEL, marshAt } from './terrain.js';
 import { shared } from './materials.js';
+import { road } from './road.js';
 
 /**
  * The paper map. At load the land is drawn once into a canvas, like an old printed topographic
@@ -715,6 +716,23 @@ export class MapSheet {
         for (let k = i + 1; k <= Math.min(pts.length - 1, i + 24); k++) I.lineTo(...pts[k]);
         I.stroke();
       }
+    }
+    // Forest Road 2840 (road.js): a cased double line, as an unpaved road on a topo map (the trail's
+    // red dashes run along it where they share it)
+    const rd = road();
+    if (rd) {
+      const path = () => {
+        I.beginPath();
+        rd.pts.forEach(([x, z], i) => (i ? I.lineTo(...toPx(x, z)) : I.moveTo(...toPx(x, z))));
+      };
+      I.strokeStyle = 'rgba(78, 58, 40, 0.85)';
+      I.lineWidth = 2.6;
+      path();
+      I.stroke();
+      I.strokeStyle = 'rgba(238, 228, 202, 0.95)';
+      I.lineWidth = 1.1;
+      path();
+      I.stroke();
     }
     I.restore();
 

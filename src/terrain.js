@@ -7,6 +7,7 @@ import { patchGroundDetail, groundDetailCacheKey } from './grounddetail.js';
 import { buildStreams } from './streams.js';
 import { patchRocky } from './rockyslope.js';
 import { FALLS, LIP, POOL_LEVEL, fallsLocal, cutBowl, streamGround, poolBowl, topSurface } from './fallsshape.js';
+import { initRoad, road, roadShelf } from './road.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -177,7 +178,11 @@ export function fallsTopAt(x, z) {
  * feel natural.
  */
 export function baseHeight(x, z) {
-  return cutBowl(x, z, naturalHeight(x, z));
+  // (the road's shelf after the streams were traced from the natural ground: their channels still
+  // cut through it at the fords; road.js)
+  const h = cutBowl(x, z, naturalHeight(x, z));
+  if (!road()) initRoad((x, z) => cutBowl(x, z, naturalHeight(x, z)), streams());
+  return roadShelf(x, z, h);
 }
 
 /** baseHeight without the waterfall's bowl. */
@@ -449,6 +454,9 @@ function heightGrid() {
  */
 export async function prepareTerrain(baked = null) {
   if (grid) return;
+  // the road (road.js): its line and level, which the trail, scatter and road mesh read (with a baked
+  // grid baseHeight is never called, so it's built here)
+  if (!road()) initRoad((x, z) => cutBowl(x, z, naturalHeight(x, z)), streams());
   if (baked) {
     grid = baked;
     return;

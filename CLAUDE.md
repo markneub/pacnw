@@ -962,9 +962,9 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   `RAMPS`/`fallsRamp`, in `naturalHeight`: a shelf along a polyline rising evenly from the ground at its start to the
   ground or the bowl's floor at its end, half-width 3.5 ± 1.2 m, edges blending back over 12 m): west from (−150,
   −292) up onto the bowl's floor at (−46, −346) (~12%), east from the mouth (30, −352) along the riser round the
-  shoulder to (305, −450) on the bench (~14%; a straight one was 20%, which the A* grade cost zig-zags on). A hidden
-  waypoint `westbank` (−165, −245) takes the trail back over the creek at ~(28, −179) (new footbridge; the one in front
-  of the falls is gone) and round to the west ledge; behind the falls W → E; out up the east ledge; the **snowfield**
+  shoulder to (305, −450) on the bench (~14%; a straight one was 20%, which the A* grade cost zig-zags on). Hidden
+  waypoints (now `roadeast`/`roadwest`: along Forest Road 2840, see below; was `westbank`) take the trail back over the
+  creek (a footbridge beside the road's ford; the one in front of the falls is gone) and round to the west ledge; behind the falls W → E; out up the east ledge; the **snowfield**
   stop moved (110, −540) → (210, −560) onto the way north (at the old spot the trail went west to it and back). Trail
   4.17 → 3.87 km, grade p95 18%, 3 footbridges. Changing the terrain moved trees and rerouted creeks a little
   on flats far off (the priority flood's tie-breaks). `holecheck trail`: no holes. No trees on the bowl's floor within 40 m of the
@@ -973,6 +973,34 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   (`?bench=falls&views=falls`). Map: a falls pictogram. Bench: opt-in view `falls`, row `falls` ("- waterfall"). Views (sun): bowl
   `x=-24&z=-372&yaw=0&pitch=0.3`, behind the water `x=-23.5&z=-418.4&yaw=3.3&pitch=0.25`, along the passage
   `x=-12&z=-417.5&yaw=1.3&pitch=0.12`.
+- **Forest Road 2840** (`src/road.js` line/level/shelf, `src/roadmesh.js` surface; the user: "a dirt jeep track from
+  west to east. The trail could go on the track for a little bit", "go all out"): an old dirt jeep track from a logging landing
+  in the western foothills (−678, 44) across the valley below the falls to one in the east (730, 52), 1.64 km, grade ≤ 8.6%.
+  The line was found once by an A* (`.cache/roadroute.mjs`, gitignored) and frozen as `CONTROL` points (Chaikin ×3, 2 m
+  resample). `initRoad(pre, streams)` (called from `prepareTerrain`, also when the world is baked): the level is the ground
+  smoothed ±16 m, dipped to the bed at the **4 fords** (−280, −90), (15, −225), (242, −161), (467, −17), then held to the grade
+  (600 passes, fords pinned). `roadShelf` (in `baseHeight`, after `cutBowl`, so the streams traced from `naturalHeight` still
+  carve through the fords): level ±`ROAD_FLAT` 3.8 m (+9 m round the landings, `landingAt`), 4 cm crown, cut/fill banks ~1 : 1.4
+  back to the ground. `roadAt(x, z)` → {d, u, s, level} (shared object, 16 m spatial hash). **Surface:** a 0.5 m strip 3 cm
+  over `groundAt` (no terrain cutout, so it can't open holes) with the trail's corridor material in road mode
+  (`corridorMaterials(true)`: stronger polygon offset, `ROAD_TREAD` block): gravelly dirt ±`ROAD_SURFACE` 2.3 m to a ragged
+  edge, two wandering wheel ruts at ±0.78 m (puddles collect there: `vTread`), a grass/moss crown between them, soil on the
+  banks, faded over the foot of the banks; no ruts in the creek beds. Trees/ferns etc. are kept off by the `exclude` filter
+  in main.js (after the bake), grass by the grass map, creek rocks off the fords.
+  **The trail on the road:** hidden stops `roadeast` (75, −202) and `roadwest` (−150, −146) and an A* cost × 0.55 on road
+  cells put ~300 m of trail on it (points 1380–1578, `trail.shared`). It **wades the main creek's ford with the road** (the
+  user: why leave the road for a bridge? A first version had its own footbridge 8 m downstream): creek cells on the road
+  cost `WET_COST` × 0.1, no footbridge is made for a crossing on the road (d < 3 m), and `addSteppingStones` (vegetation.js,
+  hash, after the clear-zone filter) lays a line of small flat scans (boulder_g/i, r 0.27–0.35 m, tops a few cm out of the
+  water) along the road's downstream edge where it's wet. On the road the trail strip drops its
+  triangles (`keepTri`: all three < 1.8 m from the road's line) and its bench cut fades out (`offRoad`); where the trail's
+  tread runs off the road surface the road shader discards, so the trail strip below shows (the junctions). **How you know** (the user asked): junction signposts ("Forest Road 2840" header, the usual stop list) off the
+  road where the trail joins and leaves it; brown fibreglass **hiker marker posts** (`trail_marker`) at both junctions and
+  every 60 m along the shared stretch; a steel **gate** (`road_gate`, "ROAD CLOSED / TO MOTOR VEHICLES" plate) 45 m west of
+  the east junction with a brown **road-number post** (`road_post`, "2840" stacked) beside it (`buildRoadPlates` in
+  signs.js). On the paper map the road is a cased line (brown/cream) under the trail's red dashes. Views (sun): east
+  junction `x=112.1&z=-181.7&yaw=0.57&pitch=-0.1`, ford `x=-1&z=-222.5&yaw=-1.42&pitch=-0.2`, forest stretch
+  `x=-420.1&z=-5.9&yaw=-0.85&pitch=-0.08`, west junction `x=-128.2&z=-165.3&yaw=2.65&pitch=-0.08`.
 - **Night** (via the cave, or `?night`; `weather.setNight`): a clear night under a full moon low in the SSW over the sea
   (`MOON_DIR` (−0.22, 0.45, 0.87), `MOON_COLOR` silver-blue). The key-light direction is no longer baked into shaders:
   `shared.uKeyDir/uKeyColor/uKeyOff` (sun or moon) drive the dapple (`patchSunlight`), glitter (`uGlDir/uGlColor`), the
