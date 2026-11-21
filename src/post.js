@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ditherPass } from './dither.js';
 import { SUN_COLOR, MOON_COLOR, FOG_POOL_BASE, FOG_POOL_FALLOFF } from './atmosphere.js';
 import { shared } from './materials.js';
 
@@ -78,6 +79,11 @@ export class Post {
     this.qB = rt(2, 2);
     this.gA = rt(2, 2);
     this.gB = rt(2, 2);
+
+    // 1-bit mode (dither.js): the composite goes into ditherRT, then the dither pass draws the canvas
+    this.dither = false;
+    this.ditherRT = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    this.ditherP = ditherPass();
 
     this.sunUv = new THREE.Vector2(0.5, 0.5);
     this.sunScreen = new THREE.Vector3();
@@ -329,6 +335,7 @@ export class Post {
     const h = this.size.y;
     if (this.sceneRT.width === w && this.sceneRT.height === h) return;
     this.sceneRT.setSize(w, h);
+    this.ditherRT.setSize(w, h);
     const qw = Math.max(1, Math.round(w / 4));
     const qh = Math.max(1, Math.round(h / 4));
     for (const t of [this.qA, this.qB, this.gA, this.gB, this.vA, this.vB, ...this.hist]) t.setSize(qw, qh);
@@ -444,7 +451,18 @@ export class Post {
     if (shared.uNight.value > 0.5) u.uSunColor.value.copy(MOON_COLOR).multiplyScalar(0.55);
     else u.uSunColor.value.copy(SUN_COLOR);
     u.uTime.value = shared.uTime.value;
-    blit(this.composite, null);
+    blit(this.composite, this.dither ? this.ditherRT : null);
+    if (this.dither) {
+      const d = this.ditherP.uniforms;
+      d.tColor.value = this.ditherRT.texture;
+      d.tDepth.value = this.sceneRT.depthTexture;
+      d.uInvProj.value.copy(camera.projectionMatrixInverse);
+      d.uCamWorld.value.copy(camera.matrixWorld);
+      d.uRes.value.copy(this.size);
+      d.uLift.value = THREE.MathUtils.lerp(0.55, 1, this.outdoors); // (in the cave: its dim torchlight up out of the black)
+      d.uPix.value = 2 * Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV()) / 2) / this.size.y;
+      blit(this.ditherP, null);
+    }
     r.info.render.calls = calls;
     r.info.render.triangles = triangles;
   }
@@ -469,6 +487,9 @@ export class Post {
   /** Compile every pass during loading (the rays only run in a sun break). */
   warmUp(scene, camera) {
     if (!this.enabled) return;
+    const dither = this.dither;
+    this.dither = true; // (1-bit mode's pass too, so switching it on later doesn't stall on a shader build)
     this.render(scene, camera, true);
+    this.dither = dither;
   }
 }

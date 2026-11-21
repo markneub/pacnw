@@ -35,6 +35,7 @@ import { LIP } from './fallsshape.js';
 import { planCoast, buildCoast, loadCoastAssets } from './coast.js';
 import { buildSeats } from './seat.js';
 import { createHint } from './hint.js';
+import { DitherToggle } from './dither.js';
 import { buildBirds } from './birds.js';
 
 installHeightFog(); // must run before any material compiles
@@ -82,6 +83,8 @@ document.getElementById('app').appendChild(renderer.domElement);
 // god rays, soft glow and the grade (post.js); it does the ACES tone mapping itself
 const post = new Post(renderer, { samples: off.has('aa') ? 0 : 4 });
 post.enabled = postOn;
+// 1-bit mode (dither.js): a button under the map icon, or 1; ?dither=1/0 forces it
+const dither = postOn ? new DitherToggle(renderer, post) : null;
 
 const scene = new THREE.Scene();
 scene.environment = createEnvironment(renderer);
@@ -159,7 +162,10 @@ async function init() {
   const sheet = await MapSheet.create(SPAWN);
   const paperMap = new PaperMap(sheet.canvas);
   paperMap.loading(sheet.view);
-  paperMap.onFirstFold = () => sheet.compose(true); // (no creases until then)
+  paperMap.onFirstFold = () => {
+    sheet.compose(true); // (no creases until then)
+    dither?.show(); // (its button comes with the map's icon)
+  };
   progress('terrain');
   await nextFrame();
   const world = await worldReady;
@@ -335,6 +341,7 @@ async function init() {
   cave.warmUp(renderer); // (its shadow cubes)
   await warmUp();
   step('warm-up');
+  dither?.set(params.has('dither') ? params.get('dither') !== '0' : DitherToggle.stored()); // (remembered from last time)
   const line = `${timings.join(' · ')} · longest stall ${longestStall().toFixed(0)} ms · ready ${(performance.now() / 1000).toFixed(1)} s after navigation`;
   if (loadTimes) console.info('load:', line);
 
@@ -594,7 +601,7 @@ async function init() {
   let frames = 0;
   const tick = () => {
     perf?.begin();
-    autoRes?.tick();
+    if (!post.dither) autoRes?.tick(); // (1-bit mode sets its own resolution)
     // ?still=N renders N frames then stops (for headless screenshots)
     const still = params.has('still') && ++frames >= (parseInt(params.get('still'), 10) || 3);
     const dt = Math.min(clock.getDelta(), 0.1);
