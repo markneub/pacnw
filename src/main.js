@@ -83,7 +83,7 @@ document.getElementById('app').appendChild(renderer.domElement);
 // god rays, soft glow and the grade (post.js); it does the ACES tone mapping itself
 const post = new Post(renderer, { samples: off.has('aa') ? 0 : 4 });
 post.enabled = postOn;
-// 1-bit mode (dither.js): a button under the map icon, or 1; ?dither=1/0 forces it
+// colour depth (dither.js): a picker under the map icon (1 steps through it); ?dither=1/2/4/8/0 forces one
 const dither = postOn ? new DitherToggle(renderer, post) : null;
 
 const scene = new THREE.Scene();
@@ -341,7 +341,7 @@ async function init() {
   cave.warmUp(renderer); // (its shadow cubes)
   await warmUp();
   step('warm-up');
-  dither?.set(params.has('dither') ? params.get('dither') !== '0' : DitherToggle.stored()); // (remembered from last time)
+  dither?.set(params.has('dither') ? parseInt(params.get('dither'), 10) || 0 : DitherToggle.stored()); // (remembered from last time)
   const line = `${timings.join(' · ')} · longest stall ${longestStall().toFixed(0)} ms · ready ${(performance.now() / 1000).toFixed(1)} s after navigation`;
   if (loadTimes) console.info('load:', line);
 

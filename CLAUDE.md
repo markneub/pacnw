@@ -1043,23 +1043,31 @@ through a staircase of snowy benches between ridged peaks to a high basin under 
   bird is placed on a thermal near the player. Hidden at night (they roost). Views (sun): lake `x=110&z=470&yaw=-0.67&pitch=0.5`,
   beach `x=50&z=962&yaw=3.14&pitch=0.3`. Test trick: free camera + `__pacnw.birds.update(0.05, t, camera, false)` in a loop,
   then `birds.update = () => {}` to freeze them for a still.
-- **1-bit mode** (`src/dither.js`, the user's dither effect from another project, "Return of the Obra Dinn" style; a
-  translucent button under the map icon, key **1**, remembered in localStorage `pacnw.dither`, `?dither=1/0` forces it):
-  pure black and white, tone as **surface-stable fractal dither dots** (after Rune Skovbo Johansen: a Bayer-ranked
-  lattice in world metres, projected along the dominant normal axis; `uD` 4.5 px spacing; spacing picked by
-  log2(uD·sigma), sigma = metres per pixel from distance, `uPix` and the view angle, so dots stay put on surfaces and keep
-  their screen spacing), 1-px outlines, chunky pixels. The original patched every material to write a dot bit, normal and
-  object id via MRT; here that would mean dozens of custom shaders, so it's **one full-screen pass at the end of post.js**:
-  the composite goes into `ditherRT`, then the pass reads it and `sceneRT.depthTexture`: world position from depth,
-  normal from the neighbours' depths (each axis from the nearer side), tone from the finished image's luminance
-  (fog/grade included; `uLift` 0.55 exponent in the cave, else its torchlight was black). Sky: dots on a 100 m sphere of
-  world directions. Outlines: against the sky, and depth steps (1/z second difference < −k·zc, k 0.06 → 0.4 from 8 to
-  60 m, none past 70 m) only where the near surface carries on to one side (1-px slivers, i.e. grass blades and needles,
-  were a scribble over everything); black on bright, white on dark. No ids or normal creases. Resolution:
-  `setPixelRatio(dpr / k)`, k = max(1, round(dpr·2/3)) (2 on a 3× phone) + `canvas.pixelated` (image-rendering), autores
-  paused meanwhile; switching off restores the old ratio. Its shader is compiled in `post.warmUp`. GLSL3 ShaderMaterial
-  (bitwise ops): it must declare its own `out` (three declares none for GLSL3). Views: spawn, lake, `?cave=40`, beach at
-  night. Not yet benched on a phone.
+- **Colour depth picker** (`src/dither.js`; the user: a button opening a picker of 1-, 2-, 4-, 8-bit and true colour,
+  "the stages of color depth found in classic games, like LucasArts adventures"): a translucent button under the map icon
+  opens `#depth-menu` (chips in the hint's IM Fell type); key **1** steps through the modes; remembered in localStorage
+  `pacnw.depth` (falls back to the old `pacnw.dither` 1-bit flag); `?dither=1/2/4/8/0` forces one. **1-bit** (the user's
+  dither effect from another project, "Return of the Obra Dinn"): black and white, tone as **surface-stable fractal
+  dither dots** (after Rune Skovbo Johansen: a Bayer-ranked lattice in world metres, projected along the dominant normal
+  axis; spacing chosen by log2(uD·sigma), sigma = metres per pixel from distance, `uPix` and the view angle, so dots stay
+  put on surfaces and keep their screen spacing), 1-px outlines, chunky pixels. **2-bit**: the Game Boy's four greens
+  by tone (ramp, outlines too). **4-bit**: the EGA 16; **8-bit**: a VGA-style 256 made for this world (`vgaPalette`: 16
+  greys + 15 ramps of 16 through dark/mid/light anchors: forest, grass, fir, moss, bark, cedar, sand, sky, fog, sea, snow,
+  gold, red, night, heather). Colour modes dither between the nearest palette colour A and B = nearest(2c − A), B's share
+  = c's projection on A→B; nearest from a 32³ `Data3DTexture` LUT built at load (distance in luma + 0.6 × chroma
+  differences: weighted RGB sent EGA's muted greens to its greys), after a grade (`uGrade` saturation/contrast: EGA 2.2 /
+  1.15, VGA 1.2 / 1.05: EGA art was bold). Dot spacing `uD` 4.5 / 4 / 3 / 2.5 px. No outlines at 4/8-bit. The original
+  patched every material to write a dot bit, normal and object id via MRT; here that would mean dozens of custom
+  shaders, so it's **one full-screen pass at the end of post.js**: the composite goes into `ditherRT`, then the pass reads
+  it and `sceneRT.depthTexture`: world position from depth, normal from the neighbours' depths (each axis from the nearer
+  side), colour from the finished image (fog/grade included; `uLift` 0.55 exponent in the cave, else its torchlight was
+  black). Sky: dots on a 100 m sphere of world directions. Outlines: against the sky, and depth steps (1/z second
+  difference < −k·zc, k 0.06 → 0.4 from 8 to 60 m, none past 70 m) only where the near surface carries on to one side
+  (1-px slivers, i.e. grass blades and needles, were a scribble over everything); darkest shade on bright, lightest on
+  dark. Resolution in every dithered mode: `setPixelRatio(dpr / k)`, k = max(1, round(dpr·2/3)) (2 on a 3× phone) +
+  `canvas.pixelated`, autores paused meanwhile; true colour restores the old ratio. One program for all modes (uniforms),
+  compiled in `post.warmUp`. GLSL3 ShaderMaterial (bitwise ops): it must declare its own `out` (three declares none for
+  GLSL3). Views: spawn, lake, `?cave=40`, beach at night. Not yet benched on a phone.
 - **Elk: tried and removed** (commit 501ea34 added them, the user: "pretty bad", then "just remove the current elk"). A JS-lofted,
   skinned, procedurally animated elk (IK legs, planted-foot gait, graze/alert/flee herds) read as tubes, not animals. Don't
   rebuild it procedurally: realistic animals need a sculpted, textured, rigged and animated model (Sketchfab/Fab, which this
